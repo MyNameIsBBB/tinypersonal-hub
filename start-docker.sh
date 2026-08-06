@@ -8,6 +8,8 @@ IMAGE_NAME="${APP_NAME}:local"
 CONTAINER_NAME="${APP_NAME}"
 DATA_VOLUME="${APP_NAME}-data"
 PORT="${PORT:-3000}"
+DOCKER_NETWORK="${DOCKER_NETWORK:-}"
+ENABLE_TAILSCALE_FUNNEL="${ENABLE_TAILSCALE_FUNNEL:-1}"
 DOCKERFILE="$(mktemp "${TMPDIR:-/tmp}/${APP_NAME}.Dockerfile.XXXXXX")"
 
 cleanup() {
@@ -15,7 +17,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-for command_name in docker tailscale curl; do
+for command_name in docker curl; do
   if ! command -v "$command_name" >/dev/null 2>&1; then
     echo "Error: $command_name is not installed or is not in PATH." >&2
     exit 1
@@ -63,6 +65,10 @@ docker_args=(
   --volume "${DATA_VOLUME}:/data"
 )
 
+if [[ -n "$DOCKER_NETWORK" ]]; then
+  docker_args+=(--network "$DOCKER_NETWORK")
+fi
+
 if [[ -f "$SCRIPT_DIR/.env" ]]; then
   docker_args+=(--env-file "$SCRIPT_DIR/.env")
 fi
@@ -89,5 +95,13 @@ done
 echo "Clearing Docker build cache..."
 docker builder prune --all --force
 
-echo "Starting Tailscale Funnel..."
-tailscale funnel --bg --yes "$PORT"
+if [[ "$ENABLE_TAILSCALE_FUNNEL" == "1" ]]; then
+  if command -v tailscale >/dev/null 2>&1; then
+    echo "Starting Tailscale Funnel..."
+    if ! tailscale funnel --bg --yes "$PORT"; then
+      echo "Warning: Tailscale Funnel could not be started automatically."
+    fi
+  else
+    echo "Warning: tailscale is not installed; skipping funnel setup."
+  fi
+fi

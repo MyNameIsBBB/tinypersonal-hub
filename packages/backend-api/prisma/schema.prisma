@@ -37,32 +37,43 @@ enum SchedulePriority {
 }
 
 model ScheduleItem {
-  id               String           @id @default(cuid())
-  title            String
-  description      String?
-  type             ScheduleItemType
-  startTime        DateTime?
-  endTime          DateTime?
-  isAllDay         Boolean          @default(false)
-  status           ScheduleStatus   @default(PENDING)
-  priority         SchedulePriority @default(MEDIUM)
-  recurrenceRule   String?
-  routineEndDate   DateTime?
-  parentRoutineId  String?
-  parentRoutine    ScheduleItem?    @relation("RoutineInstances", fields: [parentRoutineId], references: [id], onDelete: Cascade)
-  routineInstances ScheduleItem[]   @relation("RoutineInstances")
-  notes            Note[]
-  mediaAssets      MediaAsset[]
-  createdAt        DateTime         @default(now())
-  updatedAt        DateTime         @updatedAt
+  id              String           @id @default(cuid())
+  title           String
+  description     String?
+  type            ScheduleItemType
+  startTime       DateTime?
+  endTime         DateTime?
+  isAllDay        Boolean          @default(false)
+  status          ScheduleStatus   @default(PENDING)
+  priority        SchedulePriority @default(MEDIUM)
+  recurrenceRule  String?
+  routineEndDate  DateTime?
+  parentRoutineId String?
+  parentRoutine   ScheduleItem?    @relation("RoutineToInstances", fields: [parentRoutineId], references: [id], onDelete: Cascade)
+  routineChildren ScheduleItem[]   @relation("RoutineToInstances")
+  notes           Note[]
+  mediaAssets     MediaAsset[]
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
 
   @@index([type, startTime])
   @@index([status])
   @@index([parentRoutineId])
 }
 
+model Task {
+  id          String    @id @default(cuid())
+  title       String
+  startsAt    DateTime?
+  completedAt DateTime?
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
 model Note {
-  id             String        @id @default(uuid())
+  id             String        @id @default(cuid())
   title          String
   content        String
   tagsJson       String        @default("[]")
@@ -71,7 +82,7 @@ model Note {
   embeddingJson  String?
   scheduleItemId String?
   scheduleItem   ScheduleItem? @relation(fields: [scheduleItemId], references: [id], onDelete: SetNull)
-  attachments    MediaAsset[]
+  mediaAssets    MediaAsset[]
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 
@@ -80,7 +91,7 @@ model Note {
 }
 
 model MediaAsset {
-  id             String        @id @default(uuid())
+  id             String        @id @default(cuid())
   fileName       String
   mimeType       String
   fileSize       Int
@@ -99,32 +110,21 @@ model MediaAsset {
 }
 
 model VaultSecret {
-  id                    String   @id @default(uuid())
-  serviceName           String
-  category              String
-  accountIdentifier     String
-  encryptedPassword     String
-  iv                    String
-  authTag               String
-  encryptedTotpSeed     String?
-  totpIv                String?
-  totpAuthTag           String?
-  url                   String?
-  notes                 String?
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
+  id                String   @id @default(cuid())
+  serviceName       String
+  category          String
+  accountIdentifier String
+  encryptedPassword String
+  iv                String
+  authTag           String
+  encryptedTotpSeed String?
+  totpIv            String?
+  totpAuthTag       String?
+  url               String?
+  notes             String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   @@index([serviceName])
   @@index([category])
-}
-
-model Task {
-  id          String    @id @default(cuid())
-  title       String
-  startsAt    DateTime?
-  completedAt DateTime?
-  userId      String
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
 }
