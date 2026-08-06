@@ -35,7 +35,7 @@ export default function AIPage() {
   return <WorkspaceShell active="AI Assistant" title="Tiny AI Assistant" subtitle="Gemini พร้อมช่วยจัดการ workspace ของคุณ">
     <section className="ai-workspace">
       <header className="ai-hero">
-        <div className="ai-avatar"><img src="/tinypersonal-logo.png" alt="TinyPersonal AI" /></div>
+        <div className="ai-avatar"><img src="/tinypersonal-logo-192.png" alt="TinyPersonal AI" width="58" height="58" /></div>
         <div><span><Sparkles size={14} /> Gemini connected</span><h2>วันนี้ให้ช่วยอะไรดี?</h2><p>สั่งจัดตาราง ค้นโน้ต หรือค้น metadata และลิงก์จาก Vault ได้ด้วยภาษาธรรมชาติ</p></div>
       </header>
 

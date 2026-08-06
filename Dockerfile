@@ -4,6 +4,10 @@ WORKDIR /app
 
 ENV DATABASE_URL=file:/tmp/build.db
 
+RUN apt-get update \
+  && apt-get install --yes --no-install-recommends ca-certificates openssl \
+  && rm -rf /var/lib/apt/lists/*
+
 COPY . .
 RUN npm ci \
   && npm run db:generate \

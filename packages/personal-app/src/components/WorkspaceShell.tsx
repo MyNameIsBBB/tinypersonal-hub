@@ -25,7 +25,7 @@ export function WorkspaceShell({ active, title, subtitle, action, children }: {
     <div className="app-shell">
       <aside className={`sidebar ${open ? "open" : ""}`}>
         <div className="brand-row">
-          <Image className="brand-logo" src="/tinypersonal-logo.png" alt="TinyPersonal tiger logo" width={42} height={42} priority />
+          <Image className="brand-logo" src="/tinypersonal-logo-192.png" alt="TinyPersonal tiger logo" width={42} height={42} priority />
           <div><strong>TinyPersonal</strong><span>Personal workspace</span></div>
           <button className="mobile-close" aria-label="ปิดเมนู" onClick={() => setOpen(false)}><X size={20} /></button>
         </div>

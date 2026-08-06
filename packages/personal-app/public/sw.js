@@ -1,9 +1,8 @@
-const CACHE_NAME = "tinypersonal-shell-v4";
+const CACHE_NAME = "tinypersonal-shell-v5-wheat";
 const OFFLINE_URL = "/offline";
 const STATIC_ASSETS = [
   OFFLINE_URL,
   "/manifest.webmanifest",
-  "/tinypersonal-logo.png",
   "/tinypersonal-logo-192.png",
   "/tinypersonal-logo-512.png",
 ];

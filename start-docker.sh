@@ -53,7 +53,7 @@ docker "${docker_args[@]}" >/dev/null
 
 echo "Waiting for http://127.0.0.1:${PORT} ..."
 for attempt in {1..30}; do
-  if curl --fail --silent --show-error "http://127.0.0.1:${PORT}" >/dev/null 2>&1; then
+  if curl --fail --silent --show-error "http://127.0.0.1:${PORT}/api/health" >/dev/null 2>&1; then
     break
   fi
 

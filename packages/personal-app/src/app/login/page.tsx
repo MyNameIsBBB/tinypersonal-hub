@@ -16,7 +16,7 @@ export default function LoginPage() {
     else { setError("Username หรือ Password ไม่ถูกต้อง"); setLoading(false); }
   }
   return <main className="login-page"><section className="login-card">
-    <Image src="/tinypersonal-logo.png" width={76} height={76} alt="TinyPersonal" priority />
+    <Image src="/tinypersonal-logo-192.png" width={76} height={76} alt="TinyPersonal" priority />
     <p className="eyebrow">Private workspace</p><h1>TinyPersonal Hub</h1><p>เข้าสู่พื้นที่ส่วนตัวเพื่อเปิด Schedule, Notes, Media, Vault และ AI</p>
     <form onSubmit={submit}><label><span>Username</span><input type="text" autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} required autoFocus /></label><label><span><LockKeyhole size={14} /> Password</span><input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} required /></label><small>Session จะคงอยู่ 30 วันบนอุปกรณ์นี้</small><button className="primary-button" disabled={loading}>{loading ? "กำลังเข้าสู่ระบบ…" : "เข้าสู่ระบบ"}</button></form>
     {error && <div className="chat-error">{error}</div>}
