@@ -1,0 +1,24 @@
+{
+  "name": "tinypersonal-hub",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.0.0",
+  "scripts": {
+    "dev": "pnpm --filter @tinypersonal/personal-app dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "db:generate": "pnpm --filter @tinypersonal/backend-api db:generate",
+    "db:migrate": "pnpm --filter @tinypersonal/backend-api db:migrate"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@prisma/client",
+      "@prisma/engines",
+      "prisma",
+      "sharp"
+    ]
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0"
+  }
+}
