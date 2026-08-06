@@ -21,21 +21,17 @@ cat > "$PROJECT_ROOT/package.json" <<'EOF'
   "name": "tinypersonal-hub",
   "version": "0.1.0",
   "private": true,
-  "packageManager": "pnpm@10.0.0",
+  "packageManager": "npm@11.6.2",
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
-    "dev": "pnpm --filter @tinypersonal/personal-app dev",
-    "build": "pnpm -r build",
-    "typecheck": "pnpm -r typecheck",
-    "db:generate": "pnpm --filter @tinypersonal/backend-api db:generate",
-    "db:migrate": "pnpm --filter @tinypersonal/backend-api db:migrate"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "@prisma/client",
-      "@prisma/engines",
-      "prisma",
-      "sharp"
-    ]
+    "dev": "npm run dev --workspace=@tinypersonal/personal-app",
+    "build": "npm run build --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "db:generate": "npm run db:generate --workspace=@tinypersonal/backend-api",
+    "db:migrate": "npm run db:migrate --workspace=@tinypersonal/backend-api",
+    "db:deploy": "npm run db:deploy --workspace=@tinypersonal/backend-api"
   },
   "devDependencies": {
     "typescript": "^5.7.0"
@@ -43,14 +39,8 @@ cat > "$PROJECT_ROOT/package.json" <<'EOF'
 }
 EOF
 
-cat > "$PROJECT_ROOT/pnpm-workspace.yaml" <<'EOF'
-packages:
-  - "packages/*"
-EOF
-
 cat > "$PROJECT_ROOT/.gitignore" <<'EOF'
 node_modules/
-.pnpm-store/
 .next/
 dist/
 .env
@@ -63,11 +53,20 @@ EOF
 
 cat > "$PROJECT_ROOT/.env.example" <<'EOF'
 # AI provider
-OPENAI_API_KEY=
-OPENAI_MODEL=gpt-4.1-mini
+GOOGLE_GENERATIVE_AI_API_KEY=
+GEMINI_MODEL=gemini-3.5-flash-lite
 
 # Database (SQLite is convenient for local development)
 DATABASE_URL="file:./dev.db"
+VAULT_MASTER_KEY=
+MEDIA_STORAGE_DRIVER=local
+MEDIA_LOCAL_ROOT=.data/media
+MEDIA_SIGNING_KEY=
+PERSONAL_API_TOKEN=
+APP_AUTH_USERNAME=
+APP_AUTH_PASSWORD=
+SESSION_SIGNING_KEY=
+VAULT_REVEAL_PASSWORD=
 
 # Optional external integrations
 GOOGLE_CLIENT_ID=
@@ -109,7 +108,7 @@ cat > "$PROJECT_ROOT/packages/assistant-core/package.json" <<'EOF'
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "ai": "^5.0.0",
+    "ai": "^7.0.55",
     "zod": "^3.24.0"
   },
   "devDependencies": {
@@ -215,7 +214,8 @@ cat > "$PROJECT_ROOT/packages/backend-api/package.json" <<'EOF'
     "build": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
     "db:generate": "prisma generate",
-    "db:migrate": "prisma migrate dev"
+    "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy"
   },
   "dependencies": {
     "@prisma/client": "^6.2.0"
@@ -300,16 +300,16 @@ cat > "$PROJECT_ROOT/packages/personal-app/package.json" <<'EOF'
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "next build --webpack",
     "start": "next start",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@ai-sdk/openai": "^2.0.0",
-    "@tinypersonal/assistant-core": "workspace:*",
-    "@tinypersonal/backend-api": "workspace:*",
-    "ai": "^5.0.0",
-    "next": "^15.2.0",
+    "@ai-sdk/google": "^4.0.36",
+    "@tinypersonal/assistant-core": "*",
+    "@tinypersonal/backend-api": "*",
+    "ai": "^7.0.55",
+    "next": "^16.3.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },
@@ -435,7 +435,7 @@ export default function Home() {
 EOF
 
 cat > "$PROJECT_ROOT/packages/personal-app/src/app/api/chat/route.ts" <<'EOF'
-import { openai } from "@ai-sdk/openai";
+import { google } from "@ai-sdk/google";
 import { createAgentConfig } from "@tinypersonal/assistant-core";
 import { convertToModelMessages, streamText, type UIMessage } from "ai";
 
@@ -449,9 +449,9 @@ export async function POST(request: Request) {
   );
 
   const result = streamText({
-    model: openai(process.env.OPENAI_MODEL ?? "gpt-4.1-mini"),
+    model: google(process.env.GEMINI_MODEL ?? "gemini-3.5-flash-lite"),
     system: agent.system,
-    messages: convertToModelMessages(messages),
+    messages: await convertToModelMessages(messages),
     tools: agent.tools,
   });
 
@@ -466,7 +466,7 @@ cat > "$PROJECT_ROOT/AGENTS.md" <<'EOF'
 
 `tinypersonal-hub` is a central orchestrator for a modular personal workspace. It accepts human intent through a Next.js interface, converts that intent into a constrained AI plan, and delegates side effects to typed backend services. Keep the system observable and conservative: the model may propose or select an operation, but application code validates input and owns execution.
 
-The repository is a pnpm monorepo with three independently owned packages:
+The repository is an npm workspaces monorepo with three independently owned packages:
 
 1. `@tinypersonal/assistant-core` — reasoning configuration and tool selection.
 2. `@tinypersonal/personal-app` — the user-facing Next.js App Router application.
@@ -559,10 +559,10 @@ Assembly rules:
 - Read this file before editing and preserve the package boundaries above.
 - Prefer small, typed modules and explicit exports. Keep TypeScript strict and avoid `any`.
 - Update `.env.example` when adding configuration, but never commit real credentials or `.env` files.
-- Run `pnpm typecheck` and the relevant tests before handoff. Run Prisma generation after schema changes.
+- Run `npm run typecheck` and the relevant tests before handoff. Run Prisma generation after schema changes.
 - Do not modify unrelated files, silently introduce a new framework, or perform external writes without user authorization.
 - Record architectural decisions that change dependency direction, data ownership, or tool permissions in project documentation.
 EOF
 
 echo "TinyPersonal Hub scaffold created at: $PROJECT_ROOT"
-echo "Next: cd '$PROJECT_ROOT' && cp .env.example .env && pnpm install && pnpm db:generate && pnpm dev"
+echo "Next: cd '$PROJECT_ROOT' && cp .env.example .env && npm install && npm run db:generate && npm run dev"

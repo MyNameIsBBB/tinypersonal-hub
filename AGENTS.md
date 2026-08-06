@@ -4,7 +4,7 @@
 
 `tinypersonal-hub` is a central orchestrator for a modular personal workspace. It accepts human intent through a Next.js interface, converts that intent into a constrained AI plan, and delegates side effects to typed backend services. Keep the system observable and conservative: the model may propose or select an operation, but application code validates input and owns execution.
 
-The repository is a pnpm monorepo with three independently owned packages:
+The repository is an npm workspaces monorepo with three independently owned packages:
 
 1. `@tinypersonal/assistant-core` — reasoning configuration and tool selection.
 2. `@tinypersonal/personal-app` — the user-facing Next.js App Router application.
@@ -97,6 +97,6 @@ Assembly rules:
 - Read this file before editing and preserve the package boundaries above.
 - Prefer small, typed modules and explicit exports. Keep TypeScript strict and avoid `any`.
 - Update `.env.example` when adding configuration, but never commit real credentials or `.env` files.
-- Run `pnpm typecheck` and the relevant tests before handoff. Run Prisma generation after schema changes.
+- Run `npm run typecheck` and the relevant tests before handoff. Run Prisma generation after schema changes.
 - Do not modify unrelated files, silently introduce a new framework, or perform external writes without user authorization.
 - Record architectural decisions that change dependency direction, data ownership, or tool permissions in project documentation.

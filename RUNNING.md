@@ -1,0 +1,427 @@
+# วิธีรัน TinyPersonal Hub
+
+โปรเจกต์มีสคริปต์สำหรับรัน 2 รูปแบบ:
+
+- Docker: `start-docker.sh`
+- PM2: `start-pm2.sh`
+
+ทั้งสองรูปแบบจะ build ทุก workspace, เปิด Personal App และเปิด Tailscale Funnel ให้โดยอัตโนมัติ
+
+## รันแบบ Development บนเครื่อง
+
+โหมด Development เหมาะสำหรับแก้ไขโค้ดบนเครื่อง เพราะ Next.js จะ reload หน้าเว็บให้อัตโนมัติเมื่อไฟล์เปลี่ยนแปลง โดยไม่จำเป็นต้องใช้ Docker หรือ PM2
+
+### สิ่งที่ต้องติดตั้ง
+
+- Git
+- Node.js 22 หรือใหม่กว่า
+- npm 11 (ติดตั้งมากับ Node.js)
+- Tailscale เฉพาะกรณีที่ต้องการเปิดให้เข้าถึงจากอินเทอร์เน็ต
+
+ตรวจสอบเวอร์ชัน:
+
+```bash
+node --version
+npm --version
+```
+
+### macOS
+
+เปิด Terminal แล้วเข้า directory ของโปรเจกต์:
+
+```bash
+cd /path/to/tinypersonal-hub
+```
+
+ติดตั้ง dependencies:
+
+```bash
+npm ci
+```
+
+สร้างและแก้ไขไฟล์ `.env`:
+
+```bash
+cp .env.example .env
+```
+
+ใส่ Gemini API key ใน `.env`:
+
+```dotenv
+GOOGLE_GENERATIVE_AI_API_KEY=your_gemini_api_key
+GEMINI_MODEL=gemini-3.5-flash-lite
+DATABASE_URL="file:./dev.db"
+VAULT_MASTER_KEY=base64_encoded_32_byte_key
+MEDIA_SIGNING_KEY=random_string_at_least_32_characters
+PERSONAL_API_TOKEN=random_private_api_token
+APP_AUTH_USERNAME=your_workspace_username
+APP_AUTH_PASSWORD=your_workspace_login_password
+SESSION_SIGNING_KEY=random_string_at_least_32_characters
+VAULT_REVEAL_PASSWORD=separate_step_up_password
+```
+
+คัดลอก environment ให้ Next.js และ Prisma ซึ่งทำงานจาก directory ของแต่ละ package:
+
+```bash
+cp .env packages/personal-app/.env.local
+cp .env packages/backend-api/.env
+```
+
+Generate Prisma Client แล้วเปิด dev server:
+
+```bash
+npm run db:generate
+npm run dev
+```
+
+เปิดเว็บที่ [http://localhost:3000](http://localhost:3000)
+
+ถ้าต้องการเปลี่ยนพอร์ต:
+
+```bash
+npm run dev --workspace=@tinypersonal/personal-app -- --port 4000
+```
+
+### Windows — PowerShell
+
+เปิด PowerShell แล้วเข้า directory ของโปรเจกต์:
+
+```powershell
+cd C:\path\to\tinypersonal-hub
+```
+
+ติดตั้ง dependencies:
+
+```powershell
+npm ci
+```
+
+สร้างไฟล์ `.env`:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+เปิด `.env` แล้วกำหนดค่า:
+
+```dotenv
+GOOGLE_GENERATIVE_AI_API_KEY=your_gemini_api_key
+GEMINI_MODEL=gemini-3.5-flash-lite
+DATABASE_URL="file:./dev.db"
+VAULT_MASTER_KEY=base64_encoded_32_byte_key
+MEDIA_SIGNING_KEY=random_string_at_least_32_characters
+PERSONAL_API_TOKEN=random_private_api_token
+APP_AUTH_USERNAME=your_workspace_username
+APP_AUTH_PASSWORD=your_workspace_login_password
+SESSION_SIGNING_KEY=random_string_at_least_32_characters
+VAULT_REVEAL_PASSWORD=separate_step_up_password
+```
+
+คัดลอก environment ให้ Next.js และ Prisma ซึ่งทำงานจาก directory ของแต่ละ package:
+
+```powershell
+Copy-Item .env packages\personal-app\.env.local
+Copy-Item .env packages\backend-api\.env
+```
+
+Generate Prisma Client แล้วเปิด dev server:
+
+```powershell
+npm run db:generate
+npm run dev
+```
+
+เปิดเว็บที่ [http://localhost:3000](http://localhost:3000)
+
+ถ้าต้องการเปลี่ยนพอร์ต:
+
+```powershell
+npm run dev --workspace=@tinypersonal/personal-app -- --port 4000
+```
+
+สคริปต์ `.sh` ต้องใช้ผ่าน WSL หรือ Git Bash หากต้องการรัน Docker/PM2 script บน Windows โดยตรง แต่สำหรับการพัฒนาทั่วไปให้ใช้คำสั่ง PowerShell ด้านบนได้เลย
+
+### เปิด Tailscale Funnel ในโหมด Development (ไม่บังคับ)
+
+เปิด Terminal หรือ PowerShell อีกหน้าต่างหนึ่ง โดยให้ dev server ยังทำงานอยู่ แล้วรัน:
+
+```bash
+tailscale status
+tailscale funnel --bg --yes 3000
+```
+
+ถ้า dev server ใช้พอร์ตอื่น ให้เปลี่ยน `3000` เป็นพอร์ตนั้น การเปิด Funnel จะทำให้แอปเข้าถึงได้จากอินเทอร์เน็ตแบบสาธารณะ
+
+ปิด Funnel:
+
+```bash
+tailscale funnel --https=443 off
+```
+
+## 1. เตรียม Environment
+
+สร้างไฟล์ `.env` จากตัวอย่าง:
+
+```bash
+cp .env.example .env
+```
+
+จากนั้นใส่ค่าที่จำเป็นอย่างน้อย:
+
+```dotenv
+GOOGLE_GENERATIVE_AI_API_KEY=your_gemini_api_key
+GEMINI_MODEL=gemini-3.5-flash-lite
+DATABASE_URL="file:./dev.db"
+VAULT_MASTER_KEY=base64_encoded_32_byte_key
+MEDIA_SIGNING_KEY=random_string_at_least_32_characters
+PERSONAL_API_TOKEN=random_private_api_token
+APP_AUTH_USERNAME=your_workspace_username
+APP_AUTH_PASSWORD=your_workspace_login_password
+SESSION_SIGNING_KEY=random_string_at_least_32_characters
+VAULT_REVEAL_PASSWORD=separate_step_up_password
+```
+
+ห้าม commit ไฟล์ `.env` หรือ API key ขึ้น Git
+
+สร้างค่า `VAULT_MASTER_KEY` บน macOS/Linux ได้ด้วย:
+
+```bash
+openssl rand -base64 32
+```
+
+บน Windows PowerShell:
+
+```powershell
+[Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(32))
+```
+
+หากทำ master key สูญหาย จะไม่สามารถถอดรหัสข้อมูลใน Vault เดิมได้ ควรสำรอง key ไว้ใน password manager หรือ secret manager ที่แยกจากฐานข้อมูล
+
+## 2. เตรียม Tailscale
+
+ติดตั้ง Tailscale และเชื่อมต่อบัญชีก่อนรันสคริปต์:
+
+```bash
+tailscale status
+```
+
+ถ้ายังไม่ได้เชื่อมต่อ ให้รัน:
+
+```bash
+tailscale up
+```
+
+Tailscale Funnel จะเผยแพร่แอปออกสู่อินเทอร์เน็ตแบบสาธารณะ โปรดตรวจสอบว่าไม่มีข้อมูลหรือฟังก์ชันที่ไม่ต้องการเปิดเผย
+
+## 3. รันด้วย Docker
+
+สิ่งที่ต้องติดตั้ง:
+
+- Docker
+- Tailscale
+- `curl`
+
+รันด้วยพอร์ตเริ่มต้น `3000`:
+
+```bash
+./start-docker.sh
+```
+
+สคริปต์จะดำเนินการดังนี้:
+
+1. Build image `tinypersonal-hub:local`
+2. Build ทุก npm workspace และ generate Prisma Client
+3. สร้างหรือแทนที่ container ชื่อ `tinypersonal-hub`
+4. เก็บฐานข้อมูลใน Docker volume ชื่อ `tinypersonal-hub-data`
+5. รอจนแอปตอบสนองที่ `http://127.0.0.1:3000`
+6. ล้าง Docker build cache ด้วย `docker builder prune --all --force`
+7. เปิด Tailscale Funnel
+
+ตรวจสถานะและ log:
+
+```bash
+docker ps --filter name=tinypersonal-hub
+docker logs --follow tinypersonal-hub
+tailscale funnel status
+```
+
+หยุด container:
+
+```bash
+docker stop tinypersonal-hub
+```
+
+เปิดกลับมาใหม่:
+
+```bash
+docker start tinypersonal-hub
+```
+
+ลบ container โดยไม่ลบข้อมูลใน volume:
+
+```bash
+docker rm --force tinypersonal-hub
+```
+
+## 4. รันด้วย PM2
+
+สิ่งที่ต้องติดตั้ง:
+
+- Node.js 22 หรือใหม่กว่า
+- npm 11
+- PM2
+- Tailscale
+
+ตัวอย่างการติดตั้ง PM2:
+
+```bash
+npm install --global pm2
+```
+
+รันด้วยพอร์ตเริ่มต้น `3000`:
+
+```bash
+./start-pm2.sh
+```
+
+สคริปต์จะติดตั้ง dependencies, generate Prisma Client, build ทุก workspace, รันแอปด้วย PM2, บันทึก process list และเปิด Tailscale Funnel
+
+ตรวจสถานะและ log:
+
+```bash
+pm2 status
+pm2 logs tinypersonal-hub
+tailscale funnel status
+```
+
+รีสตาร์ตแอป:
+
+```bash
+pm2 restart tinypersonal-hub
+```
+
+หยุดแอป:
+
+```bash
+pm2 stop tinypersonal-hub
+```
+
+นำแอปออกจาก PM2:
+
+```bash
+pm2 delete tinypersonal-hub
+pm2 save
+```
+
+## 5. เปลี่ยนพอร์ต
+
+ส่งค่า `PORT` ก่อนเรียกสคริปต์ เช่น พอร์ต `4000`:
+
+```bash
+PORT=4000 ./start-docker.sh
+```
+
+หรือ:
+
+```bash
+PORT=4000 ./start-pm2.sh
+```
+
+พอร์ตดังกล่าวจะถูกใช้ทั้งสำหรับแอปและ target ของ Tailscale Funnel
+
+## 6. ปิด Tailscale Funnel
+
+ปิด Funnel ที่ HTTPS port เริ่มต้น:
+
+```bash
+tailscale funnel --https=443 off
+```
+
+หรือล้างการตั้งค่า Serve/Funnel ทั้งหมดบนเครื่องนี้:
+
+```bash
+tailscale funnel reset
+```
+
+## 7. แก้ปัญหาเบื้องต้น
+
+### Permission denied ตอนเรียกสคริปต์
+
+```bash
+chmod +x start-docker.sh start-pm2.sh
+```
+
+### พอร์ตถูกใช้งานอยู่
+
+เลือกพอร์ตอื่น:
+
+```bash
+PORT=4000 ./start-docker.sh
+```
+
+### Docker container เปิดไม่สำเร็จ
+
+```bash
+docker logs --tail 100 tinypersonal-hub
+```
+
+### PM2 process เปิดไม่สำเร็จ
+
+```bash
+pm2 logs tinypersonal-hub --lines 100
+```
+
+### Funnel เปิดไม่ได้
+
+ตรวจว่า Tailscale daemon ทำงานและบัญชีเชื่อมต่ออยู่:
+
+```bash
+tailscale status
+tailscale funnel status
+```
+
+Funnel ต้องได้รับอนุญาตใน tailnet policy และจะทำให้แอปเข้าถึงได้จากอินเทอร์เน็ต
+
+## 8. PWA และการ Deploy
+
+Production environment ต้องกำหนดค่าต่อไปนี้ให้ครบก่อน start:
+
+```dotenv
+DATABASE_URL="file:/data/dev.db"
+GOOGLE_GENERATIVE_AI_API_KEY=your_gemini_api_key
+GEMINI_MODEL=gemini-3.5-flash-lite
+APP_AUTH_USERNAME=your_workspace_username
+APP_AUTH_PASSWORD=your_workspace_login_password
+SESSION_SIGNING_KEY=random_string_at_least_32_characters
+VAULT_MASTER_KEY=base64_encoded_32_byte_key
+VAULT_REVEAL_PASSWORD=separate_step_up_password
+MEDIA_SIGNING_KEY=random_string_at_least_32_characters
+PERSONAL_API_TOKEN=random_private_api_token_at_least_32_characters
+MEDIA_STORAGE_DRIVER=local
+MEDIA_LOCAL_ROOT=/data/media
+```
+
+สร้าง random secret ได้ด้วย `openssl rand -base64 48` และเก็บค่าจริงไว้นอก repository
+
+Build และตรวจ migration:
+
+```bash
+npm ci
+npm run db:generate
+npm run db:deploy
+npm run typecheck
+npm run build
+```
+
+จากนั้นรันผ่าน `start-docker.sh` หรือ `start-pm2.sh` สคริปต์จะตรวจ production environment และ apply migration ก่อนเปิดแอป
+
+PWA มี Web App Manifest, ไอคอน 192/512, install prompt, offline fallback และแจ้งเตือนอัปเดต โดยจะไม่ cache API, Vault หรือข้อมูล authenticated ทั้งนี้ PWA ต้องเปิดผ่าน HTTPS หรือ `localhost`
+
+หลัง deploy ให้ตรวจ endpoint ต่อไปนี้:
+
+```text
+/manifest.webmanifest
+/sw.js
+/offline
+/api/health
+```
