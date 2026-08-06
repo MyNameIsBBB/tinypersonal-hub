@@ -1,44 +1,13 @@
-import {
-  createScheduleItemTool,
-  deleteScheduleItemTool,
-  deleteOrCancelRoutineTool,
-  getScheduleByRangeTool,
-  updateScheduleItemTool,
-  updateScheduleStatusTool,
-} from "./scheduleTools";
-import {
-  createNoteTool, deleteMediaAssetTool, deleteNoteTool, deleteVaultSecretTool,
-  listMediaAssetsTool, searchNotesTool, searchVaultMetadataTool, updateMediaAssetLinksTool,
-  updateNoteTool, updateVaultMetadataTool,
-} from "./knowledgeTools";
+import { scheduleTool } from "./schedule";
 
 export const toolRegistry = {
-  createScheduleItem: createScheduleItemTool,
-  getScheduleByRange: getScheduleByRangeTool,
-  updateScheduleStatus: updateScheduleStatusTool,
-  updateScheduleItem: updateScheduleItemTool,
-  deleteScheduleItem: deleteScheduleItemTool,
-  deleteOrCancelRoutine: deleteOrCancelRoutineTool,
-  createNote: createNoteTool,
-  updateNote: updateNoteTool,
-  deleteNote: deleteNoteTool,
-  searchNotes: searchNotesTool,
-  listMediaAssets: listMediaAssetsTool,
-  updateMediaAssetLinks: updateMediaAssetLinksTool,
-  deleteMediaAsset: deleteMediaAssetTool,
-  searchVaultMetadata: searchVaultMetadataTool,
-  updateVaultMetadata: updateVaultMetadataTool,
-  deleteVaultSecret: deleteVaultSecretTool,
+  schedule: scheduleTool,
 };
 
 export type ToolName = keyof typeof toolRegistry;
-export type ToolExecutor = (name: ToolName, input: unknown) => Promise<unknown>;
 
-export function selectTools(allowed: ToolName[], executor?: ToolExecutor) {
+export function selectTools(allowed: ToolName[]) {
   return Object.fromEntries(
-    allowed.map((name) => {
-      const selected = toolRegistry[name];
-      return [name, executor ? { ...selected, execute: (input: unknown) => executor(name, input) } : selected];
-    }),
+    allowed.map((name) => [name, toolRegistry[name]]),
   ) as Partial<typeof toolRegistry>;
 }

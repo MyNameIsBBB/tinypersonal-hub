@@ -1,6 +1,5 @@
-import type { Metadata, Viewport } from "next";
+import type { Metadata } from "next";
 import type { ReactNode } from "react";
-import { PwaRegister } from "@/components/PwaRegister";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -11,8 +10,6 @@ export const metadata: Metadata = {
   appleWebApp: { capable: true, statusBarStyle: "default", title: "TinyPersonal" },
 };
 
-export const viewport: Viewport = { themeColor: "#f7efe0", width: "device-width", initialScale: 1, viewportFit: "cover" };
-
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
-  return <html lang="th"><body>{children}<PwaRegister /></body></html>;
+  return <html lang="th"><body>{children}</body></html>;
 }
