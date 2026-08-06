@@ -9,9 +9,12 @@ type ViewMode = "day" | "week" | "month";
 export type CalendarItem = {
   id: string;
   title: string;
+  description?: string | null;
   type: "EVENT" | "TASK" | "ROUTINE";
   startTime: string | null;
   endTime: string | null;
+  isAllDay?: boolean;
+  priority?: "LOW" | "MEDIUM" | "HIGH" | "URGENT";
   status: "PENDING" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED";
   parentRoutineId: string | null;
 };
@@ -19,11 +22,14 @@ export type CalendarItem = {
 const thaiMonths = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"];
 const dayLabels = ["จ", "อ", "พ", "พฤ", "ศ", "ส", "อา"];
 
-export function CalendarView({ items, loading, onStatusChange, onRangeChange }: {
+export function CalendarView({ items, loading, onStatusChange, onRangeChange, onDateSelect, onItemSelect, selectedDateKey }: {
   items: CalendarItem[];
   loading?: boolean;
   onStatusChange?: (item: CalendarItem) => Promise<void>;
   onRangeChange?: (start: Date, end: Date) => void;
+  onDateSelect?: (dateKey: string) => void;
+  onItemSelect?: (item: CalendarItem) => void;
+  selectedDateKey?: string;
 }) {
   const today = new Date();
   const [cursor, setCursor] = useState(new Date(today.getFullYear(), today.getMonth(), 1));
@@ -48,11 +54,17 @@ export function CalendarView({ items, loading, onStatusChange, onRangeChange }: 
   const withDate = items.map((item) => ({ ...item, date: item.startTime ? new Date(item.startTime) : null }));
   const forMonth = withDate.filter((item) => !item.date || (item.date.getFullYear() === cursor.getFullYear() && item.date.getMonth() === cursor.getMonth()));
 
+  const focusDate = selectedDateKey ? new Date(`${selectedDateKey}T00:00:00`) : today;
+
   const visibleItems = view === "day"
-    ? forMonth.filter((item) => item.date?.toDateString() === today.toDateString())
+    ? forMonth.filter((item) => item.date?.toDateString() === focusDate.toDateString())
     : view === "week"
-      ? forMonth.filter((item) => item.date && Math.abs(item.date.getTime() - today.getTime()) <= 7 * 86_400_000)
+      ? forMonth.filter((item) => item.date && Math.abs(item.date.getTime() - focusDate.getTime()) <= 7 * 86_400_000)
       : forMonth;
+
+  function dateKey(year: number, month: number, day: number) {
+    return `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  }
 
   return (
     <section className="calendar-card" aria-label="ปฏิทินและตารางเวลา">
@@ -81,10 +93,24 @@ export function CalendarView({ items, loading, onStatusChange, onRangeChange }: 
         <div className="month-calendar">
           {dayLabels.map((day) => <div className="day-label" key={day}>{day}</div>)}
           {days.map((day, index) => (
-            <div className={`calendar-day ${day === today.getDate() && cursor.getMonth() === today.getMonth() ? "today" : ""}`} key={`${day}-${index}`}>
+            <div
+              className={`calendar-day ${day === today.getDate() && cursor.getMonth() === today.getMonth() ? "today" : ""} ${day && selectedDateKey === dateKey(cursor.getFullYear(), cursor.getMonth(), day) ? "selected" : ""}`}
+              key={`${day}-${index}`}
+              onClick={() => {
+                if (!day) return;
+                onDateSelect?.(dateKey(cursor.getFullYear(), cursor.getMonth(), day));
+              }}
+            >
               {day && <span className="day-number">{day}</span>}
               {forMonth.filter((item) => item.date?.getDate() === day).map((item) => (
-                <button className={`calendar-event ${item.parentRoutineId ? "routine" : item.type.toLowerCase()} ${item.status === "COMPLETED" ? "completed" : ""}`} key={item.id} onClick={() => void onStatusChange?.(item)} disabled={Boolean(item.parentRoutineId)}>
+                <button
+                  className={`calendar-event ${item.parentRoutineId ? "routine" : item.type.toLowerCase()} ${item.status === "COMPLETED" ? "completed" : ""}`}
+                  key={item.id}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onItemSelect?.(item);
+                  }}
+                >
                   <span>{item.date?.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })}</span>{item.title}
                 </button>
               ))}
@@ -101,7 +127,7 @@ export function CalendarView({ items, loading, onStatusChange, onRangeChange }: 
                 <p>{item.title}</p>
                 <span><CalendarDays size={13} /> {item.date?.toLocaleDateString("th-TH") ?? "ไม่กำหนดวัน"} · <Clock3 size={13} /> {item.date?.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" }) ?? "ไม่กำหนดเวลา"}</span>
               </div>
-              <button className="more-button" aria-label="ตัวเลือกเพิ่มเติม"><MoreHorizontal size={19} /></button>
+              <button className="more-button" aria-label="ตัวเลือกเพิ่มเติม" onClick={() => onItemSelect?.(item)}><MoreHorizontal size={19} /></button>
             </article>
           )) : <div className="empty-state">วันนี้ยังไม่มีรายการ — ลองเพิ่มด้วย AI ด้านบน</div>}
         </div>
