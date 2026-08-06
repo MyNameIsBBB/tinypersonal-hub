@@ -12,7 +12,10 @@
     "typecheck": "npm run typecheck --workspaces --if-present",
     "db:generate": "npm run db:generate --workspace=@tinypersonal/backend-api",
     "db:migrate": "npm run db:migrate --workspace=@tinypersonal/backend-api",
-    "db:deploy": "npm run db:deploy --workspace=@tinypersonal/backend-api"
+    "db:deploy": "npm run db:deploy --workspace=@tinypersonal/backend-api",
+    "docker:up": "./start-compose.sh",
+    "docker:backup": "./scripts/backup-docker-data.sh",
+    "docker:restore": "./scripts/restore-docker-data.sh"
   },
   "devDependencies": {
     "typescript": "^5.7.0"

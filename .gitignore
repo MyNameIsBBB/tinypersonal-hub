@@ -7,4 +7,4 @@ dist/
 *.tsbuildinfo
 .DS_Store
 packages/backend-api/prisma/dev.db*
-.data/
+backups/

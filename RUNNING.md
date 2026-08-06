@@ -3,9 +3,12 @@
 โปรเจกต์มีสคริปต์สำหรับรัน 2 รูปแบบ:
 
 - Docker: `start-docker.sh`
+- Docker Compose: `start-compose.sh`
 - PM2: `start-pm2.sh`
 
 ทั้งสองรูปแบบจะ build ทุก workspace, เปิด Personal App และเปิด Tailscale Funnel ให้โดยอัตโนมัติ
+
+> หมายเหตุ: หาก Funnel เคยชี้ไปพอร์ตอื่น (เช่น `3002`) สคริปต์ใหม่จะรีเซ็ตและตั้งให้ชี้พอร์ตของแอปปัจจุบันอัตโนมัติ
 
 ## รันแบบ Development บนเครื่อง
 
@@ -227,6 +230,28 @@ Tailscale Funnel จะเผยแพร่แอปออกสู่อิน
 ./start-docker.sh
 ```
 
+## 3.1 รันด้วย Docker Compose (แนะนำ)
+
+คำสั่งเดียวสำหรับ TinyPersonal + MinIO + bucket initialization:
+
+```bash
+./start-compose.sh
+```
+
+หรือผ่าน npm script:
+
+```bash
+npm run docker:up
+```
+
+ตรวจสถานะ:
+
+```bash
+docker compose ps
+docker compose logs -f app
+docker compose logs -f minio
+```
+
 สคริปต์จะดำเนินการดังนี้:
 
 1. Build image `tinypersonal-hub:local`
@@ -319,6 +344,38 @@ pm2 save
 
 ```bash
 PORT=4000 ./start-docker.sh
+```
+
+แบบ Docker Compose:
+
+```bash
+PORT=4000 ./start-compose.sh
+```
+
+## 6. สำรองและกู้คืนข้อมูล Docker
+
+สำรองข้อมูล volume ทั้ง `tinypersonal-hub-data` และ `minio-data` พร้อมไฟล์ `.env`:
+
+```bash
+./scripts/backup-docker-data.sh
+```
+
+ระบุปลายทางสำรองได้:
+
+```bash
+./scripts/backup-docker-data.sh /path/to/backups
+```
+
+กู้คืนจากไฟล์สำรอง:
+
+```bash
+./scripts/restore-docker-data.sh /path/to/tinypersonal-backup-YYYYmmdd-HHMMSS.tar.gz
+```
+
+หลัง restore เสร็จ ให้เปิดระบบใหม่ด้วย:
+
+```bash
+./start-compose.sh
 ```
 
 หรือ:

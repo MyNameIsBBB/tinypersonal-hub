@@ -10,12 +10,7 @@ DATA_VOLUME="${APP_NAME}-data"
 PORT="${PORT:-3000}"
 DOCKER_NETWORK="${DOCKER_NETWORK:-}"
 ENABLE_TAILSCALE_FUNNEL="${ENABLE_TAILSCALE_FUNNEL:-1}"
-DOCKERFILE="$(mktemp "${TMPDIR:-/tmp}/${APP_NAME}.Dockerfile.XXXXXX")"
-
-cleanup() {
-  rm -f "$DOCKERFILE"
-}
-trap cleanup EXIT
+DOCKERFILE="$SCRIPT_DIR/Dockerfile"
 
 for command_name in docker curl; do
   if ! command -v "$command_name" >/dev/null 2>&1; then
@@ -25,28 +20,6 @@ for command_name in docker curl; do
 done
 
 cd "$SCRIPT_DIR"
-
-cat >"$DOCKERFILE" <<'DOCKERFILE_EOF'
-FROM node:22-bookworm-slim
-
-WORKDIR /app
-
-ENV DATABASE_URL=file:/tmp/build.db
-
-COPY . .
-RUN npm ci \
-  && npm run db:generate \
-  && npm run build
-
-ENV NODE_ENV=production \
-    PORT=3000 \
-    HOSTNAME=0.0.0.0 \
-    DATABASE_URL=file:/data/dev.db
-
-EXPOSE 3000
-HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 CMD node -e "fetch('http://127.0.0.1:3000/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
-CMD ["sh", "-c", "npm run db:deploy && npm run start --workspace=@tinypersonal/personal-app -- --hostname 0.0.0.0 --port 3000"]
-DOCKERFILE_EOF
 
 echo "Building all workspaces in Docker..."
 docker build --file "$DOCKERFILE" --tag "$IMAGE_NAME" .
@@ -95,13 +68,4 @@ done
 echo "Clearing Docker build cache..."
 docker builder prune --all --force
 
-if [[ "$ENABLE_TAILSCALE_FUNNEL" == "1" ]]; then
-  if command -v tailscale >/dev/null 2>&1; then
-    echo "Starting Tailscale Funnel..."
-    if ! tailscale funnel --bg --yes "$PORT"; then
-      echo "Warning: Tailscale Funnel could not be started automatically."
-    fi
-  else
-    echo "Warning: tailscale is not installed; skipping funnel setup."
-  fi
-fi
+ENABLE_TAILSCALE_FUNNEL="$ENABLE_TAILSCALE_FUNNEL" "$SCRIPT_DIR/scripts/open-funnel.sh" "$PORT" || true

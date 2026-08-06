@@ -5,8 +5,9 @@ set -Eeuo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 APP_NAME="tinypersonal-hub"
 PORT="${PORT:-3000}"
+ENABLE_TAILSCALE_FUNNEL="${ENABLE_TAILSCALE_FUNNEL:-1}"
 
-for command_name in npm pm2 tailscale; do
+for command_name in npm pm2; do
   if ! command -v "$command_name" >/dev/null 2>&1; then
     echo "Error: $command_name is not installed or is not in PATH." >&2
     exit 1
@@ -43,5 +44,4 @@ PORT="$PORT" NODE_ENV=production pm2 start "$(command -v npm)" \
 
 pm2 save
 
-echo "Starting Tailscale Funnel..."
-tailscale funnel --bg --yes "$PORT"
+ENABLE_TAILSCALE_FUNNEL="$ENABLE_TAILSCALE_FUNNEL" "$SCRIPT_DIR/scripts/open-funnel.sh" "$PORT" || true
