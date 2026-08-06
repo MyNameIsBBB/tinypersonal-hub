@@ -395,6 +395,17 @@ textarea {
 	min-width: 0;
 }
 
+.section-heading {
+	margin: 0 0 10px;
+	font-size: 1rem;
+	font-weight: 700;
+}
+
+.agenda-view {
+	display: grid;
+	gap: 10px;
+}
+
 .note-list,
 .note-editor,
 .ai-workspace,
@@ -483,6 +494,14 @@ textarea {
 .ai-hero,
 .chat-message {
 	padding: 12px;
+}
+
+.routine-card {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	text-decoration: none;
+	color: inherit;
 }
 
 .storage-meter {
@@ -676,6 +695,18 @@ textarea {
 	text-align: left;
 	display: flex;
 	gap: 8px;
+}
+
+.ai-suggestions a {
+	border: 1px solid var(--line);
+	border-radius: 12px;
+	background: rgba(15, 23, 42, 0.62);
+	color: var(--text);
+	padding: 11px;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	text-decoration: none;
 }
 
 .mobile-menu,
