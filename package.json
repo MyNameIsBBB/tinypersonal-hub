@@ -15,7 +15,10 @@
     "db:deploy": "npm run db:deploy --workspace=@tinypersonal/backend-api",
     "docker:up": "./start-compose.sh",
     "docker:backup": "./scripts/backup-docker-data.sh",
-    "docker:restore": "./scripts/restore-docker-data.sh"
+    "docker:restore": "./scripts/restore-docker-data.sh",
+    "funnel:check": "./scripts/check-funnel-health.sh",
+    "funnel:install-autofix": "./scripts/install-funnel-autofix-cron.sh",
+    "funnel:install-autofix-systemd": "./scripts/install-funnel-autofix-systemd.sh"
   },
   "devDependencies": {
     "typescript": "^5.7.0"

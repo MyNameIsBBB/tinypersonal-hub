@@ -378,6 +378,51 @@ PORT=4000 ./start-compose.sh
 ./start-compose.sh
 ```
 
+## 7. ตรวจสุขภาพ Funnel และ Auto-heal
+
+ตรวจสุขภาพผ่าน URL สาธารณะของ Funnel:
+
+```bash
+./scripts/check-funnel-health.sh
+```
+
+หรือผ่าน npm:
+
+```bash
+npm run funnel:check
+```
+
+ติดตั้งงานอัตโนมัติทุก 3 นาที (cron ของ user ปัจจุบัน):
+
+```bash
+./scripts/install-funnel-autofix-cron.sh
+```
+
+ถ้าเครื่องไม่มี crontab ให้ใช้ systemd user timer แทน:
+
+```bash
+./scripts/install-funnel-autofix-systemd.sh
+```
+
+หรือผ่าน npm:
+
+```bash
+npm run funnel:install-autofix
+npm run funnel:install-autofix-systemd
+```
+
+ดู log การแก้อัตโนมัติ:
+
+```bash
+tail -f logs/funnel-heal.log
+```
+
+ถ้า Funnel ถูกปฏิเสธสิทธิ์ ให้ตั้ง operator ก่อน 1 ครั้ง:
+
+```bash
+sudo tailscale set --operator=$USER
+```
+
 หรือ:
 
 ```bash
