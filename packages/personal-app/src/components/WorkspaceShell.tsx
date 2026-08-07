@@ -6,11 +6,11 @@ import Image from "next/image";
 import { useState, type ReactNode } from "react";
 
 const modules = [
+  { href: "/ai", label: "AI Assistant", icon: Bot },
   { href: "/", label: "Schedule", icon: CalendarDays },
   { href: "/notes", label: "Notes", icon: NotebookPen },
   { href: "/media", label: "Media", icon: FileImage },
   { href: "/vault", label: "Vault", icon: KeyRound },
-  { href: "/ai", label: "AI Assistant", icon: Bot },
 ] as const;
 
 export function WorkspaceShell({ active, title, subtitle, action, children }: {
