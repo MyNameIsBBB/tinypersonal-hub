@@ -6,7 +6,7 @@ import { convertToModelMessages, streamText, type UIMessage } from "ai";
 export const maxDuration = 30;
 
 export async function POST(request: Request) {
-  const { messages }: { messages: UIMessage[] } = await request.json();
+  const { messages, voiceMode }: { messages: UIMessage[]; voiceMode?: boolean } = await request.json();
 
   let context = "No schedule context loaded.";
   try {
@@ -30,7 +30,7 @@ export async function POST(request: Request) {
 
   const result = streamText({
     model: google(process.env.GEMINI_MODEL ?? "gemini-3.5-flash-lite"),
-    system: `${agent.system}\n\n${context}`,
+    system: `${agent.system}\n\n${context}${voiceMode ? "\n\nVoice mode: answer in Thai, naturally and very briefly (normally 1-2 sentences) unless essential detail is required." : ""}`,
     messages: await convertToModelMessages(messages),
     tools: agent.tools,
   });

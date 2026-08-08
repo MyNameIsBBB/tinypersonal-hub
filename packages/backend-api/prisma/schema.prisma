@@ -128,3 +128,16 @@ model VaultSecret {
   @@index([serviceName])
   @@index([category])
 }
+
+model NotificationDelivery {
+  id             String   @id @default(cuid())
+  idempotencyKey String
+  channel        String
+  status         String
+  error          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([idempotencyKey, channel])
+  @@index([createdAt])
+}

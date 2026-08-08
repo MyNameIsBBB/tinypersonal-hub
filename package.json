@@ -19,7 +19,9 @@
     "import:tinyschedule": "node ./scripts/import-tinyschedule-schedules.mjs",
     "funnel:check": "./scripts/check-funnel-health.sh",
     "funnel:install-autofix": "./scripts/install-funnel-autofix-cron.sh",
-    "funnel:install-autofix-systemd": "./scripts/install-funnel-autofix-systemd.sh"
+    "funnel:install-autofix-systemd": "./scripts/install-funnel-autofix-systemd.sh",
+    "briefing:run": "node ./scripts/run-morning-briefing.mjs",
+    "briefing:install-cron": "./scripts/install-morning-briefing-cron.sh"
   },
   "devDependencies": {
     "typescript": "^5.7.0"
