@@ -9,13 +9,50 @@ import { RoutineForm } from "./RoutineForm";
 import type { RoutineDraft } from "./RoutineForm";
 import type { CalendarItem } from "./CalendarView";
 
+const BANGKOK_TZ = "Asia/Bangkok";
+const BANGKOK_OFFSET_HOURS = 7;
+
+function pad2(value: number): string {
+  return String(value).padStart(2, "0");
+}
+
+function toBangkokWallClock(date: Date): Date {
+  return new Date(date.getTime() + BANGKOK_OFFSET_HOURS * 60 * 60 * 1000);
+}
+
+function bangkokDateKey(date: Date): string {
+  const local = toBangkokWallClock(date);
+  return `${local.getUTCFullYear()}-${pad2(local.getUTCMonth() + 1)}-${pad2(local.getUTCDate())}`;
+}
+
+function bangkokTimeHHMM(date: Date): string {
+  const local = toBangkokWallClock(date);
+  return `${pad2(local.getUTCHours())}:${pad2(local.getUTCMinutes())}`;
+}
+
+function bangkokLocalToUtc(dateKey: string, time: string, second = 0): Date {
+  const [year, month, day] = dateKey.split("-").map(Number);
+  const [hour, minute] = time.split(":").map(Number);
+  return new Date(Date.UTC(year, month - 1, day, hour - BANGKOK_OFFSET_HOURS, minute, second, 0));
+}
+
+function bangkokDisplayDateFromKey(dateKey: string): string {
+  return bangkokLocalToUtc(dateKey, "00:00").toLocaleDateString("th-TH", {
+    timeZone: BANGKOK_TZ,
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+}
+
 export function ScheduleWorkspace() {
   const [manageOpen, setManageOpen] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<"day" | "routine">("day");
   const [showEditor, setShowEditor] = useState(false);
   const [items, setItems] = useState<CalendarItem[]>([]);
-  const [selectedDate, setSelectedDate] = useState(new Date().toLocaleDateString("en-CA"));
+  const [selectedDate, setSelectedDate] = useState(bangkokDateKey(new Date()));
   const [editingItem, setEditingItem] = useState<CalendarItem | null>(null);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
@@ -24,16 +61,21 @@ export function ScheduleWorkspace() {
     title: "",
     description: "",
     type: "EVENT" as "EVENT" | "TASK",
-    date: new Date().toLocaleDateString("en-CA"),
+    date: bangkokDateKey(new Date()),
     startTime: "09:00",
     endTime: "10:00",
     isAllDay: false,
     priority: "MEDIUM" as "LOW" | "MEDIUM" | "HIGH" | "URGENT",
   });
 
-  const loadRange = useCallback(async (start = new Date(new Date().getFullYear(), new Date().getMonth(), 1), end = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0, 23, 59, 59)) => {
+  const loadRange = useCallback(async (start = new Date()) => {
+    const localStart = toBangkokWallClock(start);
+    const year = localStart.getUTCFullYear();
+    const month = localStart.getUTCMonth();
+    const monthStartUtc = new Date(Date.UTC(year, month, 1, -BANGKOK_OFFSET_HOURS, 0, 0, 0));
+    const monthEndUtc = new Date(Date.UTC(year, month + 1, 0, 23 - BANGKOK_OFFSET_HOURS, 59, 59, 999));
     setLoading(true);
-    const response = await fetch(`/api/schedule?start=${encodeURIComponent(start.toISOString())}&end=${encodeURIComponent(end.toISOString())}`, { cache: "no-store" });
+    const response = await fetch(`/api/schedule?start=${encodeURIComponent(monthStartUtc.toISOString())}&end=${encodeURIComponent(monthEndUtc.toISOString())}`, { cache: "no-store" });
     if (response.status === 401) { window.location.assign("/login"); return; }
     const data = await response.json() as { items?: CalendarItem[] };
     setItems(data.items ?? []); setLoading(false);
@@ -72,9 +114,9 @@ export function ScheduleWorkspace() {
       title: item.title,
       description: item.description ?? "",
       type: item.type === "TASK" ? "TASK" : "EVENT",
-      date: start.toLocaleDateString("en-CA"),
-      startTime: item.isAllDay ? "00:00" : start.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false }),
-      endTime: end ? end.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false }) : "10:00",
+      date: bangkokDateKey(start),
+      startTime: item.isAllDay ? "00:00" : bangkokTimeHHMM(start),
+      endTime: end ? bangkokTimeHHMM(end) : "10:00",
       isAllDay: Boolean(item.isAllDay),
       priority: item.priority ?? "MEDIUM",
     });
@@ -89,11 +131,11 @@ export function ScheduleWorkspace() {
     }
 
     const startTime = draft.isAllDay
-      ? new Date(`${draft.date}T00:00:00`)
-      : new Date(`${draft.date}T${draft.startTime}:00`);
+      ? bangkokLocalToUtc(draft.date, "00:00")
+      : bangkokLocalToUtc(draft.date, draft.startTime);
     const endTime = draft.isAllDay
-      ? new Date(`${draft.date}T23:59:00`)
-      : new Date(`${draft.date}T${draft.endTime}:00`);
+      ? bangkokLocalToUtc(draft.date, "23:59")
+      : bangkokLocalToUtc(draft.date, draft.endTime);
 
     if (draft.type === "EVENT" && endTime <= startTime) {
       setMessage("เวลาสิ้นสุดต้องมากกว่าเวลาเริ่ม");
@@ -149,12 +191,11 @@ export function ScheduleWorkspace() {
   }
 
   async function createRoutine(routine: RoutineDraft) {
-    const today = new Date();
-    const anchorDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
-    const start = new Date(`${anchorDate}T${routine.startTime}:00`);
-    let end = new Date(`${anchorDate}T${routine.endTime}:00`);
+    const anchorDate = bangkokDateKey(new Date());
+    const start = bangkokLocalToUtc(anchorDate, routine.startTime);
+    let end = bangkokLocalToUtc(anchorDate, routine.endTime);
     if (end <= start) end = new Date(end.getTime() + 86_400_000);
-    const routineEndDate = new Date(`${routine.endDate}T23:59:59`);
+    const routineEndDate = bangkokLocalToUtc(routine.endDate, "23:59", 59);
     if (routineEndDate < start) throw new Error("วันสิ้นสุด Routine ต้องไม่อยู่ก่อนวันนี้");
     const response = await fetch("/api/schedule", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
       title: routine.title, type: "ROUTINE", startTime: start.toISOString(), endTime: end.toISOString(),
@@ -175,7 +216,7 @@ export function ScheduleWorkspace() {
 
   const dayItems = items.filter((item) => {
     if (!item.startTime) return false;
-    return new Date(item.startTime).toLocaleDateString("en-CA") === selectedDate;
+    return bangkokDateKey(new Date(item.startTime)) === selectedDate;
   }).sort((left, right) => {
     if (!left.startTime) return 1;
     if (!right.startTime) return -1;
@@ -212,7 +253,7 @@ export function ScheduleWorkspace() {
             onRangeChange={loadRange}
             onDateSelect={openDayModal}
             onItemSelect={(item) => {
-              const dateKey = item.startTime ? new Date(item.startTime).toLocaleDateString("en-CA") : selectedDate;
+              const dateKey = item.startTime ? bangkokDateKey(new Date(item.startTime)) : selectedDate;
               setSelectedDate(dateKey);
               setModalMode("day");
               setModalOpen(true);
@@ -232,7 +273,7 @@ export function ScheduleWorkspace() {
               <header className="schedule-modal-head">
                 <div>
                   <p className="eyebrow">{manageOpen ? "Manage schedule" : "Day details"}</p>
-                  <h2>{new Date(`${selectedDate}T00:00:00`).toLocaleDateString("th-TH", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</h2>
+                  <h2>{bangkokDisplayDateFromKey(selectedDate)}</h2>
                 </div>
                 <button className="today-button" aria-label="ปิด" onClick={closeModal}><X size={16} /></button>
               </header>
@@ -281,7 +322,7 @@ export function ScheduleWorkspace() {
                         <div>
                           <strong>{item.title}</strong>
                           <p>{item.type} · {item.status}{item.priority ? ` · ${item.priority}` : ""}</p>
-                          <small>{start ? start.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" }) : "ไม่ระบุเวลา"}{end ? ` - ${end.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })}` : ""}</small>
+                          <small>{start ? start.toLocaleTimeString("th-TH", { timeZone: BANGKOK_TZ, hour: "2-digit", minute: "2-digit" }) : "ไม่ระบุเวลา"}{end ? ` - ${end.toLocaleTimeString("th-TH", { timeZone: BANGKOK_TZ, hour: "2-digit", minute: "2-digit" })}` : ""}</small>
                         </div>
                         {manageOpen && <div className="day-item-actions"><button className="today-button" onClick={() => openEditEditor(item)} disabled={Boolean(item.parentRoutineId)}><Pencil size={14} /></button><button className="danger-button" onClick={() => void deleteItem(item)} disabled={Boolean(item.parentRoutineId)}><Trash2 size={14} /></button></div>}
                       </article>;

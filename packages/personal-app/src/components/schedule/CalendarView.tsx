@@ -5,6 +5,33 @@ import {
 } from "lucide-react";
 import { useMemo, useState } from "react";
 
+const BANGKOK_TZ = "Asia/Bangkok";
+const BANGKOK_OFFSET_HOURS = 7;
+const DAY_MS = 86_400_000;
+
+function pad2(value: number): string {
+  return String(value).padStart(2, "0");
+}
+
+function toBangkokWallClock(date: Date): Date {
+  return new Date(date.getTime() + BANGKOK_OFFSET_HOURS * 60 * 60 * 1000);
+}
+
+function bangkokDateKey(date: Date): string {
+  const local = toBangkokWallClock(date);
+  return `${local.getUTCFullYear()}-${pad2(local.getUTCMonth() + 1)}-${pad2(local.getUTCDate())}`;
+}
+
+function bangkokDayStartUtcMs(date: Date): number {
+  const local = toBangkokWallClock(date);
+  return Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate());
+}
+
+function parseDateKeyToUtcMs(dateKey: string): number {
+  const [year, month, day] = dateKey.split("-").map(Number);
+  return Date.UTC(year, month - 1, day);
+}
+
 type ViewMode = "day" | "week" | "month";
 export type CalendarItem = {
   id: string;
@@ -31,8 +58,9 @@ export function CalendarView({ items, loading, onStatusChange, onRangeChange, on
   onItemSelect?: (item: CalendarItem) => void;
   selectedDateKey?: string;
 }) {
-  const today = new Date();
-  const [cursor, setCursor] = useState(new Date(today.getFullYear(), today.getMonth(), 1));
+  const now = new Date();
+  const bangkokToday = toBangkokWallClock(now);
+  const [cursor, setCursor] = useState(new Date(bangkokToday.getUTCFullYear(), bangkokToday.getUTCMonth(), 1));
   const [view, setView] = useState<ViewMode>("month");
 
   const days = useMemo(() => {
@@ -52,14 +80,18 @@ export function CalendarView({ items, loading, onStatusChange, onRangeChange, on
   }
 
   const withDate = items.map((item) => ({ ...item, date: item.startTime ? new Date(item.startTime) : null }));
-  const forMonth = withDate.filter((item) => !item.date || (item.date.getFullYear() === cursor.getFullYear() && item.date.getMonth() === cursor.getMonth()));
+  const forMonth = withDate.filter((item) => {
+    if (!item.date) return true;
+    const local = toBangkokWallClock(item.date);
+    return local.getUTCFullYear() === cursor.getFullYear() && local.getUTCMonth() === cursor.getMonth();
+  });
 
-  const focusDate = selectedDateKey ? new Date(`${selectedDateKey}T00:00:00`) : today;
+  const focusDayStartMs = selectedDateKey ? parseDateKeyToUtcMs(selectedDateKey) : bangkokDayStartUtcMs(now);
 
   const visibleItems = view === "day"
-    ? forMonth.filter((item) => item.date?.toDateString() === focusDate.toDateString())
+    ? forMonth.filter((item) => item.date && bangkokDayStartUtcMs(item.date) === focusDayStartMs)
     : view === "week"
-      ? forMonth.filter((item) => item.date && Math.abs(item.date.getTime() - focusDate.getTime()) <= 7 * 86_400_000)
+      ? forMonth.filter((item) => item.date && Math.abs(bangkokDayStartUtcMs(item.date) - focusDayStartMs) <= 6 * DAY_MS)
       : forMonth;
 
   function dateKey(year: number, month: number, day: number) {
@@ -81,7 +113,10 @@ export function CalendarView({ items, loading, onStatusChange, onRangeChange, on
               </button>
             ))}
           </div>
-          <button className="today-button" onClick={() => setCursor(new Date(today.getFullYear(), today.getMonth(), 1))}>วันนี้</button>
+          <button className="today-button" onClick={() => {
+            const currentBangkok = toBangkokWallClock(new Date());
+            setCursor(new Date(currentBangkok.getUTCFullYear(), currentBangkok.getUTCMonth(), 1));
+          }}>วันนี้</button>
           <div className="arrow-buttons">
             <button aria-label="เดือนก่อนหน้า" onClick={() => moveMonth(-1)}><ChevronLeft size={18} /></button>
             <button aria-label="เดือนถัดไป" onClick={() => moveMonth(1)}><ChevronRight size={18} /></button>
@@ -94,7 +129,7 @@ export function CalendarView({ items, loading, onStatusChange, onRangeChange, on
           {dayLabels.map((day) => <div className="day-label" key={day}>{day}</div>)}
           {days.map((day, index) => (
             <div
-              className={`calendar-day ${day === today.getDate() && cursor.getMonth() === today.getMonth() ? "today" : ""} ${day && selectedDateKey === dateKey(cursor.getFullYear(), cursor.getMonth(), day) ? "selected" : ""}`}
+              className={`calendar-day ${day === bangkokToday.getUTCDate() && cursor.getMonth() === bangkokToday.getUTCMonth() && cursor.getFullYear() === bangkokToday.getUTCFullYear() ? "today" : ""} ${day && selectedDateKey === dateKey(cursor.getFullYear(), cursor.getMonth(), day) ? "selected" : ""}`}
               key={`${day}-${index}`}
               onClick={() => {
                 if (!day) return;
@@ -102,7 +137,7 @@ export function CalendarView({ items, loading, onStatusChange, onRangeChange, on
               }}
             >
               {day && <span className="day-number">{day}</span>}
-              {forMonth.filter((item) => item.date?.getDate() === day).map((item) => (
+              {forMonth.filter((item) => item.date && toBangkokWallClock(item.date).getUTCDate() === day).map((item) => (
                 <button
                   className={`calendar-event ${item.parentRoutineId ? "routine" : item.type.toLowerCase()} ${item.status === "COMPLETED" ? "completed" : ""}`}
                   key={item.id}
@@ -111,7 +146,7 @@ export function CalendarView({ items, loading, onStatusChange, onRangeChange, on
                     onItemSelect?.(item);
                   }}
                 >
-                  <span>{item.date?.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })}</span>{item.title}
+                  <span>{item.date?.toLocaleTimeString("th-TH", { timeZone: BANGKOK_TZ, hour: "2-digit", minute: "2-digit" })}</span>{item.title}
                 </button>
               ))}
             </div>
@@ -125,7 +160,7 @@ export function CalendarView({ items, loading, onStatusChange, onRangeChange, on
               <div className={`agenda-dot ${item.parentRoutineId ? "routine" : item.type.toLowerCase()}`} />
               <div>
                 <p>{item.title}</p>
-                <span><CalendarDays size={13} /> {item.date?.toLocaleDateString("th-TH") ?? "ไม่กำหนดวัน"} · <Clock3 size={13} /> {item.date?.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" }) ?? "ไม่กำหนดเวลา"}</span>
+                <span><CalendarDays size={13} /> {item.date?.toLocaleDateString("th-TH", { timeZone: BANGKOK_TZ }) ?? "ไม่กำหนดวัน"} · <Clock3 size={13} /> {item.date?.toLocaleTimeString("th-TH", { timeZone: BANGKOK_TZ, hour: "2-digit", minute: "2-digit" }) ?? "ไม่กำหนดเวลา"}</span>
               </div>
               <button className="more-button" aria-label="ตัวเลือกเพิ่มเติม" onClick={() => onItemSelect?.(item)}><MoreHorizontal size={19} /></button>
             </article>

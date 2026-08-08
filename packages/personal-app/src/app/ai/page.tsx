@@ -2,6 +2,7 @@
 
 import { useChat } from "@ai-sdk/react";
 import { ArrowUp, Bot, CalendarPlus, FileSearch, KeyRound, LoaderCircle, Mic, MicOff, ShieldCheck, Sparkles, Volume2, VolumeX } from "lucide-react";
+import { getToolName, isToolUIPart, type UIMessagePart } from "ai";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { WorkspaceShell } from "@/components/WorkspaceShell";
 
@@ -11,13 +12,47 @@ const suggestions = [
   { icon: KeyRound, text: "ขอลิงก์เข้า GitHub จาก Vault" },
 ];
 
-const CHAT_STORAGE_KEY = "tinypersonal.ai.chat";
-const CHAT_IDLE_LIMIT_MS = 30 * 60 * 1000;
+const CHAT_STORAGE_KEY = "tinypersonal-ai-chat";
 
 type StoredChatPayload = {
   messages: unknown[];
   lastActiveAt: number;
 };
+
+function renderMessageParts(parts: UIMessagePart<any, any>[]) {
+  const latestToolPartIndexByToolName = new Map<string, number>();
+  parts.forEach((part, index) => {
+    if (isToolUIPart(part)) {
+      latestToolPartIndexByToolName.set(getToolName(part), index);
+    }
+  });
+
+  return parts.map((part, index) => {
+    if (part.type === "text") {
+      return <p key={index}>{part.text}</p>;
+    }
+
+    if (!isToolUIPart(part)) {
+      return null;
+    }
+
+    // The model may retry the same tool multiple times; only show the latest status for each tool name.
+    const toolName = getToolName(part);
+    if (latestToolPartIndexByToolName.get(toolName) !== index) {
+      return null;
+    }
+
+    if (part.state === "output-available") {
+      return <div className="tool-status done" key={index}>ใช้เครื่องมือ {toolName} สำเร็จ</div>;
+    }
+
+    if (part.state === "output-error" || part.state === "output-denied") {
+      return <div className="tool-status error" key={index}>เครื่องมือ {toolName} มีปัญหา: {part.errorText ?? "ดำเนินการไม่สำเร็จ"}</div>;
+    }
+
+    return <div className="tool-status" key={index}><LoaderCircle size={13} /> กำลังดำเนินการด้วยเครื่องมือ {toolName}…</div>;
+  });
+}
 
 type SpeechRecognitionEventLike = { results: { [index: number]: { [index: number]: { transcript: string } }; length: number } };
 type SpeechRecognitionLike = {
@@ -39,6 +74,7 @@ export default function AIPage() {
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const voiceRequestPending = useRef(false);
   const lastSpokenMessageId = useRef<string | null>(null);
+  const [historyReady, setHistoryReady] = useState(false);
 
   function clearStoredChat() {
     if (typeof window === "undefined") return;
@@ -60,7 +96,6 @@ export default function AIPage() {
 
   async function send(text: string, fromVoice = false) {
     if (!text.trim() || status === "submitted" || status === "streaming") return;
-    touchActivity();
     setInput("");
     voiceRequestPending.current = fromVoice;
     await sendMessage({ text }, { body: { voiceMode: fromVoice } });
@@ -94,19 +129,30 @@ export default function AIPage() {
     const Recognition = speechWindow.SpeechRecognition ?? speechWindow.webkitSpeechRecognition;
     setVoiceAvailable(Boolean(Recognition));
     if (!Recognition) return;
+
     const recognition = new Recognition();
-    recognition.lang = "th-TH"; recognition.interimResults = true; recognition.continuous = false;
+    recognition.lang = "th-TH";
+    recognition.interimResults = true;
+    recognition.continuous = false;
     recognition.onresult = (event) => {
       let transcript = "";
-      for (let index = 0; index < event.results.length; index += 1) transcript += event.results[index][0].transcript;
+      for (let index = 0; index < event.results.length; index += 1) {
+        transcript += event.results[index][0].transcript;
+      }
       setInput(transcript.trim());
       const last = event.results[event.results.length - 1] as unknown as { isFinal?: boolean; 0: { transcript: string } };
-      if (last?.isFinal) void send(transcript.trim(), true);
+      if (last?.isFinal) {
+        void send(transcript.trim(), true);
+      }
     };
     recognition.onend = () => setListening(false);
     recognition.onerror = () => setListening(false);
     recognitionRef.current = recognition;
-    return () => { recognition.stop(); recognitionRef.current = null; };
+
+    return () => {
+      recognition.stop();
+      recognitionRef.current = null;
+    };
   }, []);
 
   useEffect(() => {
@@ -122,60 +168,59 @@ export default function AIPage() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
+
     const raw = window.localStorage.getItem(CHAT_STORAGE_KEY);
-    if (!raw) {
-      initialized.current = true;
-      return;
-    }
-
-    try {
-      const parsed = JSON.parse(raw) as Partial<StoredChatPayload>;
-      if (!Array.isArray(parsed.messages) || typeof parsed.lastActiveAt !== "number") {
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw) as Partial<StoredChatPayload>;
+        if (Array.isArray(parsed.messages) && typeof parsed.lastActiveAt === "number") {
+          setMessages(parsed.messages as Parameters<typeof setMessages>[0]);
+          initialized.current = true;
+        } else {
+          clearStoredChat();
+          initialized.current = true;
+        }
+      } catch {
         clearStoredChat();
         initialized.current = true;
-        return;
       }
-
-      const idleFor = Date.now() - parsed.lastActiveAt;
-      if (idleFor >= CHAT_IDLE_LIMIT_MS) {
-        clearStoredChat();
-        setMessages([]);
-        initialized.current = true;
-        return;
-      }
-
-      lastActiveAtRef.current = parsed.lastActiveAt;
-      setMessages(parsed.messages as Parameters<typeof setMessages>[0]);
-    } catch {
-      clearStoredChat();
     }
 
-    initialized.current = true;
+    let cancelled = false;
+    const loadHistory = async () => {
+      try {
+        const response = await fetch("/api/chat", { method: "GET", cache: "no-store" });
+        if (!response.ok) return;
+        const data = await response.json() as { messages?: Parameters<typeof setMessages>[0] };
+        if (!cancelled && Array.isArray(data.messages)) {
+          setMessages(data.messages);
+        }
+      } finally {
+        if (!cancelled) {
+          setHistoryReady(true);
+        }
+      }
+    };
+
+    void loadHistory();
+    return () => {
+      cancelled = true;
+    };
   }, [setMessages]);
 
   useEffect(() => {
-    if (!initialized.current) return;
-    persistChat(messages);
-  }, [messages]);
-
-  useEffect(() => {
-    if (!initialized.current) return;
-    const timer = window.setInterval(() => {
-      if (status === "submitted" || status === "streaming") return;
-      const idleFor = Date.now() - lastActiveAtRef.current;
-      if (idleFor < CHAT_IDLE_LIMIT_MS) return;
-      setMessages([]);
-      clearStoredChat();
-      lastActiveAtRef.current = Date.now();
-    }, 60 * 1000);
-
-    return () => window.clearInterval(timer);
-  }, [setMessages, status]);
-
-  useEffect(() => {
+    if (!historyReady) return;
     const prompt = new URLSearchParams(window.location.search).get("prompt");
-    if (prompt && !initialPromptSent.current) { initialPromptSent.current = true; void sendMessage({ text: prompt }); }
-  }, [sendMessage]);
+    if (prompt && !initialPromptSent.current) {
+      initialPromptSent.current = true;
+      void sendMessage({ text: prompt });
+    }
+  }, [historyReady, sendMessage]);
+
+  useEffect(() => {
+    if (!historyReady || typeof window === "undefined") return;
+    persistChat(messages);
+  }, [historyReady, messages]);
 
   return <WorkspaceShell active="AI Assistant" title="Tiny AI Assistant" subtitle="Gemini พร้อมช่วยจัดการ workspace ของคุณ">
     <section className="ai-workspace">
@@ -189,7 +234,7 @@ export default function AIPage() {
           {suggestions.map(({ icon: Icon, text }) => <button key={text} onClick={() => void send(text)}><Icon size={18} /><span>{text}</span></button>)}
         </div> : messages.map((message) => <article className={`chat-message ${message.role}`} key={message.id}>
           <div className="message-avatar">{message.role === "assistant" ? <Bot size={17} /> : "P"}</div>
-          <div>{message.parts.map((part, index) => part.type === "text" ? <p key={index}>{part.text}</p> : part.type.startsWith("tool-") ? <span className="tool-status" key={index}><LoaderCircle size={13} /> กำลังดำเนินการด้วยเครื่องมือ…</span> : null)}</div>
+          <div>{renderMessageParts(message.parts)}</div>
         </article>)}
         {(status === "submitted" || status === "streaming") && <div className="thinking"><LoaderCircle size={15} /> Gemini กำลังคิด…</div>}
         {error && <div className="chat-error">เชื่อมต่อ AI ไม่สำเร็จ: {error.message}</div>}
