@@ -8,7 +8,7 @@ import { prisma } from "../db/client";
 
 export type Weekday = "MO" | "TU" | "WE" | "TH" | "FR" | "SA" | "SU";
 export type RecurrenceRule = {
-  frequency: "DAILY" | "WEEKLY" | "MONTHLY";
+  frequency: "DAILY" | "WEEKLY" | "MONTHLY" | "YEARLY";
   interval: number;
   byDays?: Weekday[];
 };
@@ -53,7 +53,7 @@ function positiveInterval(value: unknown): number {
 export function parseRecurrenceRule(value: string): RecurrenceRule {
   if (value.trim().startsWith("{")) {
     const parsed = JSON.parse(value) as Partial<RecurrenceRule>;
-    if (!parsed.frequency || !["DAILY", "WEEKLY", "MONTHLY"].includes(parsed.frequency)) {
+    if (!parsed.frequency || !["DAILY", "WEEKLY", "MONTHLY", "YEARLY"].includes(parsed.frequency)) {
       throw new Error("Unsupported recurrence frequency");
     }
     return {
@@ -67,7 +67,7 @@ export function parseRecurrenceRule(value: string): RecurrenceRule {
     value.replace(/^RRULE:/, "").split(";").map((part) => part.split("=", 2)),
   ) as Record<string, string | undefined>;
   const frequency = fields.FREQ as RecurrenceRule["frequency"] | undefined;
-  if (!frequency || !["DAILY", "WEEKLY", "MONTHLY"].includes(frequency)) {
+  if (!frequency || !["DAILY", "WEEKLY", "MONTHLY", "YEARLY"].includes(frequency)) {
     throw new Error("Unsupported RRULE frequency");
   }
   return {
@@ -88,6 +88,14 @@ function occursOn(date: Date, anchor: Date, rule: RecurrenceRule): boolean {
     const selectedDays = rule.byDays?.length ? rule.byDays : [WEEKDAYS[anchor.getUTCDay()]];
     return Math.floor(dayDifference / 7) % rule.interval === 0
       && selectedDays.includes(WEEKDAYS[date.getUTCDay()]);
+  }
+
+  if (rule.frequency === "YEARLY") {
+    const yearDifference = date.getUTCFullYear() - anchor.getUTCFullYear();
+    return yearDifference >= 0
+      && yearDifference % rule.interval === 0
+      && date.getUTCMonth() === anchor.getUTCMonth()
+      && date.getUTCDate() === anchor.getUTCDate();
   }
 
   const monthDifference = (date.getUTCFullYear() - anchor.getUTCFullYear()) * 12

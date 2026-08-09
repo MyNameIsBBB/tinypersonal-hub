@@ -6,8 +6,8 @@ const scheduleType = z.enum(["EVENT", "TASK", "ROUTINE"]);
 const scheduleStatus = z.enum(["PENDING", "IN_PROGRESS", "COMPLETED", "CANCELLED"]);
 const priority = z.enum(["LOW", "MEDIUM", "HIGH", "URGENT"]);
 const recurrenceRuleSchema = z.object({
-  frequency: z.enum(["DAILY", "WEEKLY", "MONTHLY"]),
-  interval: z.number().int().min(1).max(52).default(1),
+  frequency: z.enum(["DAILY", "WEEKLY", "MONTHLY", "YEARLY"]),
+  interval: z.number().int().min(1).max(120).default(1),
   byDays: z.array(z.enum(["MO", "TU", "WE", "TH", "FR", "SA", "SU"])).max(7).optional(),
 }).strict();
 

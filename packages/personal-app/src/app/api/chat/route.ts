@@ -19,28 +19,79 @@ type ChatMemoryRecord = {
   updatedAt: number;
 };
 
+type RecurrenceFrequency = "DAILY" | "WEEKLY" | "MONTHLY" | "YEARLY";
+
+const recurrenceFrequencySchema = z.enum(["DAILY", "WEEKLY", "MONTHLY", "YEARLY"]);
+const weekdaySchema = z.enum(["MO", "TU", "WE", "TH", "FR", "SA", "SU"]);
+
+function defaultRoutineEndDate(start: Date, frequency: RecurrenceFrequency, interval: number): Date {
+  const end = new Date(start);
+  if (frequency === "YEARLY") {
+    end.setUTCFullYear(end.getUTCFullYear() + Math.max(10, interval * 20));
+    return end;
+  }
+  if (frequency === "MONTHLY") {
+    end.setUTCMonth(end.getUTCMonth() + Math.max(24, interval * 120));
+    return end;
+  }
+  if (frequency === "WEEKLY") {
+    end.setUTCDate(end.getUTCDate() + Math.max(365, interval * 7 * 260));
+    return end;
+  }
+  end.setUTCDate(end.getUTCDate() + Math.max(365, interval * 730));
+  return end;
+}
+
 const scheduleCreateTool = tool({
-  description: "Create one schedule event when the user gives a title and start date/time.",
+  description: "Create a one-time event or a recurring routine (daily/weekly/monthly/yearly) when the user gives title and start date/time.",
   inputSchema: z.object({
     title: z.string().trim().min(1),
     startsAt: z.string().trim().min(1),
+    isAllDay: z.boolean().default(false),
     durationMinutes: z.number().int().positive().max(24 * 60).default(30),
-  }).strict(),
+    recurrenceFrequency: recurrenceFrequencySchema.optional(),
+    recurrenceInterval: z.number().int().min(1).max(120).default(1),
+    recurrenceByDays: z.array(weekdaySchema).max(7).optional(),
+    recurrenceEndsAt: z.string().trim().min(1).optional(),
+  }).strict().superRefine((value, context) => {
+    if (value.recurrenceByDays?.length && value.recurrenceFrequency !== "WEEKLY") {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["recurrenceByDays"],
+        message: "recurrenceByDays is only valid for WEEKLY recurrence",
+      });
+    }
+  }),
   execute: async (input) => {
     const startTime = parseBangkokDateTimeInput(input.startsAt);
-
     const endTime = new Date(startTime.getTime() + input.durationMinutes * 60_000);
+    const isRecurring = Boolean(input.recurrenceFrequency);
+    const recurrenceRule = isRecurring ? JSON.stringify({
+      frequency: input.recurrenceFrequency,
+      interval: input.recurrenceInterval,
+      ...(input.recurrenceByDays?.length ? { byDays: input.recurrenceByDays } : {}),
+    }) : null;
+    const routineEndDate = isRecurring
+      ? (input.recurrenceEndsAt
+        ? parseBangkokDateTimeInput(input.recurrenceEndsAt)
+        : defaultRoutineEndDate(startTime, input.recurrenceFrequency!, input.recurrenceInterval))
+      : null;
+
+    if (routineEndDate && routineEndDate < startTime) {
+      throw new Error("recurrenceEndsAt must not be before startsAt");
+    }
+
     const item = await createScheduleItem({
       title: input.title,
       description: null,
-      type: "EVENT",
+      type: isRecurring ? "ROUTINE" : "EVENT",
       startTime,
       endTime,
-      isAllDay: false,
+      isAllDay: input.isAllDay,
       status: "PENDING",
       priority: "MEDIUM",
-      recurrenceRule: null,
-      routineEndDate: null,
+      recurrenceRule,
+      routineEndDate,
       parentRoutineId: null,
     });
 
