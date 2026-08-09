@@ -76,16 +76,17 @@ function htmlToText(html: string): { title: string | null; text: string } {
 }
 
 export async function searchWeb(query: string, count = 5): Promise<WebSearchResult[]> {
-  const apiKey = process.env.BRAVE_SEARCH_API_KEY;
-  if (!apiKey) throw new Error("BRAVE_SEARCH_API_KEY is not configured");
-  const url = new URL("https://api.search.brave.com/res/v1/web/search");
-  url.searchParams.set("q", query); url.searchParams.set("count", String(Math.max(1, Math.min(count, 10))));
-  url.searchParams.set("search_lang", "th");
-  const response = await fetch(url, { headers: { Accept: "application/json", "X-Subscription-Token": apiKey }, signal: AbortSignal.timeout(10_000) });
-  if (!response.ok) throw new Error(`Brave Search returned ${response.status}`);
-  const payload = await response.json() as { web?: { results?: Array<{ title?: string; url?: string; description?: string }> } };
-  return (payload.web?.results ?? []).flatMap((item) => item.title && item.url
-    ? [{ title: item.title, url: item.url, description: item.description ?? "" }] : []);
+  const baseUrl = process.env.SEARXNG_BASE_URL ?? "http://127.0.0.1:8080";
+  const url = new URL("/search", baseUrl);
+  url.searchParams.set("q", query);
+  url.searchParams.set("format", "json");
+  url.searchParams.set("language", "th-TH");
+  url.searchParams.set("safesearch", "1");
+  const response = await fetch(url, { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(12_000) });
+  if (!response.ok) throw new Error(`SearXNG returned ${response.status}`);
+  const payload = await response.json() as { results?: Array<{ title?: string; url?: string; content?: string }> };
+  return (payload.results ?? []).slice(0, Math.max(1, Math.min(count, 10))).flatMap((item) => item.title && item.url
+    ? [{ title: item.title, url: item.url, description: item.content ?? "" }] : []);
 }
 
 export async function scrapeWebPage(rawUrl: string, maxCharacters = 12_000): Promise<ScrapedPage> {
