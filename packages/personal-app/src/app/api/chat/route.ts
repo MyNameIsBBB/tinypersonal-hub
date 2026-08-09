@@ -1,6 +1,6 @@
 import { google } from "@ai-sdk/google";
-import { createAgentConfigForRequest, type ToolSearchProvider } from "@tinypersonal/assistant-core";
-import { createScheduleItem, getScheduleByRange, scrapeWebPage, searchToolVectors, searchWeb } from "@tinypersonal/backend-api";
+import { createAgentConfigForRequest, LocalToolSearchProvider, type ToolSearchProvider } from "@tinypersonal/assistant-core";
+import { createScheduleItem, getScheduleByRange, scrapeWebPage, searchNotes, searchToolVectors, searchVaultMetadata, searchWeb, updateNote, updateVaultMetadata } from "@tinypersonal/backend-api";
 import { convertToModelMessages, isStepCount, streamText, tool, type UIMessage } from "ai";
 import { isValidSessionToken, SESSION_COOKIE } from "@/lib/serverAuth";
 import { z } from "zod";
@@ -110,21 +110,75 @@ const scheduleCreateTool = tool({
 const webSearchExecutionTool = tool({
   description: "Search the public web for current information.",
   inputSchema: z.object({ query: z.string().trim().min(2).max(300), count: z.number().int().min(1).max(10).default(5) }).strict(),
-  execute: async ({ query, count }) => ({ ok: true as const, results: await searchWeb(query, count) }),
+  execute: async ({ query, count }) => {
+    try { return { ok: true as const, results: await searchWeb(query, count) }; }
+    catch (error) { return { ok: false as const, error: { code: "WEB_SEARCH_FAILED", message: error instanceof Error ? error.message : "Web search failed" } }; }
+  },
 });
 
 const webScrapeExecutionTool = tool({
   description: "Read visible text from one public HTTP/HTTPS page with private-network protection.",
   inputSchema: z.object({ url: z.string().url().max(2_000), maxCharacters: z.number().int().min(1_000).max(30_000).default(12_000) }).strict(),
-  execute: async ({ url, maxCharacters }) => ({ ok: true as const, page: await scrapeWebPage(url, maxCharacters) }),
+  execute: async ({ url, maxCharacters }) => {
+    try { return { ok: true as const, page: await scrapeWebPage(url, maxCharacters) }; }
+    catch (error) { return { ok: false as const, error: { code: "WEB_SCRAPE_FAILED", message: error instanceof Error ? error.message : "Web scrape failed" } }; }
+  },
 });
 
+const notesSearchExecutionTool = tool({
+  description: "Search and read authorized personal notes.",
+  inputSchema: z.object({ query: z.string().trim().min(1).max(300), limit: z.number().int().min(1).max(10).default(5) }).strict(),
+  execute: async ({ query, limit }) => ({
+    ok: true as const,
+    notes: (await searchNotes(query, limit)).map((note) => ({
+      id: note.id, title: note.title, content: note.content.slice(0, 4_000), contentTruncated: note.content.length > 4_000,
+      tags: note.tags, folder: note.folder, scheduleItemId: note.scheduleItemId, updatedAt: note.updatedAt.toISOString(),
+    })),
+  }),
+});
+
+const notesUpdateExecutionTool = tool({
+  description: "Update an existing personal note after identifying it by ID.",
+  inputSchema: z.object({
+    id: z.string().min(1), title: z.string().trim().min(1).max(200).optional(), content: z.string().max(100_000).optional(),
+    tags: z.array(z.string().trim().min(1).max(60)).max(30).optional(), folder: z.string().trim().max(160).nullable().optional(),
+    scheduleItemId: z.string().min(1).nullable().optional(),
+  }).strict(),
+  execute: async ({ id, ...input }) => {
+    const note = await updateNote(id, input);
+    return { ok: true as const, note: { id: note.id, title: note.title, tags: note.tags, folder: note.folder, updatedAt: note.updatedAt.toISOString() } };
+  },
+});
+
+const vaultSearchExecutionTool = tool({
+  description: "Search safe vault metadata. Never returns passwords, OTP, ciphertext, or encryption fields.",
+  inputSchema: z.object({ query: z.string().trim().min(1).max(200) }).strict(),
+  execute: async ({ query }) => ({ ok: true as const, records: await searchVaultMetadata(query) }),
+});
+
+const vaultUpdateExecutionTool = tool({
+  description: "Update safe vault metadata only. Never reads or changes passwords or OTP.",
+  inputSchema: z.object({
+    id: z.string().min(1), serviceName: z.string().trim().min(1).max(160).optional(), category: z.string().trim().min(1).max(100).optional(),
+    accountIdentifier: z.string().trim().min(1).max(320).optional(), url: z.string().url().max(2_000).nullable().optional(), notes: z.string().max(5_000).nullable().optional(),
+  }).strict(),
+  execute: async ({ id, ...input }) => ({ ok: true as const, record: await updateVaultMetadata(id, input) }),
+});
+
+const localToolProvider = new LocalToolSearchProvider();
 const sqliteVectorProvider: ToolSearchProvider = {
   async search(query, documents, limit) {
-    const hits = await searchToolVectors(query, documents, limit);
+    const [vectorHits, lexicalHits] = await Promise.all([
+      searchToolVectors(query, documents, limit),
+      localToolProvider.search(query, documents, limit),
+    ]);
     const names = new Set(documents.map((document) => document.name));
-    return hits.flatMap((hit) => names.has(hit.name as (typeof documents)[number]["name"])
-      ? [{ name: hit.name as (typeof documents)[number]["name"], score: hit.score }] : []);
+    const scores = new Map<string, number>();
+    for (const hit of vectorHits) scores.set(hit.name, hit.score);
+    for (const hit of lexicalHits) scores.set(hit.name, Math.max(scores.get(hit.name) ?? 0, hit.score));
+    return [...scores].flatMap(([name, score]) => names.has(name as (typeof documents)[number]["name"])
+      ? [{ name: name as (typeof documents)[number]["name"], score }] : [])
+      .sort((left, right) => right.score - left.score).slice(0, limit);
   },
 };
 
@@ -318,7 +372,7 @@ export async function POST(request: Request) {
   const agent = await createAgentConfigForRequest(
     { locale: "th-TH", timezone: "Asia/Bangkok" },
     latestUserText(baseMessages),
-    ["schedule", "web.search", "web.scrape"],
+    ["schedule", "web.search", "web.scrape", "notes.search", "notes.update", "vault.searchMetadata", "vault.updateMetadata"],
     { limit: 5, minimumScore: 0.08, provider: sqliteVectorProvider },
   );
   let context = "";
@@ -342,12 +396,16 @@ export async function POST(request: Request) {
 
   const result = streamText({
     model: google(process.env.GEMINI_MODEL ?? "gemini-3.5-flash-lite"),
-    system: `${agent.system}\n\n${nowContext}\nAlways interpret and answer date/time in Asia/Bangkok (UTC+07:00). Do not convert schedule times to UTC unless explicitly requested.\n\n${context}${payload.voiceMode ? "\n\nVoice mode: answer in Thai, naturally and very briefly (normally 1-2 sentences) unless essential detail is required." : ""}`,
+    system: `${agent.system}\n\n${nowContext}\nAlways interpret and answer date/time in Asia/Bangkok (UTC+07:00). Do not convert schedule times to UTC unless explicitly requested. When a supplied web tool is relevant, use it instead of claiming web access is unavailable. Use web.search for current information and web.scrape for a specific URL. If a tool returns ok=false, explain its exact error message briefly and never claim success. Vault tools may access metadata only and must never imply that passwords or OTP were read.\n\n${context}${payload.voiceMode ? "\n\nVoice mode: answer in Thai, naturally and very briefly (normally 1-2 sentences) unless essential detail is required." : ""}`,
     messages: await convertToModelMessages(modelContextMessages),
     tools: {
       ...(agent.selectedToolNames.includes("schedule") && { schedule: scheduleCreateTool }),
       ...(agent.selectedToolNames.includes("web.search") && { "web.search": webSearchExecutionTool }),
       ...(agent.selectedToolNames.includes("web.scrape") && { "web.scrape": webScrapeExecutionTool }),
+      ...(agent.selectedToolNames.includes("notes.search") && { "notes.search": notesSearchExecutionTool }),
+      ...(agent.selectedToolNames.includes("notes.update") && { "notes.update": notesUpdateExecutionTool }),
+      ...(agent.selectedToolNames.includes("vault.searchMetadata") && { "vault.searchMetadata": vaultSearchExecutionTool }),
+      ...(agent.selectedToolNames.includes("vault.updateMetadata") && { "vault.updateMetadata": vaultUpdateExecutionTool }),
     },
     // Allow follow-up model steps after tool output so responses do not stop at finishReason=tool-calls.
     stopWhen: isStepCount(5),
