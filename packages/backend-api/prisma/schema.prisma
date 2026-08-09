@@ -141,3 +141,14 @@ model NotificationDelivery {
   @@unique([idempotencyKey, channel])
   @@index([createdAt])
 }
+
+model ToolVector {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  content     String
+  contentHash String
+  vectorJson  String
+  dimensions  Int
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}

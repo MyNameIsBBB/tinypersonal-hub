@@ -1,6 +1,6 @@
 import { google } from "@ai-sdk/google";
-import { createAgentConfig } from "@tinypersonal/assistant-core";
-import { createScheduleItem, getScheduleByRange } from "@tinypersonal/backend-api";
+import { createAgentConfigForRequest, type ToolSearchProvider } from "@tinypersonal/assistant-core";
+import { createScheduleItem, getScheduleByRange, scrapeWebPage, searchToolVectors, searchWeb } from "@tinypersonal/backend-api";
 import { convertToModelMessages, isStepCount, streamText, tool, type UIMessage } from "ai";
 import { isValidSessionToken, SESSION_COOKIE } from "@/lib/serverAuth";
 import { z } from "zod";
@@ -10,6 +10,8 @@ export const maxDuration = 30;
 const CHAT_TTL_MS = 12 * 60 * 60 * 1000;
 const CHAT_MAX_MESSAGES = 120;
 const CHAT_MAX_SESSIONS = 200;
+const MODEL_CONTEXT_MAX_MESSAGES = 32;
+const MODEL_CONTEXT_MAX_CHARACTERS = 32_000;
 const BANGKOK_OFFSET_HOURS = 7;
 
 type ChatMemoryRecord = {
@@ -53,6 +55,27 @@ const scheduleCreateTool = tool({
     };
   },
 });
+
+const webSearchExecutionTool = tool({
+  description: "Search the public web for current information.",
+  inputSchema: z.object({ query: z.string().trim().min(2).max(300), count: z.number().int().min(1).max(10).default(5) }).strict(),
+  execute: async ({ query, count }) => ({ ok: true as const, results: await searchWeb(query, count) }),
+});
+
+const webScrapeExecutionTool = tool({
+  description: "Read visible text from one public HTTP/HTTPS page with private-network protection.",
+  inputSchema: z.object({ url: z.string().url().max(2_000), maxCharacters: z.number().int().min(1_000).max(30_000).default(12_000) }).strict(),
+  execute: async ({ url, maxCharacters }) => ({ ok: true as const, page: await scrapeWebPage(url, maxCharacters) }),
+});
+
+const sqliteVectorProvider: ToolSearchProvider = {
+  async search(query, documents, limit) {
+    const hits = await searchToolVectors(query, documents, limit);
+    const names = new Set(documents.map((document) => document.name));
+    return hits.flatMap((hit) => names.has(hit.name as (typeof documents)[number]["name"])
+      ? [{ name: hit.name as (typeof documents)[number]["name"], score: hit.score }] : []);
+  },
+};
 
 function pad2(value: number): string {
   return String(value).padStart(2, "0");
@@ -144,6 +167,25 @@ function truncateMessages(messages: UIMessage[]): UIMessage[] {
   return messages.slice(-CHAT_MAX_MESSAGES);
 }
 
+function contextWindowMessages(messages: UIMessage[]): UIMessage[] {
+  const selected: UIMessage[] = [];
+  let characters = 0;
+  for (let index = messages.length - 1; index >= 0 && selected.length < MODEL_CONTEXT_MAX_MESSAGES; index -= 1) {
+    const message = messages[index];
+    const size = JSON.stringify(message).length;
+    if (selected.length > 0 && characters + size > MODEL_CONTEXT_MAX_CHARACTERS) break;
+    selected.unshift(message);
+    characters += size;
+  }
+  return selected;
+}
+
+function latestUserText(messages: UIMessage[]): string {
+  const message = [...messages].reverse().find((item) => item.role === "user");
+  if (!message) return "";
+  return message.parts.filter((part) => part.type === "text").map((part) => part.text).join(" ").trim();
+}
+
 function cookieValue(request: Request, name: string): string | undefined {
   const cookie = request.headers.get("cookie") ?? "";
   return cookie
@@ -218,38 +260,43 @@ export async function POST(request: Request) {
   const storedMessages = memory.get(ownerKey)?.messages ?? [];
   const incomingMessages = Array.isArray(payload.messages) ? payload.messages : [];
   const baseMessages = truncateMessages(incomingMessages.length ? incomingMessages : storedMessages);
+  const modelContextMessages = contextWindowMessages(baseMessages);
   memory.set(ownerKey, { messages: baseMessages, updatedAt: Date.now() });
   enforceSessionLimit(memory);
 
-  let context = "No schedule context loaded.";
-  try {
-    const now = new Date();
-    const rangeEnd = new Date(now.getTime() + 14 * 86_400_000);
-    const upcoming = await getScheduleByRange(now, rangeEnd);
-    context = upcoming.length
-      ? `Upcoming schedule items (next 14 days):\n${upcoming.slice(0, 120).map((item) => {
-        const when = item.startTime ? formatBangkokDateTime(item.startTime) : "unscheduled";
-        const until = item.endTime ? formatBangkokDateTime(item.endTime) : "unscheduled";
-        return `- [${item.type}] ${item.title} | status=${item.status} | start=${when} | end=${until} | timezone=Asia/Bangkok`;
-      }).join("\n")}`
-      : "No schedule items found in next 14 days.";
-  } catch {
-    context = "Schedule context unavailable right now. Continue answering normally and suggest retry for latest schedule insights.";
-  }
-
-  const agent = createAgentConfig(
+  const agent = await createAgentConfigForRequest(
     { locale: "th-TH", timezone: "Asia/Bangkok" },
-    ["schedule"],
+    latestUserText(baseMessages),
+    ["schedule", "web.search", "web.scrape"],
+    { limit: 5, minimumScore: 0.08, provider: sqliteVectorProvider },
   );
+  let context = "";
+  if (agent.selectedToolNames.includes("schedule")) {
+    try {
+      const now = new Date();
+      const rangeEnd = new Date(now.getTime() + 14 * 86_400_000);
+      const upcoming = await getScheduleByRange(now, rangeEnd);
+      context = upcoming.length
+        ? `Relevant schedule items (next 14 days, maximum 30):\n${upcoming.slice(0, 30).map((item) => {
+          const when = item.startTime ? formatBangkokDateTime(item.startTime) : "unscheduled";
+          const until = item.endTime ? formatBangkokDateTime(item.endTime) : "unscheduled";
+          return `- [${item.type}] ${item.title} | status=${item.status} | start=${when} | end=${until}`;
+        }).join("\n")}`
+        : "No schedule items found in the next 14 days.";
+    } catch {
+      context = "Schedule context is currently unavailable.";
+    }
+  }
   const nowContext = bangkokNowContext(new Date());
 
   const result = streamText({
     model: google(process.env.GEMINI_MODEL ?? "gemini-3.5-flash-lite"),
     system: `${agent.system}\n\n${nowContext}\nAlways interpret and answer date/time in Asia/Bangkok (UTC+07:00). Do not convert schedule times to UTC unless explicitly requested.\n\n${context}${payload.voiceMode ? "\n\nVoice mode: answer in Thai, naturally and very briefly (normally 1-2 sentences) unless essential detail is required." : ""}`,
-    messages: await convertToModelMessages(baseMessages),
+    messages: await convertToModelMessages(modelContextMessages),
     tools: {
-      ...agent.tools,
-      schedule: scheduleCreateTool,
+      ...(agent.selectedToolNames.includes("schedule") && { schedule: scheduleCreateTool }),
+      ...(agent.selectedToolNames.includes("web.search") && { "web.search": webSearchExecutionTool }),
+      ...(agent.selectedToolNames.includes("web.scrape") && { "web.scrape": webScrapeExecutionTool }),
     },
     // Allow follow-up model steps after tool output so responses do not stop at finishReason=tool-calls.
     stopWhen: isStepCount(5),
