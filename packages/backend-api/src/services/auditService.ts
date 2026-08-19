@@ -10,7 +10,8 @@ export async function recordAudit(input: {
   actorId: string; action: string; status: "REQUESTED" | "SUCCEEDED" | "FAILED" | "DENIED";
   targetType?: string; targetId?: string; promptVersion?: string; metadata?: Record<string, unknown>;
 }) {
-  return prisma.auditLog.create({ data: { ...input, metadataJson: safeMetadata(input.metadata ?? {}) } });
+  const { metadata, ...data } = input;
+  return prisma.auditLog.create({ data: { ...data, metadataJson: safeMetadata(metadata ?? {}) } });
 }
 
 export async function createPendingAction(input: {

@@ -1,4 +1,4 @@
-const CACHE_NAME = "tinypersonal-shell-v5-wheat";
+const CACHE_NAME = "tinypersonal-shell-v6-wheat";
 const OFFLINE_URL = "/offline";
 const STATIC_ASSETS = [
   OFFLINE_URL,
@@ -30,9 +30,16 @@ self.addEventListener("fetch", (event) => {
   }
 
   if (url.pathname.startsWith("/_next/static/") || STATIC_ASSETS.includes(url.pathname)) {
-    event.respondWith(caches.match(request).then((cached) => cached || fetch(request).then((response) => {
-      if (response.ok) caches.open(CACHE_NAME).then((cache) => cache.put(request, response.clone()));
+    event.respondWith(caches.match(request).then(async (cached) => {
+      if (cached) return cached;
+      const response = await fetch(request);
+      if (response.ok) {
+        // Clone synchronously before returning the response to the page. Once a
+        // streaming body is consumed, Response.clone() must throw.
+        const cacheCopy = response.clone();
+        event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.put(request, cacheCopy)));
+      }
       return response;
-    })));
+    }));
   }
 });
