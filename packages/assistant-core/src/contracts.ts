@@ -26,4 +26,13 @@ export const vaultMetadataUpdateSchema = vaultCreateSchema.omit({ password: true
 export const vaultRevealSchema = z.object({ password: z.string().min(1).max(10_000), reason: z.string().trim().min(3).max(500) }).strict();
 export const loginSchema = z.object({ username: z.string().trim().min(1).max(320), password: z.string().min(1).max(10_000) }).strict();
 export const browserVisionContextSchema = z.object({ currentUrl: z.string().url().max(2_000), title: z.string().trim().min(1).max(200) }).strict();
-export const chatRequestSchema = z.object({ sessionId: idSchema.optional(), messages: z.array(z.unknown()).max(120).optional(), voiceMode: z.boolean().optional(), jarvisMode: z.boolean().optional(), visionContext: browserVisionContextSchema.optional() }).strict();
+export const chatRequestSchema = z.object({
+  id: z.string().trim().min(1).max(191).optional(),
+  trigger: z.enum(["submit-message", "regenerate-message"]).optional(),
+  messageId: idSchema.optional(),
+  sessionId: idSchema.nullable().optional(),
+  messages: z.array(z.unknown()).max(120).optional(),
+  voiceMode: z.boolean().optional(),
+  jarvisMode: z.boolean().optional(),
+  visionContext: browserVisionContextSchema.optional(),
+}).strict();

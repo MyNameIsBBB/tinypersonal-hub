@@ -235,7 +235,7 @@ export async function POST(request: Request) {
 
   const parsed = await parseJson(request, chatRequestSchema); if ("response" in parsed) return parsed.response;
   const payload = parsed.data;
-  const session = await getOrCreateChatSession(ownerKey, payload.sessionId);
+  const session = await getOrCreateChatSession(ownerKey, payload.sessionId ?? undefined);
   const storedMessages = await loadChatMessages(ownerKey, session.id) as UIMessage[];
   const incomingMessages = Array.isArray(payload.messages) ? payload.messages as UIMessage[] : [];
   const baseMessages = retainChatMessages(incomingMessages.length ? incomingMessages : storedMessages);
