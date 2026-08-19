@@ -1,5 +1,7 @@
 import { createVaultSecret, searchVaultMetadata } from "@tinypersonal/backend-api";
 import { isAuthorizedRequest } from "@/lib/serverAuth";
+import { vaultCreateSchema } from "@tinypersonal/assistant-core";
+import { parseJson } from "@/lib/apiValidation";
 
 export async function GET(request: Request) {
   if (!isAuthorizedRequest(request)) return Response.json({ error: "Unauthorized" }, { status: 401 });
@@ -9,17 +11,12 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   if (!isAuthorizedRequest(request)) return Response.json({ error: "Unauthorized" }, { status: 401 });
-  const input = await request.json() as {
-    serviceName?: string; category?: string; accountIdentifier?: string; password?: string;
-    url?: string; notes?: string; totpSeed?: string;
-  };
-  if (!input.serviceName || !input.category || !input.accountIdentifier || !input.password) {
-    return Response.json({ error: "Missing required vault fields" }, { status: 400 });
-  }
+  const parsed = await parseJson(request, vaultCreateSchema); if ("response" in parsed) return parsed.response;
+  const input = parsed.data;
   const secret = await createVaultSecret({
     serviceName: input.serviceName, category: input.category,
     accountIdentifier: input.accountIdentifier, password: input.password,
-    url: input.url, notes: input.notes, totpSeed: input.totpSeed,
+    url: input.url || undefined, notes: input.notes, totpSeed: input.totpSeed,
   });
   return Response.json({ secret }, { status: 201 });
 }

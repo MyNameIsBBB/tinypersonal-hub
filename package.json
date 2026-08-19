@@ -10,6 +10,7 @@
     "dev": "npm run dev --workspace=@tinypersonal/personal-app",
     "build": "npm run build --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "vitest run",
     "db:generate": "npm run db:generate --workspace=@tinypersonal/backend-api",
     "db:migrate": "npm run db:migrate --workspace=@tinypersonal/backend-api",
     "db:deploy": "npm run db:deploy --workspace=@tinypersonal/backend-api",
@@ -26,6 +27,7 @@
     "search:logs": "docker compose logs --tail=100 searxng"
   },
   "devDependencies": {
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "vitest": "^3.2.4"
   }
 }

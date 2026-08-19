@@ -1,11 +1,14 @@
 import { createSessionToken, SESSION_COOKIE, verifyLoginCredentials } from "@/lib/serverAuth";
+import { loginSchema } from "@tinypersonal/assistant-core";
+import { parseJson } from "@/lib/apiValidation";
 
 export async function POST(request: Request) {
-  const body = await request.json() as { username?: string; password?: string };
-  if (!verifyLoginCredentials(body.username ?? "", body.password ?? "")) {
+  const parsed = await parseJson(request, loginSchema); if ("response" in parsed) return parsed.response;
+  const body = parsed.data;
+  if (!verifyLoginCredentials(body.username, body.password)) {
     return Response.json({ error: "Invalid credentials" }, { status: 401 });
   }
-  const { token, expiresAt } = createSessionToken(body.username!);
+  const { token, expiresAt } = createSessionToken(body.username);
   const secure = process.env.NODE_ENV === "production" ? "; Secure" : "";
   return Response.json({ ok: true }, {
     headers: {

@@ -152,3 +152,57 @@ model ToolVector {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
+
+model ChatSession {
+  id        String        @id @default(cuid())
+  ownerKey  String
+  title     String?
+  messages  ChatMessage[]
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  @@index([ownerKey, updatedAt])
+}
+
+model ChatMessage {
+  id        String      @id @default(cuid())
+  sessionId String
+  session   ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  messageId String
+  role      String
+  payloadJson String
+  createdAt DateTime    @default(now())
+
+  @@unique([sessionId, messageId])
+  @@index([sessionId, createdAt])
+}
+
+model PendingAction {
+  id          String   @id @default(cuid())
+  ownerKey    String
+  sessionId   String?
+  toolName    String
+  argumentsJson String
+  summary     String
+  status      String   @default("PENDING")
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+  resolvedAt  DateTime?
+
+  @@index([ownerKey, status, expiresAt])
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  actorId     String
+  action      String
+  targetType  String?
+  targetId    String?
+  status      String
+  promptVersion String?
+  metadataJson String  @default("{}")
+  createdAt   DateTime @default(now())
+
+  @@index([actorId, createdAt])
+  @@index([action, createdAt])
+}

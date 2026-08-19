@@ -1,6 +1,7 @@
 import { scheduleTool } from "./schedule";
 import { webScrapeTool, webSearchTool } from "./web";
 import { searchNotesTool, searchVaultMetadataTool, updateNoteTool, updateVaultMetadataTool } from "./knowledgeTools";
+import { closeBrowserViewTool, openBrowserViewTool } from "./browserView";
 
 export const toolRegistry = {
   schedule: scheduleTool,
@@ -10,6 +11,8 @@ export const toolRegistry = {
   "notes.update": updateNoteTool,
   "vault.searchMetadata": searchVaultMetadataTool,
   "vault.updateMetadata": updateVaultMetadataTool,
+  openBrowserView: openBrowserViewTool,
+  closeBrowserView: closeBrowserViewTool,
 };
 
 export type ToolName = keyof typeof toolRegistry;
@@ -45,6 +48,14 @@ export const toolCatalog: Record<ToolName, { description: string; keywords: stri
   "vault.updateMetadata": {
     description: "Edit safe vault metadata such as service, category, account identifier, URL, or notes without reading or changing passwords or OTP.",
     keywords: ["edit vault", "update vault", "change account metadata", "แก้ vault", "แก้ไข vault", "อัปเดต vault", "เปลี่ยนข้อมูลบัญชี"],
+  },
+  openBrowserView: {
+    description: "Open, show, play, or display a YouTube search or web URL in the Jarvis browser workspace.",
+    keywords: ["open", "show", "play", "youtube", "browser", "display", "เปิด", "แสดง", "เล่น", "ยูทูบ", "หน้าจอ", "เปิดเว็บ"],
+  },
+  closeBrowserView: {
+    description: "Close the Jarvis browser display, screen, video, or all displayed content.",
+    keywords: ["close", "close screen", "close all", "ปิด", "ปิดหน้าจอ", "ปิดทั้งหมด", "ปิดเว็บ", "หยุดวิดีโอ"],
   },
 };
 

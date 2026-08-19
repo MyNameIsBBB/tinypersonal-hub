@@ -1,5 +1,7 @@
 import { createScheduleItem, getScheduleByRange } from "@tinypersonal/backend-api";
 import { isAuthorizedRequest } from "@/lib/serverAuth";
+import { scheduleCreateSchema } from "@tinypersonal/assistant-core";
+import { parseJson } from "@/lib/apiValidation";
 
 export async function GET(request: Request) {
   if (!isAuthorizedRequest(request)) return Response.json({ error: "Unauthorized" }, { status: 401 });
@@ -12,19 +14,15 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   if (!isAuthorizedRequest(request)) return Response.json({ error: "Unauthorized" }, { status: 401 });
-  const input = await request.json() as {
-    title?: string; description?: string; type?: "EVENT" | "TASK" | "ROUTINE";
-    startTime?: string; endTime?: string; isAllDay?: boolean; priority?: "LOW" | "MEDIUM" | "HIGH" | "URGENT";
-    recurrenceRule?: string; routineEndDate?: string;
-  };
-  if (!input.title?.trim() || !input.type) return Response.json({ error: "title and type are required" }, { status: 400 });
+  const parsed = await parseJson(request, scheduleCreateSchema); if ("response" in parsed) return parsed.response;
+  const input = parsed.data;
   try {
     const item = await createScheduleItem({
       title: input.title.trim(), description: input.description ?? null, type: input.type,
       startTime: input.startTime ? new Date(input.startTime) : null,
       endTime: input.endTime ? new Date(input.endTime) : null,
       isAllDay: input.isAllDay ?? false, status: "PENDING", priority: input.priority ?? "MEDIUM",
-      recurrenceRule: input.recurrenceRule ?? null,
+      recurrenceRule: input.recurrenceRule ? (typeof input.recurrenceRule === "string" ? input.recurrenceRule : JSON.stringify(input.recurrenceRule)) : null,
       routineEndDate: input.routineEndDate ? new Date(input.routineEndDate) : null,
       parentRoutineId: null,
     });

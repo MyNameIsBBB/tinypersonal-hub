@@ -46,6 +46,16 @@ export function isAuthorizedRequest(request: Request): boolean {
   return isValidSessionToken(cookieValue(request, SESSION_COOKIE));
 }
 
+export function authorizedOwnerKey(request: Request): string | null {
+  if (process.env.NODE_ENV !== "production" && !process.env.SESSION_SIGNING_KEY) return "dev-shared";
+  const token = cookieValue(request, SESSION_COOKIE);
+  if (!isValidSessionToken(token)) return null;
+  try {
+    const username = Buffer.from(token!.split(".")[0], "base64url").toString("utf8").trim().toLowerCase();
+    return username ? `user:${username}` : null;
+  } catch { return null; }
+}
+
 export function verifyLoginCredentials(username: string, password: string): boolean {
   const expectedUsername = process.env.APP_AUTH_USERNAME;
   const expectedPassword = process.env.APP_AUTH_PASSWORD;

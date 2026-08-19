@@ -1,6 +1,7 @@
 import { getScheduleByRange, type ScheduleItem } from "./scheduleService";
 import { Prisma } from "@prisma/client";
 import { prisma } from "../db/client";
+import { getMarketQuotes, type MarketQuote } from "./integrations";
 
 export type NewsHeadline = {
   title: string;
@@ -14,6 +15,7 @@ export type MorningBriefingContext = {
   timezone: string;
   schedule: ScheduleItem[];
   news: NewsHeadline[];
+  markets: MarketQuote[];
 };
 
 export type NotificationResult = {
@@ -59,11 +61,12 @@ async function fetchImportantNews(): Promise<NewsHeadline[]> {
 
 export async function getMorningBriefingContext(now = new Date()): Promise<MorningBriefingContext> {
   const { start, end, date } = bangkokDayRange(now);
-  const [schedule, news] = await Promise.all([
+  const [schedule, news, markets] = await Promise.all([
     getScheduleByRange(start, end),
     fetchImportantNews().catch(() => []),
+    getMarketQuotes().catch(() => []),
   ]);
-  return { date, timezone: "Asia/Bangkok", schedule, news };
+  return { date, timezone: "Asia/Bangkok", schedule, news, markets };
 }
 
 async function reserveDelivery(idempotencyKey: string, channel: NotificationResult["channel"]): Promise<boolean> {

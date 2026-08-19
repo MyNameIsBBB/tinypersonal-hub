@@ -1,6 +1,7 @@
 import { createHash, createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { fileTypeFromBuffer } from "file-type";
 import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { prisma } from "../db/client";
@@ -97,8 +98,13 @@ export async function registerMediaAsset(input: {
 }, storage: StorageDriver = createStorageFromEnvironment()) {
   if (!ALLOWED_MIME_TYPES.has(input.mimeType)) throw new Error("Unsupported file type");
   if (!input.bytes.length || input.bytes.length > MAX_FILE_SIZE) throw new Error("File size is outside the allowed range");
+  const detected = await fileTypeFromBuffer(input.bytes);
+  if (!detected || !ALLOWED_MIME_TYPES.has(detected.mime) || detected.mime !== input.mimeType) {
+    throw new Error("File content does not match its declared type");
+  }
 
-  const extension = path.extname(input.fileName).slice(0, 12).toLowerCase();
+  const declaredExtension = path.extname(input.fileName).slice(0, 12).toLowerCase();
+  const extension = declaredExtension || `.${detected.ext}`;
   const storagePath = `${randomUUID()}${extension}`;
   await storage.put(storagePath, input.bytes, input.mimeType);
   return prisma.mediaAsset.create({ data: {

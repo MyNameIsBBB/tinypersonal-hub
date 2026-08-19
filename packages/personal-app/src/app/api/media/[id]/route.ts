@@ -1,5 +1,7 @@
 import { deleteMediaAsset, readMediaAsset, updateMediaAssetLinks, verifyMediaAccessToken } from "@tinypersonal/backend-api";
 import { isAuthorizedRequest } from "@/lib/serverAuth";
+import { mediaLinksSchema } from "@tinypersonal/assistant-core";
+import { parseJson } from "@/lib/apiValidation";
 
 export const runtime = "nodejs";
 
@@ -27,7 +29,8 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
 export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
   if (!isAuthorizedRequest(request)) return Response.json({ error: "Unauthorized" }, { status: 401 });
   const { id } = await context.params;
-  const body = await request.json() as { noteId?: string | null; scheduleItemId?: string | null };
+  const parsed = await parseJson(request, mediaLinksSchema); if ("response" in parsed) return parsed.response;
+  const body = parsed.data;
   return Response.json({ asset: await updateMediaAssetLinks(id, body) });
 }
 

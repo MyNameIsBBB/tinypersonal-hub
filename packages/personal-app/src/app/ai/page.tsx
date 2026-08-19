@@ -18,8 +18,9 @@ type StoredChatPayload = {
   messages: unknown[];
   lastActiveAt: number;
 };
+type ChatSessionSummary = { id: string; title: string | null; updatedAt: string; _count: { messages: number } };
 
-function renderMessageParts(parts: UIMessagePart<any, any>[]) {
+function renderMessageParts(parts: UIMessagePart<any, any>[], decide: (id: string, approved: boolean) => void) {
   const latestToolPartIndexByToolName = new Map<string, number>();
   parts.forEach((part, index) => {
     if (isToolUIPart(part)) {
@@ -43,6 +44,10 @@ function renderMessageParts(parts: UIMessagePart<any, any>[]) {
     }
 
     if (part.state === "output-available") {
+      const output = part.output as { confirmation?: { id?: string; summary?: string }; confirmationRequired?: boolean; status?: string } | undefined;
+      if (output?.confirmation?.id && (output.confirmationRequired || output.status === "confirmation-required")) {
+        return <div className="tool-status" key={index}><span>{output.confirmation.summary ?? `ยืนยัน ${toolName}`}</span><button onClick={() => decide(output.confirmation!.id!, false)}>ยกเลิก</button><button onClick={() => decide(output.confirmation!.id!, true)}>ยืนยัน</button></div>;
+      }
       return <div className="tool-status done" key={index}>ใช้เครื่องมือ {toolName} สำเร็จ</div>;
     }
 
@@ -75,6 +80,8 @@ export default function AIPage() {
   const voiceRequestPending = useRef(false);
   const lastSpokenMessageId = useRef<string | null>(null);
   const [historyReady, setHistoryReady] = useState(false);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [sessions, setSessions] = useState<ChatSessionSummary[]>([]);
 
   function clearStoredChat() {
     if (typeof window === "undefined") return;
@@ -98,7 +105,7 @@ export default function AIPage() {
     if (!text.trim() || status === "submitted" || status === "streaming") return;
     setInput("");
     voiceRequestPending.current = fromVoice;
-    await sendMessage({ text }, { body: { voiceMode: fromVoice } });
+    await sendMessage({ text }, { body: { voiceMode: fromVoice, sessionId } });
   }
 
   async function speak(text: string) {
@@ -191,9 +198,11 @@ export default function AIPage() {
       try {
         const response = await fetch("/api/chat", { method: "GET", cache: "no-store" });
         if (!response.ok) return;
-        const data = await response.json() as { messages?: Parameters<typeof setMessages>[0] };
+        const data = await response.json() as { sessionId?: string | null; sessions?: ChatSessionSummary[]; messages?: Parameters<typeof setMessages>[0] };
         if (!cancelled && Array.isArray(data.messages)) {
           setMessages(data.messages);
+          setSessionId(data.sessionId ?? null);
+          setSessions(data.sessions ?? []);
         }
       } finally {
         if (!cancelled) {
@@ -222,11 +231,24 @@ export default function AIPage() {
     persistChat(messages);
   }, [historyReady, messages]);
 
+  async function openSession(nextSessionId: string) {
+    const response = await fetch(`/api/chat?sessionId=${encodeURIComponent(nextSessionId)}`, { cache: "no-store" });
+    if (!response.ok) return;
+    const data = await response.json() as { sessionId: string; messages: Parameters<typeof setMessages>[0] };
+    setSessionId(data.sessionId); setMessages(data.messages);
+  }
+  async function decideAction(id: string, approved: boolean) {
+    const response = await fetch(`/api/confirm/${encodeURIComponent(id)}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ approved }) });
+    if (!response.ok) window.alert((await response.json() as { error?: string }).error ?? "ยืนยันรายการไม่สำเร็จ");
+    else window.alert(approved ? "ดำเนินการเรียบร้อยแล้ว" : "ยกเลิกรายการแล้ว");
+  }
+
   return <WorkspaceShell active="AI Assistant" title="Tiny AI Assistant" subtitle="Gemini พร้อมช่วยจัดการ workspace ของคุณ">
     <section className="ai-workspace">
       <header className="ai-hero">
         <div className="ai-avatar"><img src="/tinypersonal-logo-192.png" alt="TinyPersonal AI" width="58" height="58" /></div>
         <div><span><Sparkles size={14} /> Gemini connected</span><h2>วันนี้ให้ช่วยอะไรดี?</h2><p>สั่งจัดตาราง ค้นโน้ต หรือค้น metadata และลิงก์จาก Vault ได้ด้วยภาษาธรรมชาติ</p></div>
+        {sessions.length > 0 && <select aria-label="ประวัติการสนทนา" value={sessionId ?? ""} onChange={(event) => void openSession(event.target.value)}>{sessions.map((session) => <option value={session.id} key={session.id}>{session.title || "บทสนทนาใหม่"} ({session._count.messages})</option>)}</select>}
       </header>
 
       <div className="chat-thread" aria-live="polite">
@@ -234,7 +256,7 @@ export default function AIPage() {
           {suggestions.map(({ icon: Icon, text }) => <button key={text} onClick={() => void send(text)}><Icon size={18} /><span>{text}</span></button>)}
         </div> : messages.map((message) => <article className={`chat-message ${message.role}`} key={message.id}>
           <div className="message-avatar">{message.role === "assistant" ? <Bot size={17} /> : "P"}</div>
-          <div>{renderMessageParts(message.parts)}</div>
+          <div>{renderMessageParts(message.parts, (id, approved) => void decideAction(id, approved))}</div>
         </article>)}
         {(status === "submitted" || status === "streaming") && <div className="thinking"><LoaderCircle size={15} /> Gemini กำลังคิด…</div>}
         {error && <div className="chat-error">เชื่อมต่อ AI ไม่สำเร็จ: {error.message}</div>}

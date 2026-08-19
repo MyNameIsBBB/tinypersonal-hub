@@ -1,12 +1,13 @@
 "use client";
 
-import { Bot, CalendarDays, FileImage, KeyRound, LogOut, Menu, NotebookPen, Sparkles, X } from "lucide-react";
+import { Bot, CalendarDays, FileImage, KeyRound, LogOut, Menu, NotebookPen, RadioTower, Sparkles, X } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 import { useState, type ReactNode } from "react";
 
 const modules = [
   { href: "/ai", label: "AI Assistant", icon: Bot },
+  { href: "/jarvis", label: "Jarvis Mode", icon: RadioTower },
   { href: "/", label: "Schedule", icon: CalendarDays },
   { href: "/notes", label: "Notes", icon: NotebookPen },
   { href: "/media", label: "Media", icon: FileImage },

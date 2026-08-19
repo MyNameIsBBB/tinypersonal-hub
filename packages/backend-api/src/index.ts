@@ -1,5 +1,8 @@
 export { prisma } from "./db/client";
-export { integrationHealth } from "./services/integrations";
+export { deleteChatSession, getOrCreateChatSession, listChatSessions, loadChatMessages, replaceChatMessages } from "./services/chatService";
+export type { StoredChatMessage } from "./services/chatService";
+export { createPendingAction, recordAudit, resolvePendingAction } from "./services/auditService";
+export { getMarketQuotes, integrationHealth } from "./services/integrations";
 export type { IntegrationName } from "./services/integrations";
 export { getMorningBriefingContext, sendMorningNotification } from "./services/morningBriefingService";
 export type { NewsHeadline, MorningBriefingContext, NotificationResult } from "./services/morningBriefingService";

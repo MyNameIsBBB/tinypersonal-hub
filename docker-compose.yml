@@ -1,6 +1,6 @@
 services:
   searxng:
-    image: searxng/searxng:latest
+    image: searxng/searxng:2026.7.31-057a77168
     container_name: tinypersonal-searxng
     restart: unless-stopped
     ports:
@@ -14,7 +14,7 @@ services:
       - tinypersonal-network
 
   minio:
-    image: quay.io/minio/minio:latest
+    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
     container_name: minio
     restart: unless-stopped
     command: server /data --console-address ":9001"
@@ -30,7 +30,7 @@ services:
       - tinypersonal-network
 
   minio-init:
-    image: minio/mc:latest
+    image: minio/mc:RELEASE.2025-03-12T17-29-24Z
     depends_on:
       - minio
     restart: "no"
