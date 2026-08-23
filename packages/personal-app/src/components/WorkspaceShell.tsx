@@ -8,7 +8,7 @@ import { useState, type ReactNode } from "react";
 const modules = [
   { href: "/ai", label: "AI Assistant", icon: Bot },
   { href: "/jarvis", label: "Jarvis Mode", icon: RadioTower },
-  { href: "/", label: "Schedule", icon: CalendarDays },
+  { href: "/schedule", label: "Schedule", icon: CalendarDays },
   { href: "/notes", label: "Notes", icon: NotebookPen },
   { href: "/media", label: "Media", icon: FileImage },
   { href: "/vault", label: "Vault", icon: KeyRound },
