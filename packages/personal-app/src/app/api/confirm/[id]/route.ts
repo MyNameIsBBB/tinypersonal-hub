@@ -1,4 +1,4 @@
-import { createScheduleItem, recordAudit, resolvePendingAction, updateNote, updateVaultMetadata } from "@tinypersonal/backend-api";
+import { createScheduleItem, recordAudit, resolvePendingAction, updateNote, updateScheduleStatus, updateVaultMetadata } from "@tinypersonal/backend-api";
 import { z } from "zod";
 import { authorizedOwnerKey } from "@/lib/serverAuth";
 import { parseJson } from "@/lib/apiValidation";
@@ -16,6 +16,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     const args = JSON.parse(action.argumentsJson) as Record<string, unknown>;
     let result: unknown;
     if (action.toolName === "schedule.create") result = await createScheduleItem(args as Parameters<typeof createScheduleItem>[0]);
+    else if (action.toolName === "schedule.updateStatus") result = await updateScheduleStatus(String(args.id), args.status as Parameters<typeof updateScheduleStatus>[1]);
     else if (action.toolName === "notes.update") { const { id: targetId, ...input } = args; result = await updateNote(String(targetId), input); }
     else if (action.toolName === "vault.updateMetadata") { const { id: targetId, ...input } = args; result = await updateVaultMetadata(String(targetId), input); }
     else return Response.json({ error: "Unsupported pending action" }, { status: 400 });

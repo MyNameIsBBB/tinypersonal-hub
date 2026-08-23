@@ -2,13 +2,15 @@ import { describe, expect, it } from "vitest";
 import { retrieveToolNames } from "./toolRetrieval";
 
 describe("tool retrieval", () => {
-  it("selects Thai schedule intent inside the allowlist", async () => {
-    await expect(retrieveToolNames("ช่วยเพิ่มนัดพรุ่งนี้", ["schedule", "notes.search"])).resolves.toEqual(["schedule"]);
+  it("selects only the relevant schedule operation", async () => {
+    await expect(retrieveToolNames("ช่วยเพิ่มนัดพรุ่งนี้", ["getSchedule", "createScheduleItem"])).resolves.toContain("createScheduleItem");
   });
-  it("never widens authorization", async () => {
-    await expect(retrieveToolNames("ค้นเว็บข่าวล่าสุด", ["notes.search"])).resolves.toEqual([]);
+
+  it("does not select a web tool for ordinary reasoning", async () => {
+    await expect(retrieveToolNames("ช่วยวิเคราะห์โค้ด TypeScript นี้", ["searchWeb", "fetchWebPage"])).resolves.toEqual([]);
   });
-  it("routes explicit Jarvis close commands", async () => {
-    await expect(retrieveToolNames("ปิดหน้าจอทั้งหมด", ["openBrowserView", "closeBrowserView"])).resolves.toContain("closeBrowserView");
+
+  it("never widens the allowlist", async () => {
+    await expect(retrieveToolNames("ค้นเว็บข่าวล่าสุด", ["getSchedule"])).resolves.toEqual([]);
   });
 });

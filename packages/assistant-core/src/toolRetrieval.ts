@@ -55,7 +55,7 @@ export async function retrieveToolNames(
   options: RetrieveToolsOptions = {},
 ): Promise<ToolName[]> {
   if (!query.trim() || allowedTools.length === 0) return [];
-  const limit = Math.max(1, Math.min(options.limit ?? 5, 5));
+  const limit = Math.max(1, Math.min(options.limit ?? 2, 3));
   const documents = allowedTools.map((name) => ({
     name,
     text: `${name} ${toolCatalog[name].description} ${toolCatalog[name].keywords.join(" ")}`,
