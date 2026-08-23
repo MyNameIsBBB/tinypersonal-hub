@@ -15,6 +15,7 @@ export {
 	deleteOrCancelRoutine,
 	deleteScheduleItem,
 	getScheduleByRange,
+	listActiveRoutines,
 	updateScheduleItem,
 	updateScheduleStatus,
 } from "./services/scheduleService";

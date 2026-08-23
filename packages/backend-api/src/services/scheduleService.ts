@@ -205,6 +205,14 @@ export async function getScheduleByRange(rangeStart: Date, rangeEnd: Date): Prom
   );
 }
 
+export async function listActiveRoutines(): Promise<ScheduleItem[]> {
+  const records = await prisma.scheduleItem.findMany({
+    where: { type: "ROUTINE", parentRoutineId: null, status: { not: "CANCELLED" }, routineEndDate: { gte: new Date() } },
+    orderBy: [{ routineEndDate: "asc" }, { createdAt: "asc" }],
+  });
+  return records.map(toDomain);
+}
+
 export async function updateScheduleStatus(
   id: string,
   status: ScheduleStatus,

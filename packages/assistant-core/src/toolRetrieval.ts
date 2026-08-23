@@ -63,5 +63,16 @@ export async function retrieveToolNames(
   const hits = await (options.provider ?? new LocalToolSearchProvider()).search(query, documents, limit);
   const allowed = new Set(allowedTools);
   const minimumScore = options.minimumScore ?? 1;
-  return hits.filter((hit) => allowed.has(hit.name) && hit.score >= minimumScore).map((hit) => hit.name);
+  let selected = hits.filter((hit) => allowed.has(hit.name) && hit.score >= minimumScore).map((hit) => hit.name);
+
+  // Routine mutations need a lookup tool to resolve the stable routine root ID.
+  // Avoid exposing both destructive and editing operations for an ambiguous shared word.
+  if (selected.includes("updateRoutine") && selected.includes("deleteRoutine")) {
+    const deletionIntent = /\b(delete|remove|stop|cancel)\b|ลบ|หยุด|ยกเลิก/u.test(normalize(query));
+    selected = selected.filter((name) => name !== (deletionIntent ? "updateRoutine" : "deleteRoutine"));
+  }
+  if ((selected.includes("updateRoutine") || selected.includes("deleteRoutine")) && allowed.has("getSchedule") && !selected.includes("getSchedule")) {
+    selected.push("getSchedule");
+  }
+  return selected;
 }

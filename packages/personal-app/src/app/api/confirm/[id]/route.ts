@@ -1,4 +1,4 @@
-import { createScheduleItem, recordAudit, resolvePendingAction, updateNote, updateScheduleStatus, updateVaultMetadata } from "@tinypersonal/backend-api";
+import { createScheduleItem, deleteOrCancelRoutine, recordAudit, resolvePendingAction, updateNote, updateScheduleItem, updateScheduleStatus, updateVaultMetadata } from "@tinypersonal/backend-api";
 import { z } from "zod";
 import { authorizedOwnerKey } from "@/lib/serverAuth";
 import { parseJson } from "@/lib/apiValidation";
@@ -17,6 +17,16 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     let result: unknown;
     if (action.toolName === "schedule.create") result = await createScheduleItem(args as Parameters<typeof createScheduleItem>[0]);
     else if (action.toolName === "schedule.updateStatus") result = await updateScheduleStatus(String(args.id), args.status as Parameters<typeof updateScheduleStatus>[1]);
+    else if (action.toolName === "schedule.updateRoutine") {
+      const { id: routineId, startTime, endTime, routineEndDate, ...input } = args;
+      result = await updateScheduleItem(String(routineId), {
+        ...input,
+        ...(typeof startTime === "string" ? { startTime: new Date(startTime) } : {}),
+        ...(typeof endTime === "string" ? { endTime: new Date(endTime) } : {}),
+        ...(typeof routineEndDate === "string" ? { routineEndDate: new Date(routineEndDate) } : {}),
+      });
+    }
+    else if (action.toolName === "schedule.deleteRoutine") { await deleteOrCancelRoutine(String(args.id), "ALL"); result = { id: String(args.id), status: "CANCELLED" }; }
     else if (action.toolName === "notes.update") { const { id: targetId, ...input } = args; result = await updateNote(String(targetId), input); }
     else if (action.toolName === "vault.updateMetadata") { const { id: targetId, ...input } = args; result = await updateVaultMetadata(String(targetId), input); }
     else return Response.json({ error: "Unsupported pending action" }, { status: 400 });

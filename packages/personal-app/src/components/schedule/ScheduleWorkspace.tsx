@@ -46,12 +46,24 @@ function bangkokDisplayDateFromKey(dateKey: string): string {
   });
 }
 
+function readRoutineRule(value?: string | null): { frequency: RoutineDraft["frequency"]; interval: number; byDays: string[] } {
+  if (!value) return { frequency: "WEEKLY", interval: 1, byDays: [] };
+  if (value.trim().startsWith("{")) {
+    const parsed = JSON.parse(value) as { frequency?: RoutineDraft["frequency"]; interval?: number; byDays?: string[] };
+    return { frequency: parsed.frequency ?? "WEEKLY", interval: parsed.interval ?? 1, byDays: parsed.byDays ?? [] };
+  }
+  const fields = Object.fromEntries(value.replace(/^RRULE:/, "").split(";").map((part) => part.split("=", 2)));
+  return { frequency: (fields.FREQ as RoutineDraft["frequency"]) ?? "WEEKLY", interval: Number(fields.INTERVAL ?? 1), byDays: fields.BYDAY?.split(",") ?? [] };
+}
+
 export function ScheduleWorkspace() {
   const [manageOpen, setManageOpen] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<"day" | "routine">("day");
   const [showEditor, setShowEditor] = useState(false);
   const [items, setItems] = useState<CalendarItem[]>([]);
+  const [routines, setRoutines] = useState<CalendarItem[]>([]);
+  const [editingRoutine, setEditingRoutine] = useState<CalendarItem | null>(null);
   const [selectedDate, setSelectedDate] = useState(bangkokDateKey(new Date()));
   const [editingItem, setEditingItem] = useState<CalendarItem | null>(null);
   const [loading, setLoading] = useState(true);
@@ -77,11 +89,18 @@ export function ScheduleWorkspace() {
     setLoading(true);
     const response = await fetch(`/api/schedule?start=${encodeURIComponent(monthStartUtc.toISOString())}&end=${encodeURIComponent(monthEndUtc.toISOString())}`, { cache: "no-store" });
     if (response.status === 401) { window.location.assign("/login"); return; }
-    const data = await response.json() as { items?: CalendarItem[] };
-    setItems(data.items ?? []); setLoading(false);
+    const data = await response.json() as { items?: CalendarItem[]; routines?: CalendarItem[] };
+    setItems(data.items ?? []); setRoutines(data.routines ?? []); setLoading(false);
   }, []);
 
   useEffect(() => { void loadRange(); }, [loadRange]);
+
+  // Replace a potentially stale prerendered date as soon as the client mounts.
+  useEffect(() => {
+    const today = bangkokDateKey(new Date());
+    setSelectedDate(today);
+    setDraft((current) => ({ ...current, date: today }));
+  }, []);
 
   function openDayModal(dateKey: string) {
     setSelectedDate(dateKey);
@@ -190,14 +209,14 @@ export function ScheduleWorkspace() {
     await loadRange();
   }
 
-  async function createRoutine(routine: RoutineDraft) {
-    const anchorDate = bangkokDateKey(new Date());
+  async function saveRoutine(routine: RoutineDraft) {
+    const anchorDate = editingRoutine?.startTime ? bangkokDateKey(new Date(editingRoutine.startTime)) : bangkokDateKey(new Date());
     const start = bangkokLocalToUtc(anchorDate, routine.startTime);
     let end = bangkokLocalToUtc(anchorDate, routine.endTime);
     if (end <= start) end = new Date(end.getTime() + 86_400_000);
     const routineEndDate = bangkokLocalToUtc(routine.endDate, "23:59", 59);
     if (routineEndDate < start) throw new Error("วันสิ้นสุด Routine ต้องไม่อยู่ก่อนวันนี้");
-    const response = await fetch("/api/schedule", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
+    const response = await fetch(editingRoutine ? `/api/schedule/${encodeURIComponent(editingRoutine.id)}` : "/api/schedule", { method: editingRoutine ? "PATCH" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
       title: routine.title, type: "ROUTINE", startTime: start.toISOString(), endTime: end.toISOString(),
       recurrenceRule: JSON.stringify({ frequency: routine.frequency, interval: routine.interval, byDays: routine.byDays }),
       routineEndDate: routineEndDate.toISOString(),
@@ -205,8 +224,29 @@ export function ScheduleWorkspace() {
     const data = await response.json() as { error?: string };
     if (!response.ok) throw new Error(data.error ?? "บันทึกไม่สำเร็จ");
     setMessage("สร้าง Routine แล้ว");
-    setModalMode("day");
+    setMessage(editingRoutine ? "แก้ไข Routine แล้ว" : "สร้าง Routine แล้ว");
+    setEditingRoutine(null);
     await loadRange();
+  }
+
+  function routineDraft(item: CalendarItem): RoutineDraft {
+    const rule = readRoutineRule(item.recurrenceRule);
+    const start = item.startTime ? new Date(item.startTime) : new Date();
+    const end = item.endTime ? new Date(item.endTime) : new Date(start.getTime() + 3_600_000);
+    return {
+      title: item.title, frequency: rule.frequency, interval: rule.interval,
+      byDays: rule.byDays, startTime: bangkokTimeHHMM(start), endTime: bangkokTimeHHMM(end),
+      endDate: item.routineEndDate ? bangkokDateKey(new Date(item.routineEndDate)) : bangkokDateKey(new Date()),
+    };
+  }
+
+  async function deleteRoutine(item: CalendarItem) {
+    if (!window.confirm(`ลบ Routine ${item.title} และรายการในอนาคตทั้งหมดหรือไม่?`)) return;
+    const response = await fetch(`/api/schedule/${encodeURIComponent(item.id)}`, {
+      method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: "CANCEL", scope: "ALL" }),
+    });
+    if (!response.ok) { setMessage("ลบ Routine ไม่สำเร็จ"); return; }
+    setEditingRoutine(null); setMessage("ลบ Routine แล้ว"); await loadRange();
   }
 
   async function toggleStatus(item: CalendarItem) {
@@ -227,6 +267,7 @@ export function ScheduleWorkspace() {
     setModalOpen(false);
     setShowEditor(false);
     setEditingItem(null);
+    setEditingRoutine(null);
   }
 
   return (
@@ -287,7 +328,23 @@ export function ScheduleWorkspace() {
 
               {modalMode === "routine" ? (
                 <div className="modal-routine-wrap">
-                  <RoutineForm onCreate={createRoutine} />
+                  <div className="routine-manager-list">
+                    <div className="section-heading"><div><p className="eyebrow">Active routines</p><h2>Routine ที่กำลังใช้งาน ({routines.length})</h2></div></div>
+                    {routines.length === 0 ? <div className="modal-empty-state">ยังไม่มี Routine ที่กำลังใช้งาน</div> : routines.map((routine) => (
+                      <article className="day-item-row" key={routine.id}>
+                        <div>
+                          <strong>{routine.title}</strong>
+                          <p>{readRoutineRule(routine.recurrenceRule).frequency}</p>
+                          <small>สิ้นสุด {routine.routineEndDate ? new Date(routine.routineEndDate).toLocaleDateString("th-TH", { timeZone: BANGKOK_TZ }) : "ไม่ระบุ"}</small>
+                        </div>
+                        <div className="day-item-actions">
+                          <button className="today-button" aria-label="แก้ไข Routine" onClick={() => setEditingRoutine(routine)}><Pencil size={14} /></button>
+                          <button className="danger-button" aria-label="ลบ Routine" onClick={() => void deleteRoutine(routine)}><Trash2 size={14} /></button>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                  <RoutineForm key={editingRoutine?.id ?? "new"} initial={editingRoutine ? routineDraft(editingRoutine) : undefined} onCreate={saveRoutine} />
                 </div>
               ) : (
                 <>

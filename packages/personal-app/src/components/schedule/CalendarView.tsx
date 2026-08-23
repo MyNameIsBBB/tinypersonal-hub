@@ -3,7 +3,7 @@
 import {
   CalendarDays, ChevronLeft, ChevronRight, CircleCheck, Clock3, MoreHorizontal,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 const BANGKOK_TZ = "Asia/Bangkok";
 const BANGKOK_OFFSET_HOURS = 7;
@@ -44,6 +44,8 @@ export type CalendarItem = {
   priority?: "LOW" | "MEDIUM" | "HIGH" | "URGENT";
   status: "PENDING" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED";
   parentRoutineId: string | null;
+  recurrenceRule?: string | null;
+  routineEndDate?: string | null;
 };
 
 const thaiMonths = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"];
@@ -58,10 +60,17 @@ export function CalendarView({ items, loading, onStatusChange, onRangeChange, on
   onItemSelect?: (item: CalendarItem) => void;
   selectedDateKey?: string;
 }) {
-  const now = new Date();
+  const [now, setNow] = useState(() => new Date());
   const bangkokToday = toBangkokWallClock(now);
   const [cursor, setCursor] = useState(new Date(bangkokToday.getUTCFullYear(), bangkokToday.getUTCMonth(), 1));
   const [view, setView] = useState<ViewMode>("month");
+
+  // A statically rendered page can hydrate with an old build-time date.
+  useEffect(() => {
+    setNow(new Date());
+    const timer = window.setInterval(() => setNow(new Date()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   const days = useMemo(() => {
     const year = cursor.getFullYear();
@@ -114,8 +123,15 @@ export function CalendarView({ items, loading, onStatusChange, onRangeChange, on
             ))}
           </div>
           <button className="today-button" onClick={() => {
-            const currentBangkok = toBangkokWallClock(new Date());
+            const current = new Date();
+            const currentBangkok = toBangkokWallClock(current);
+            setNow(current);
             setCursor(new Date(currentBangkok.getUTCFullYear(), currentBangkok.getUTCMonth(), 1));
+            onDateSelect?.(bangkokDateKey(current));
+            onRangeChange?.(
+              new Date(currentBangkok.getUTCFullYear(), currentBangkok.getUTCMonth(), 1),
+              new Date(currentBangkok.getUTCFullYear(), currentBangkok.getUTCMonth() + 1, 0, 23, 59, 59),
+            );
           }}>วันนี้</button>
           <div className="arrow-buttons">
             <button aria-label="เดือนก่อนหน้า" onClick={() => moveMonth(-1)}><ChevronLeft size={18} /></button>

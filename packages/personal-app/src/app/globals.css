@@ -240,6 +240,8 @@ button { color: inherit; }
   background: transparent;
   padding: 4px 2px 2px;
 }
+.routine-manager-list { display: grid; gap: 10px; margin-bottom: 18px; }
+.routine-manager-list .day-item-row { margin: 0; }
 
 .modal-empty-state {
   display: grid;

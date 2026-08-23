@@ -1,4 +1,4 @@
-import { createScheduleItem, getScheduleByRange } from "@tinypersonal/backend-api";
+import { createScheduleItem, getScheduleByRange, listActiveRoutines } from "@tinypersonal/backend-api";
 import { isAuthorizedRequest } from "@/lib/serverAuth";
 import { scheduleCreateSchema } from "@tinypersonal/assistant-core";
 import { parseJson } from "@/lib/apiValidation";
@@ -9,7 +9,8 @@ export async function GET(request: Request) {
   const rangeStart = new Date(url.searchParams.get("start") ?? new Date().toISOString());
   const rangeEnd = new Date(url.searchParams.get("end") ?? new Date(Date.now() + 31 * 86_400_000).toISOString());
   if (Number.isNaN(rangeStart.getTime()) || Number.isNaN(rangeEnd.getTime())) return Response.json({ error: "Invalid date range" }, { status: 400 });
-  return Response.json({ items: await getScheduleByRange(rangeStart, rangeEnd) }, { headers: { "Cache-Control": "no-store" } });
+  const [items, routines] = await Promise.all([getScheduleByRange(rangeStart, rangeEnd), listActiveRoutines()]);
+  return Response.json({ items, routines }, { headers: { "Cache-Control": "no-store" } });
 }
 
 export async function POST(request: Request) {
