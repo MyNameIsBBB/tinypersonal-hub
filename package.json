@@ -23,6 +23,7 @@
     "funnel:install-autofix-systemd": "./scripts/install-funnel-autofix-systemd.sh",
     "briefing:run": "node ./scripts/run-morning-briefing.mjs",
     "briefing:install-cron": "./scripts/install-morning-briefing-cron.sh",
+    "briefing:install-systemd": "bash ./scripts/install-morning-briefing-systemd.sh",
     "search:up": "./scripts/start-searxng.sh",
     "search:logs": "docker compose logs --tail=100 searxng"
   },
