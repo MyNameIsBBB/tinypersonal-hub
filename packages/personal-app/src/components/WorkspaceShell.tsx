@@ -14,6 +14,8 @@ const modules = [
   { href: "/vault", label: "Vault", icon: KeyRound },
 ] as const;
 
+const appVersion = process.env.NEXT_PUBLIC_APP_VERSION ?? "dev";
+
 export function WorkspaceShell({ active, title, subtitle, action, children }: {
   active: typeof modules[number]["label"];
   title: string;
@@ -38,6 +40,7 @@ export function WorkspaceShell({ active, title, subtitle, action, children }: {
             </Link>
           ))}
         </nav>
+        <div className="sidebar-version" title="เวอร์ชันของ build ที่กำลังเปิดอยู่">Build {appVersion}</div>
         <div className="sidebar-note"><span><Sparkles size={15} /> Private by design</span><p>ข้อมูลสำคัญอยู่หลังขอบเขตสิทธิ์และการเข้ารหัส</p></div>
         <div className="profile-row"><div className="avatar">P</div><div><strong>Personal space</strong><span>Asia/Bangkok</span></div><button aria-label="ออกจากระบบ" onClick={async () => { await fetch("/api/auth/session", { method: "DELETE" }); window.location.assign("/login"); }}><LogOut size={16} /></button></div>
       </aside>

@@ -270,6 +270,13 @@ export function ScheduleWorkspace() {
     setEditingRoutine(null);
   }
 
+  function openRoutineManager() {
+    setManageOpen(true);
+    setModalMode("routine");
+    setModalOpen(true);
+    setShowEditor(false);
+  }
+
   return (
     <WorkspaceShell active="Schedule" title="จัดวันของคุณให้ง่ายขึ้น" subtitle="สวัสดี 👋" action={<div className="schedule-actions"><button className="today-button manage-toggle" onClick={() => {
       setManageOpen((value) => {
@@ -283,7 +290,7 @@ export function ScheduleWorkspace() {
         }
         return next;
       });
-    }}>{manageOpen ? "ปิดโหมดจัดการ" : "จัดการ"}</button></div>}>
+    }}>{manageOpen ? "ปิดโหมดจัดการ" : "จัดการ"}</button><button className="primary-button" onClick={openRoutineManager}>Routine ({routines.length})</button></div>}>
         <QuickAIChatInput />
         {message && <div className="upload-notice">{message}</div>}
         <div className="workspace-grid schedule-only">

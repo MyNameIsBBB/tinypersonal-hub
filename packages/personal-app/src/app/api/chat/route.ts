@@ -274,8 +274,13 @@ export async function POST(request: Request) {
     onError: (error) => error instanceof Error ? `AI execution failed: ${error.message}` : "AI execution failed unexpectedly",
     onEnd: async ({ isAborted, messages }) => {
       if (isAborted) return;
-      const nextMessages = retainChatMessages(messages as UIMessage[]);
-      await replaceChatMessages(ownerKey, session.id, nextMessages);
+      try {
+        const nextMessages = retainChatMessages(messages as UIMessage[]);
+        await replaceChatMessages(ownerKey, session.id, nextMessages);
+      } catch (error) {
+        // Persistence must not turn a successful response into a transport failure.
+        console.error("Failed to persist completed chat stream", error instanceof Error ? error.message : "Unknown error");
+      }
     },
   });
 }

@@ -248,7 +248,7 @@ export default function AIPage() {
       <header className="ai-hero">
         <div className="ai-avatar"><img src="/tinypersonal-logo-192.png" alt="TinyPersonal AI" width="58" height="58" /></div>
         <div><span><Sparkles size={14} /> Gemini connected</span><h2>วันนี้ให้ช่วยอะไรดี?</h2><p>สั่งจัดตาราง ค้นโน้ต หรือค้น metadata และลิงก์จาก Vault ได้ด้วยภาษาธรรมชาติ</p></div>
-        {sessions.length > 0 && <select aria-label="ประวัติการสนทนา" value={sessionId ?? ""} onChange={(event) => void openSession(event.target.value)}>{sessions.map((session) => <option value={session.id} key={session.id}>{session.title || "บทสนทนาใหม่"} ({session._count.messages})</option>)}</select>}
+        {sessions.length > 1 && <label className="chat-history-select"><span>ประวัติแชท</span><select aria-label="ประวัติการสนทนา" value={sessionId ?? ""} onChange={(event) => void openSession(event.target.value)}>{sessions.map((session) => <option value={session.id} key={session.id}>{session.title || "บทสนทนาใหม่"} ({session._count.messages})</option>)}</select></label>}
       </header>
 
       <div className="chat-thread" aria-live="polite">
