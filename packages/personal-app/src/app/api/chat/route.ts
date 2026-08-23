@@ -1,5 +1,5 @@
 import { google } from "@ai-sdk/google";
-import { createPendingAction, deleteChatSession, getOrCreateChatSession, getScheduleByRange, listActiveRoutines, listChatSessions, loadChatMessages, recordAudit, replaceChatMessages, scrapeWebPage, searchWeb } from "@tinypersonal/backend-api";
+import { createPendingAction, deleteChatSession, ensureDailyGeneralChat, getOrCreateChatSession, getScheduleByRange, listActiveRoutines, listChatSessions, loadChatMessages, recordAudit, replaceChatMessages, scrapeWebPage, searchWeb } from "@tinypersonal/backend-api";
 import { convertToModelMessages, isStepCount, streamText, tool, type UIMessage } from "ai";
 import { isValidSessionToken, SESSION_COOKIE } from "@/lib/serverAuth";
 import { z } from "zod";
@@ -226,8 +226,9 @@ export async function GET(request: Request) {
   }
 
   const requestedSessionId = new URL(request.url).searchParams.get("sessionId") ?? undefined;
+  const generalSession = await ensureDailyGeneralChat(ownerKey);
   const sessions = await listChatSessions(ownerKey);
-  const sessionId = requestedSessionId ?? sessions[0]?.id;
+  const sessionId = requestedSessionId ?? generalSession.id;
   const messages = sessionId ? await loadChatMessages(ownerKey, sessionId) : [];
   return Response.json(
     { sessionId: sessionId ?? null, sessions, messages },
@@ -243,7 +244,8 @@ export async function DELETE(request: Request) {
 
   const sessionId = new URL(request.url).searchParams.get("sessionId");
   if (!sessionId) return Response.json({ error: "sessionId is required" }, { status: 400 });
-  await deleteChatSession(ownerKey, sessionId);
+  const deleted = await deleteChatSession(ownerKey, sessionId);
+  if (deleted.count === 0) return Response.json({ error: "General chat cannot be deleted" }, { status: 400 });
   return Response.json({ ok: true }, { headers: { "Cache-Control": "no-store" } });
 }
 
@@ -255,7 +257,8 @@ export async function POST(request: Request) {
 
   const parsed = await parseJson(request, chatRequestSchema); if ("response" in parsed) return parsed.response;
   const payload = parsed.data;
-  const session = await getOrCreateChatSession(ownerKey, payload.sessionId ?? undefined);
+  const generalSession = await ensureDailyGeneralChat(ownerKey);
+  const session = await getOrCreateChatSession(ownerKey, payload.sessionId ?? generalSession.id);
   const storedMessages = await loadChatMessages(ownerKey, session.id) as UIMessage[];
   const incomingMessages = Array.isArray(payload.messages) ? payload.messages as UIMessage[] : [];
   const baseMessages = retainChatMessages(incomingMessages.length ? incomingMessages : storedMessages);

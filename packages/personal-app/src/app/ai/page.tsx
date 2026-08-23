@@ -13,6 +13,7 @@ const suggestions = [
 ];
 
 type ChatSessionSummary = { id: string; title: string | null; updatedAt: string; _count: { messages: number } };
+const GENERAL_CHAT_TITLE = "แชททั่วไป";
 
 function renderMessageParts(parts: UIMessagePart<any, any>[], decide: (id: string, approved: boolean) => void) {
   const latestToolPartIndexByToolName = new Map<string, number>();
@@ -38,10 +39,11 @@ function renderMessageParts(parts: UIMessagePart<any, any>[], decide: (id: strin
     }
 
     if (part.state === "output-available") {
-      const output = part.output as { confirmation?: { id?: string; summary?: string }; confirmationRequired?: boolean; status?: string } | undefined;
+      const output = part.output as { ok?: boolean; error?: { message?: string }; confirmation?: { id?: string; summary?: string }; confirmationRequired?: boolean; status?: string } | undefined;
       if (output?.confirmation?.id && (output.confirmationRequired || output.status === "confirmation-required")) {
         return <div className="tool-status" key={index}><span>{output.confirmation.summary ?? `ยืนยัน ${toolName}`}</span><button onClick={() => decide(output.confirmation!.id!, false)}>ยกเลิก</button><button onClick={() => decide(output.confirmation!.id!, true)}>ยืนยัน</button></div>;
       }
+      if (output?.ok === false) return <div className="tool-status error" key={index}>เครื่องมือ {toolName} ขัดข้อง: {output.error?.message ?? "ไม่สามารถดึงข้อมูลได้"}</div>;
       return <div className="tool-status done" key={index}>ใช้เครื่องมือ {toolName} สำเร็จ</div>;
     }
 
@@ -72,6 +74,7 @@ export default function AIPage() {
   const voiceRequestPending = useRef(false);
   const lastSpokenMessageId = useRef<string | null>(null);
   const threadRef = useRef<HTMLDivElement | null>(null);
+  const generalCycleRef = useRef(new Date(Date.now() - 3_600_000).toISOString().slice(0, 10));
   const [historyReady, setHistoryReady] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [sessions, setSessions] = useState<ChatSessionSummary[]>([]);
@@ -203,6 +206,17 @@ export default function AIPage() {
     clearError(); setSessionId(data.sessionId); setMessages(data.messages);
   }
 
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      const cycle = new Date(Date.now() - 3_600_000).toISOString().slice(0, 10);
+      if (cycle === generalCycleRef.current || status !== "ready") return;
+      generalCycleRef.current = cycle;
+      const general = sessions.find(({ title }) => title === GENERAL_CHAT_TITLE);
+      if (general && general.id === sessionId) void openSession(general.id);
+    }, 60_000);
+    return () => window.clearInterval(timer);
+  }, [sessionId, sessions, status]);
+
   async function createSession() {
     const response = await fetch("/api/chat/sessions", { method: "POST" });
     if (!response.ok) return;
@@ -235,8 +249,8 @@ export default function AIPage() {
         <button className="new-chat-button" onClick={() => void createSession()}><Plus size={15} /> แชตใหม่</button>
         <div className="chat-session-list">
           {sessions.map((session) => <div className={`chat-session-row ${session.id === sessionId ? "active" : ""}`} key={session.id}>
-            <button onClick={() => void openSession(session.id)}><MessageSquare size={14} /><span>{session.title || "บทสนทนาใหม่"}</span></button>
-            <button className="delete-chat-button" aria-label="ลบบทสนทนา" onClick={() => void removeSession(session.id)}><Trash2 size={13} /></button>
+            <button onClick={() => void openSession(session.id)}><MessageSquare size={14} /><span>{session.title || "บทสนทนาใหม่"}{session.title === GENERAL_CHAT_TITLE ? " · รีเซ็ต 08:00" : ""}</span></button>
+            {session.title !== GENERAL_CHAT_TITLE && <button className="delete-chat-button" aria-label="ลบบทสนทนา" onClick={() => void removeSession(session.id)}><Trash2 size={13} /></button>}
           </div>)}
         </div>
       </aside>

@@ -1,5 +1,5 @@
 import { google } from "@ai-sdk/google";
-import { getMorningBriefingContext, sendMorningNotification } from "@tinypersonal/backend-api";
+import { getMorningBriefingContext, resetAllGeneralChats, sendMorningNotification } from "@tinypersonal/backend-api";
 import { generateText } from "ai";
 import { timingSafeEqual } from "node:crypto";
 
@@ -19,11 +19,11 @@ export async function POST(request: Request) {
   const schedule = context.schedule.map((item) => ({ title: item.title, type: item.type, startTime: item.startTime?.toISOString() ?? null }));
   const { text } = await generateText({
     model: google(process.env.GEMINI_MODEL ?? "gemini-3.5-flash-lite"),
-    system: "คุณคือผู้ช่วยส่วนตัว เขียน morning briefing ภาษาไทยสุภาพ เรียกผู้ใช้ว่า ‘พี่เบสท์’ สั้น กระชับไม่เกิน 4 ประโยค เลือกเฉพาะข่าวสำคัญที่สุด 1–2 ข่าวจาก JSON และห้ามแต่งข้อมูล หากไม่มีข่าวให้สรุปเฉพาะตารางงาน",
+    system: "You are JARVIS. Write a concise Thai morning briefing, address the user as Sir, prioritize today's schedule, and never invent information. Use at most four short paragraphs.",
     prompt: JSON.stringify({ date: context.date, timezone: context.timezone, schedule, news: context.news, markets: context.markets }),
   });
   const message = text.trim();
+  const generalChatsUpdated = await resetAllGeneralChats(message, context.date);
   const deliveries = await sendMorningNotification(message, `morning-briefing:${context.date}`);
-  if (!deliveries.length) return Response.json({ error: "No notification channel configured", message }, { status: 503 });
-  return Response.json({ ok: deliveries.some((delivery) => delivery.ok), message, deliveries });
+  return Response.json({ ok: true, message, generalChatsUpdated, deliveries });
 }

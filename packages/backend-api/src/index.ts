@@ -1,5 +1,5 @@
 export { prisma } from "./db/client";
-export { createChatSession, deleteChatSession, getOrCreateChatSession, listChatSessions, loadChatMessages, replaceChatMessages } from "./services/chatService";
+export { createChatSession, deleteChatSession, ensureDailyGeneralChat, GENERAL_CHAT_TITLE, getOrCreateChatSession, listChatSessions, loadChatMessages, replaceChatMessages, resetAllGeneralChats } from "./services/chatService";
 export type { StoredChatMessage } from "./services/chatService";
 export { createPendingAction, recordAudit, resolvePendingAction } from "./services/auditService";
 export { getMarketQuotes, integrationHealth } from "./services/integrations";
