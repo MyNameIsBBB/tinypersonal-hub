@@ -21,6 +21,23 @@ function parseRoutineEndInput(value: string): Date {
   return parseBangkokDateTimeInput(/^\d{4}-\d{2}-\d{2}$/.test(value.trim()) ? `${value.trim()} 23:59:59` : value);
 }
 
+function scheduleItemForModel(item: Awaited<ReturnType<typeof getScheduleByRange>>[number]) {
+  return {
+    id: item.id,
+    title: item.title,
+    description: item.description,
+    type: item.type,
+    startTime: item.startTime?.toISOString() ?? null,
+    endTime: item.endTime?.toISOString() ?? null,
+    isAllDay: item.isAllDay,
+    status: item.status,
+    priority: item.priority,
+    recurrenceRule: item.recurrenceRule,
+    routineEndDate: item.routineEndDate?.toISOString() ?? null,
+    parentRoutineId: item.parentRoutineId,
+  };
+}
+
 function defaultRoutineEndDate(start: Date, frequency: RecurrenceFrequency, interval: number): Date {
   const end = new Date(start);
   if (frequency === "YEARLY") {
@@ -105,8 +122,8 @@ const scheduleGetTool = tool({
     ]);
     return {
       ok: true as const,
-      items: items.slice(0, 100),
-      routines: routines.slice(0, 50),
+      items: items.slice(0, 100).map(scheduleItemForModel),
+      routines: routines.slice(0, 50).map(scheduleItemForModel),
       truncated: items.length > 100 || routines.length > 50,
     };
   },

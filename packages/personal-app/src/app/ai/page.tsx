@@ -1,7 +1,7 @@
 "use client";
 
 import { useChat } from "@ai-sdk/react";
-import { ArrowUp, Bot, CalendarPlus, FileSearch, KeyRound, LoaderCircle, Mic, MicOff, ShieldCheck, Sparkles, Volume2, VolumeX } from "lucide-react";
+import { ArrowUp, Bot, CalendarPlus, FileSearch, KeyRound, LoaderCircle, MessageSquare, Mic, MicOff, Plus, ShieldCheck, Sparkles, Trash2, Volume2, VolumeX } from "lucide-react";
 import { getToolName, isToolUIPart, type UIMessagePart } from "ai";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { WorkspaceShell } from "@/components/WorkspaceShell";
@@ -12,12 +12,6 @@ const suggestions = [
   { icon: KeyRound, text: "ขอลิงก์เข้า GitHub จาก Vault" },
 ];
 
-const CHAT_STORAGE_KEY = "tinypersonal-ai-chat";
-
-type StoredChatPayload = {
-  messages: unknown[];
-  lastActiveAt: number;
-};
 type ChatSessionSummary = { id: string; title: string | null; updatedAt: string; _count: { messages: number } };
 
 function renderMessageParts(parts: UIMessagePart<any, any>[], decide: (id: string, approved: boolean) => void) {
@@ -72,38 +66,20 @@ export default function AIPage() {
   const [listening, setListening] = useState(false);
   const [voiceReply, setVoiceReply] = useState(true);
   const [voiceAvailable, setVoiceAvailable] = useState(false);
-  const { messages, sendMessage, setMessages, status, error } = useChat({ id: "tinypersonal-ai-assistant" });
+  const { messages, sendMessage, setMessages, status, error, clearError } = useChat({ id: "tinypersonal-ai-assistant" });
   const initialPromptSent = useRef(false);
-  const initialized = useRef(false);
-  const lastActiveAtRef = useRef(Date.now());
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const voiceRequestPending = useRef(false);
   const lastSpokenMessageId = useRef<string | null>(null);
+  const threadRef = useRef<HTMLDivElement | null>(null);
   const [historyReady, setHistoryReady] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [sessions, setSessions] = useState<ChatSessionSummary[]>([]);
 
-  function clearStoredChat() {
-    if (typeof window === "undefined") return;
-    window.localStorage.removeItem(CHAT_STORAGE_KEY);
-  }
-
-  function persistChat(nextMessages: unknown[]) {
-    if (typeof window === "undefined") return;
-    const payload: StoredChatPayload = {
-      messages: nextMessages,
-      lastActiveAt: lastActiveAtRef.current,
-    };
-    window.localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(payload));
-  }
-
-  function touchActivity() {
-    lastActiveAtRef.current = Date.now();
-  }
-
   async function send(text: string, fromVoice = false) {
     if (!text.trim() || status === "submitted" || status === "streaming") return;
     setInput("");
+    clearError();
     voiceRequestPending.current = fromVoice;
     await sendMessage({ text }, { body: { voiceMode: fromVoice, sessionId } });
   }
@@ -176,23 +152,6 @@ export default function AIPage() {
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    const raw = window.localStorage.getItem(CHAT_STORAGE_KEY);
-    if (raw) {
-      try {
-        const parsed = JSON.parse(raw) as Partial<StoredChatPayload>;
-        if (Array.isArray(parsed.messages) && typeof parsed.lastActiveAt === "number") {
-          setMessages(parsed.messages as Parameters<typeof setMessages>[0]);
-          initialized.current = true;
-        } else {
-          clearStoredChat();
-          initialized.current = true;
-        }
-      } catch {
-        clearStoredChat();
-        initialized.current = true;
-      }
-    }
-
     let cancelled = false;
     const loadHistory = async () => {
       try {
@@ -222,20 +181,47 @@ export default function AIPage() {
     const prompt = new URLSearchParams(window.location.search).get("prompt");
     if (prompt && !initialPromptSent.current) {
       initialPromptSent.current = true;
-      void sendMessage({ text: prompt });
+      void sendMessage({ text: prompt }, { body: { sessionId } });
     }
-  }, [historyReady, sendMessage]);
+  }, [historyReady, sendMessage, sessionId]);
 
   useEffect(() => {
-    if (!historyReady || typeof window === "undefined") return;
-    persistChat(messages);
-  }, [historyReady, messages]);
+    threadRef.current?.scrollTo({ top: threadRef.current.scrollHeight, behavior: status === "streaming" ? "auto" : "smooth" });
+  }, [messages, status]);
+
+  useEffect(() => {
+    if (!historyReady || status !== "ready" || messages.length === 0) return;
+    void fetch("/api/chat/sessions", { cache: "no-store" })
+      .then((response) => response.ok ? response.json() : null)
+      .then((data: { sessions?: ChatSessionSummary[] } | null) => { if (data?.sessions) setSessions(data.sessions); });
+  }, [historyReady, messages.length, status]);
 
   async function openSession(nextSessionId: string) {
     const response = await fetch(`/api/chat?sessionId=${encodeURIComponent(nextSessionId)}`, { cache: "no-store" });
     if (!response.ok) return;
     const data = await response.json() as { sessionId: string; messages: Parameters<typeof setMessages>[0] };
-    setSessionId(data.sessionId); setMessages(data.messages);
+    clearError(); setSessionId(data.sessionId); setMessages(data.messages);
+  }
+
+  async function createSession() {
+    const response = await fetch("/api/chat/sessions", { method: "POST" });
+    if (!response.ok) return;
+    const data = await response.json() as { session: ChatSessionSummary };
+    clearError(); setMessages([]); setSessionId(data.session.id);
+    setSessions((current) => [{ ...data.session, _count: { messages: 0 } }, ...current]);
+  }
+
+  async function removeSession(targetSessionId: string) {
+    if (!window.confirm("ลบบทสนทนานี้หรือไม่?")) return;
+    const response = await fetch(`/api/chat?sessionId=${encodeURIComponent(targetSessionId)}`, { method: "DELETE" });
+    if (!response.ok) return;
+    const remaining = sessions.filter(({ id }) => id !== targetSessionId);
+    setSessions(remaining);
+    if (sessionId === targetSessionId) {
+      clearError();
+      if (remaining[0]) await openSession(remaining[0].id);
+      else await createSession();
+    }
   }
   async function decideAction(id: string, approved: boolean) {
     const response = await fetch(`/api/confirm/${encodeURIComponent(id)}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ approved }) });
@@ -244,14 +230,23 @@ export default function AIPage() {
   }
 
   return <WorkspaceShell active="AI Assistant" title="Tiny AI Assistant" subtitle="Gemini พร้อมช่วยจัดการ workspace ของคุณ">
-    <section className="ai-workspace">
+    <div className="ai-chat-layout">
+      <aside className="chat-sessions-panel">
+        <button className="new-chat-button" onClick={() => void createSession()}><Plus size={15} /> แชตใหม่</button>
+        <div className="chat-session-list">
+          {sessions.map((session) => <div className={`chat-session-row ${session.id === sessionId ? "active" : ""}`} key={session.id}>
+            <button onClick={() => void openSession(session.id)}><MessageSquare size={14} /><span>{session.title || "บทสนทนาใหม่"}</span></button>
+            <button className="delete-chat-button" aria-label="ลบบทสนทนา" onClick={() => void removeSession(session.id)}><Trash2 size={13} /></button>
+          </div>)}
+        </div>
+      </aside>
+      <section className="ai-workspace">
       <header className="ai-hero">
         <div className="ai-avatar"><img src="/tinypersonal-logo-192.png" alt="TinyPersonal AI" width="58" height="58" /></div>
         <div><span><Sparkles size={14} /> Gemini connected</span><h2>วันนี้ให้ช่วยอะไรดี?</h2><p>สั่งจัดตาราง ค้นโน้ต หรือค้น metadata และลิงก์จาก Vault ได้ด้วยภาษาธรรมชาติ</p></div>
-        {sessions.length > 1 && <label className="chat-history-select"><span>ประวัติแชท</span><select aria-label="ประวัติการสนทนา" value={sessionId ?? ""} onChange={(event) => void openSession(event.target.value)}>{sessions.map((session) => <option value={session.id} key={session.id}>{session.title || "บทสนทนาใหม่"} ({session._count.messages})</option>)}</select></label>}
       </header>
 
-      <div className="chat-thread" aria-live="polite">
+      <div className="chat-thread" aria-live="polite" ref={threadRef}>
         {messages.length === 0 ? <div className="ai-suggestions">
           {suggestions.map(({ icon: Icon, text }) => <button key={text} onClick={() => void send(text)}><Icon size={18} /><span>{text}</span></button>)}
         </div> : messages.map((message) => <article className={`chat-message ${message.role}`} key={message.id}>
@@ -266,12 +261,13 @@ export default function AIPage() {
         {listening && <div className="voice-listening-indicator" role="status"><span /> กำลังฟังเสียงภาษาไทย…</div>}
         <form className="ai-composer" onSubmit={submit}>
           <button type="button" className={`voice-button${listening ? " listening" : ""}`} onClick={toggleListening} disabled={!voiceAvailable || status === "submitted" || status === "streaming"} aria-label={voiceAvailable ? (listening ? "หยุดฟัง" : "พูดกับ AI") : "เบราว์เซอร์นี้ไม่รองรับการพูด"}>{listening ? <MicOff size={18} /> : <Mic size={18} />}</button>
-          <textarea value={input} onChange={(event) => { touchActivity(); setInput(event.target.value); }} placeholder="พิมพ์คำสั่ง เช่น เลื่อน Routine ฟิตเนสของอาทิตย์นี้…" rows={2} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void send(input); } }} />
+          <textarea value={input} onChange={(event) => setInput(event.target.value)} placeholder="พิมพ์คำสั่ง เช่น เลื่อน Routine ฟิตเนสของอาทิตย์นี้…" rows={2} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void send(input); } }} />
           <button type="button" className="voice-button" onClick={() => { window.speechSynthesis?.cancel(); setVoiceReply((enabled) => !enabled); }} aria-label={voiceReply ? "ปิดเสียงตอบกลับ" : "เปิดเสียงตอบกลับ"}>{voiceReply ? <Volume2 size={18} /> : <VolumeX size={18} />}</button>
           <button type="submit" disabled={!input.trim() || status === "submitted" || status === "streaming"} aria-label="ส่งข้อความ"><ArrowUp size={19} /></button>
         </form>
         <p><ShieldCheck size={12} /> เสียงจะถูกพิมพ์ลงแชต • AI เข้าถึง Vault ได้เฉพาะ metadata</p>
       </div>
-    </section>
+      </section>
+    </div>
   </WorkspaceShell>;
 }

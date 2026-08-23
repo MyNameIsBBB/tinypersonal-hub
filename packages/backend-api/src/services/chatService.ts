@@ -9,6 +9,10 @@ export async function listChatSessions(ownerKey: string, limit = 30) {
   });
 }
 
+export async function createChatSession(ownerKey: string) {
+  return prisma.chatSession.create({ data: { ownerKey }, select: { id: true, title: true, createdAt: true, updatedAt: true } });
+}
+
 export async function getOrCreateChatSession(ownerKey: string, sessionId?: string) {
   if (sessionId) {
     const existing = await prisma.chatSession.findFirst({ where: { id: sessionId, ownerKey } });
