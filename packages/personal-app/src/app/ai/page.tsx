@@ -77,6 +77,7 @@ export default function AIPage() {
   const [listening, setListening] = useState(false);
   const [voiceReply, setVoiceReply] = useState(true);
   const [voiceAvailable, setVoiceAvailable] = useState(false);
+  const [persistenceError, setPersistenceError] = useState<string | null>(null);
   const { messages, sendMessage, setMessages, status, error, clearError } = useChat({ id: "tinypersonal-ai-assistant" });
   const initialPromptSent = useRef(false);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
@@ -89,11 +90,26 @@ export default function AIPage() {
   const [sessions, setSessions] = useState<ChatSessionSummary[]>([]);
 
   async function send(text: string, fromVoice = false) {
-    if (!historyReady || !text.trim() || status === "submitted" || status === "streaming") return;
+    const clean = text.trim();
+    if (!historyReady || !sessionId || !clean || status === "submitted" || status === "streaming") return;
     setInput("");
     clearError();
+    setPersistenceError(null);
     voiceRequestPending.current = fromVoice;
-    await sendMessage({ text }, { body: { voiceMode: fromVoice, sessionId } });
+    const message = { id: crypto.randomUUID(), role: "user" as const, parts: [{ type: "text" as const, text: clean }] };
+    const checkpoint = await fetch("/api/chat/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionId, message }),
+      keepalive: true,
+    });
+    if (!checkpoint.ok) {
+      setInput(clean);
+      voiceRequestPending.current = false;
+      setPersistenceError("บันทึกข้อความไม่สำเร็จ กรุณาลองส่งอีกครั้ง");
+      return;
+    }
+    await sendMessage(message, { body: { voiceMode: fromVoice, sessionId } });
   }
 
   async function speak(text: string) {
@@ -252,7 +268,7 @@ export default function AIPage() {
     else window.alert(approved ? "ดำเนินการเรียบร้อยแล้ว" : "ยกเลิกรายการแล้ว");
   }
 
-  return <WorkspaceShell active="AI Assistant" title="Tiny AI Assistant" subtitle="Gemini พร้อมช่วยจัดการ workspace ของคุณ">
+  return <WorkspaceShell active="AI Assistant" title="Tiny AI Assistant" subtitle="Gemini พร้อมช่วยจัดการ workspace ของคุณ" focusMode>
     <div className="ai-chat-layout">
       <aside className="chat-sessions-panel">
         <button className="new-chat-button" onClick={() => void createSession()}><Plus size={15} /> แชตใหม่</button>
@@ -277,7 +293,7 @@ export default function AIPage() {
           <div>{renderMessageParts(message.parts, (id, approved) => void decideAction(id, approved))}</div>
         </article>)}
         {(status === "submitted" || status === "streaming") && <div className="thinking"><LoaderCircle size={15} /> Gemini กำลังคิด…</div>}
-        {error && <div className="chat-error">เชื่อมต่อ AI ไม่สำเร็จ: {error.message}</div>}
+        {(error || persistenceError) && <div className="chat-error">{persistenceError ?? `เชื่อมต่อ AI ไม่สำเร็จ: ${error!.message}`}</div>}
       </div>
 
       <div className="ai-composer-wrap">

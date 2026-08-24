@@ -164,6 +164,47 @@ export async function loadChatMessages(
     return rows.map((row) => JSON.parse(row.payloadJson) as StoredChatMessage);
 }
 
+export async function saveChatMessage(
+    ownerKey: string,
+    sessionId: string,
+    message: StoredChatMessage,
+) {
+    const session = await prisma.chatSession.findFirstOrThrow({
+        where: { id: sessionId, ownerKey },
+    });
+    const text = message.parts
+        .flatMap((part) =>
+            typeof part === "object" && part && "text" in part
+                ? [String((part as { text: unknown }).text)]
+                : [],
+        )
+        .join(" ")
+        .trim();
+    const title = session.title === GENERAL_CHAT_TITLE
+        ? GENERAL_CHAT_TITLE
+        : session.title || (message.role === "user" ? text.slice(0, 120) : null);
+    const payloadJson = JSON.stringify(message);
+
+    await prisma.$transaction([
+        prisma.chatMessage.upsert({
+            where: {
+                sessionId_messageId: { sessionId, messageId: message.id },
+            },
+            create: {
+                sessionId,
+                messageId: message.id,
+                role: message.role,
+                payloadJson,
+            },
+            update: { role: message.role, payloadJson },
+        }),
+        prisma.chatSession.update({
+            where: { id: sessionId },
+            data: { title, updatedAt: new Date() },
+        }),
+    ]);
+}
+
 export async function replaceChatMessages(
     ownerKey: string,
     sessionId: string,

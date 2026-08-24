@@ -1,6 +1,7 @@
 import { google } from "@ai-sdk/google";
 import { createPendingAction, deleteChatSession, ensureDailyGeneralChat, getOrCreateChatSession, getScheduleByRange, listActiveRoutines, listChatSessions, loadChatMessages, recordAudit, replaceChatMessages, scrapeWebPage, searchWeb } from "@tinypersonal/backend-api";
-import { convertToModelMessages, isStepCount, streamText, tool, type UIMessage } from "ai";
+import { consumeStream, convertToModelMessages, isStepCount, streamText, tool, type UIMessage } from "ai";
+import { after } from "next/server";
 import { isValidSessionToken, SESSION_COOKIE } from "@/lib/serverAuth";
 import { z } from "zod";
 import { bangkokNowContext, parseBangkokDateTimeInput } from "@/lib/chat/ContextBuilder";
@@ -285,21 +286,32 @@ export async function POST(request: Request) {
     },
     // Allow follow-up model steps after tool output so responses do not stop at finishReason=tool-calls.
     stopWhen: isStepCount(3),
-    abortSignal: request.signal,
   });
+
+  const onPersistenceEnd = async ({ messages }: { messages: UIMessage[] }) => {
+    try {
+      const nextMessages = retainChatMessages(messages);
+      await replaceChatMessages(ownerKey, session.id, nextMessages);
+    } catch (error) {
+      console.error("Failed to persist completed chat stream", error instanceof Error ? error.message : "Unknown error");
+    }
+  };
+  const persistenceStream = result.toUIMessageStream<UIMessage>({
+    originalMessages: baseMessages,
+    onError: (error) => error instanceof Error ? `AI execution failed: ${error.message}` : "AI execution failed unexpectedly",
+    onEnd: onPersistenceEnd,
+  });
+  const persistenceTask = Promise.resolve(
+    consumeStream({
+      stream: persistenceStream,
+      onError: (error) => console.error("Failed to consume chat persistence stream", error instanceof Error ? error.message : "Unknown error"),
+    }),
+  );
+  after(() => persistenceTask);
 
   return result.toUIMessageStreamResponse({
     originalMessages: baseMessages,
     headers: { "X-Chat-Session-Id": session.id },
     onError: (error) => error instanceof Error ? `AI execution failed: ${error.message}` : "AI execution failed unexpectedly",
-    onEnd: async ({ messages }) => {
-      try {
-        const nextMessages = retainChatMessages(messages as UIMessage[]);
-        await replaceChatMessages(ownerKey, session.id, nextMessages);
-      } catch (error) {
-        // Persistence must not turn a successful response into a transport failure.
-        console.error("Failed to persist completed chat stream", error instanceof Error ? error.message : "Unknown error");
-      }
-    },
   });
 }

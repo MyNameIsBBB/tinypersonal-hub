@@ -62,6 +62,9 @@ button { color: inherit; }
 .profile-row > div:nth-child(2) { flex: 1; }.profile-row > button { display: grid; width: 30px; height: 30px; place-items: center; border: 0; border-radius: 8px; background: transparent; color: #988e81; cursor: pointer; }.profile-row > button:hover { background: var(--wheat-100); color: #765522; }
 
 .workspace-main { width: calc(100% - 240px); margin-left: 240px; padding: 30px clamp(22px, 3vw, 48px) 46px; }
+.sidebar, .workspace-main { transition: margin-left .22s ease, transform .22s ease, width .22s ease; }
+.app-shell.sidebar-collapsed .sidebar { transform: translateX(-105%); }
+.app-shell.sidebar-collapsed .workspace-main { width: 100%; margin-left: 0; }
 .topbar { display: flex; min-height: 54px; align-items: center; gap: 14px; }
 .topbar > div { flex: 1; }
 .topbar p { margin: 0 0 3px; color: var(--muted); font-size: 12px; }
@@ -69,6 +72,8 @@ button { color: inherit; }
 .schedule-actions { display: flex; align-items: center; gap: 8px; }
 .manage-toggle { width: auto; min-height: 42px; padding: 0 12px !important; color: var(--ink); }
 .mobile-menu { display: none; border: 0; background: transparent; }
+.desktop-sidebar-toggle { display: grid; width: 38px; height: 38px; flex: 0 0 auto; place-items: center; border: 1px solid var(--line); border-radius: 8px; background: #fffefa; color: #756c61; cursor: pointer; }
+.desktop-sidebar-toggle:hover { border-color: #d7c29d; background: var(--wheat-100); color: #6e5128; }
 .add-button, .primary-button {
   display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: 0; border-radius: 11px;
   background: var(--ink); color: white; padding: 11px 16px; cursor: pointer; font-size: 12px; font-weight: 700;
@@ -354,12 +359,19 @@ button { color: inherit; }
   .routine-column { display: none; }
   .workspace-grid.show-form .routine-column { display: block; }
   .routine-card { max-width: 620px; }
+  .ai-chat-layout { height: calc(100dvh - 138px); min-height: 500px; grid-template-rows: auto minmax(0, 1fr); grid-template-columns: 1fr; }
+  .chat-sessions-panel { height: 58px; flex-direction: row; align-items: center; gap: 8px; }
+  .new-chat-button { height: 38px; flex: 0 0 auto; }
+  .chat-session-list { display: flex; flex: 1; gap: 4px; margin-top: 0; overflow-x: auto; overflow-y: hidden; }
+  .chat-session-row { min-width: 170px; }
 }
 
 @media (max-width: 760px) {
   .sidebar { width: min(82vw, 290px); transform: translateX(-105%); transition: transform .22s ease; box-shadow: 18px 0 50px rgba(56,45,30,.16); }
   .sidebar.open { transform: translateX(0); }
+  .app-shell.sidebar-collapsed .sidebar.open { transform: translateX(0); }
   .mobile-close, .mobile-menu { display: grid; place-items: center; }
+  .desktop-sidebar-toggle { display: none; }
   .nav-scrim { display: block; position: fixed; inset: 0; z-index: 20; border: 0; background: rgba(56,48,38,.3); }
   .workspace-main { width: 100%; margin: 0; padding: 18px 14px 30px; }
   .topbar { align-items: flex-start; }
@@ -410,10 +422,7 @@ button { color: inherit; }
   .vault-banner { align-items: flex-start; flex-wrap: wrap; }.vault-banner > span { margin-left: 56px; }
   .vault-row { align-items: flex-start; flex-wrap: wrap; }.password-mask { width: 100%; margin-left: 52px; }.password-mask code { flex: 1; min-width: 0; }
   .vault-form { grid-template-columns: 1fr 1fr; }.real-editor { min-height: 500px; }.editor-fields > div { grid-template-columns: 1fr; }
-  .ai-chat-layout { height: calc(100dvh - 120px); min-height: 480px; grid-template-rows: auto minmax(0, 1fr); grid-template-columns: 1fr; margin-top: 18px; }
-  .chat-sessions-panel { max-height: 92px; }
-  .chat-session-list { display: flex; overflow-x: auto; overflow-y: hidden; }
-  .chat-session-row { min-width: 170px; }
+  .ai-chat-layout { height: calc(100dvh - 120px); min-height: 480px; margin-top: 18px; }
   .ai-hero { align-items: flex-start; padding: 14px; }.ai-hero p { display: none; }.chat-thread { min-height: 0; }.ai-suggestions { grid-template-columns: 1fr; margin: 5px auto; }.ai-suggestions button { min-height: 76px; }.thinking { margin-left: 0; }
 }
 

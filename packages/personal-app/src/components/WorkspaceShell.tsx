@@ -1,6 +1,6 @@
 "use client";
 
-import { Bot, CalendarDays, FileImage, KeyRound, LogOut, Menu, NotebookPen, RadioTower, Sparkles, X } from "lucide-react";
+import { Bot, CalendarDays, FileImage, KeyRound, LogOut, Menu, NotebookPen, PanelLeftClose, PanelLeftOpen, RadioTower, Sparkles, X } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 import { useState, type ReactNode } from "react";
@@ -16,16 +16,18 @@ const modules = [
 
 const appVersion = process.env.NEXT_PUBLIC_APP_VERSION ?? "dev";
 
-export function WorkspaceShell({ active, title, subtitle, action, children }: {
+export function WorkspaceShell({ active, title, subtitle, action, focusMode = false, children }: {
   active: typeof modules[number]["label"];
   title: string;
   subtitle: string;
   action?: ReactNode;
+  focusMode?: boolean;
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(focusMode);
   return (
-    <div className="app-shell">
+    <div className={`app-shell ${collapsed ? "sidebar-collapsed" : ""}`}>
       <aside className={`sidebar ${open ? "open" : ""}`}>
         <div className="brand-row">
           <Image className="brand-logo" src="/tinypersonal-logo-192.png" alt="TinyPersonal tiger logo" width={42} height={42} priority />
@@ -48,6 +50,9 @@ export function WorkspaceShell({ active, title, subtitle, action, children }: {
       <main className="workspace-main">
         <header className="topbar">
           <button className="mobile-menu" aria-label="เปิดเมนู" onClick={() => setOpen(true)}><Menu size={22} /></button>
+          <button className="desktop-sidebar-toggle" aria-label={collapsed ? "เปิด sidebar" : "ปิด sidebar"} title={collapsed ? "เปิด sidebar" : "ปิด sidebar"} onClick={() => setCollapsed((value) => !value)}>
+            {collapsed ? <PanelLeftOpen size={20} /> : <PanelLeftClose size={20} />}
+          </button>
           <div><p>{subtitle}</p><h1>{title}</h1></div>{action}
         </header>
         {children}
