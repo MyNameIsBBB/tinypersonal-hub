@@ -4,6 +4,8 @@ import { useChat } from "@ai-sdk/react";
 import { ArrowUp, Bot, CalendarPlus, FileSearch, KeyRound, LoaderCircle, MessageSquare, Mic, MicOff, Plus, ShieldCheck, Sparkles, Trash2, Volume2, VolumeX } from "lucide-react";
 import { getToolName, isToolUIPart, type UIMessagePart } from "ai";
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { WorkspaceShell } from "@/components/WorkspaceShell";
 
 const suggestions = [
@@ -25,7 +27,14 @@ function renderMessageParts(parts: UIMessagePart<any, any>[], decide: (id: strin
 
   return parts.map((part, index) => {
     if (part.type === "text") {
-      return <p key={index}>{part.text}</p>;
+      return <div className="chat-markdown" key={index}>
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm]}
+          components={{
+            a: ({ children, ...props }) => <a {...props} target="_blank" rel="noreferrer">{children}</a>,
+          }}
+        >{part.text}</ReactMarkdown>
+      </div>;
     }
 
     if (!isToolUIPart(part)) {
@@ -80,7 +89,7 @@ export default function AIPage() {
   const [sessions, setSessions] = useState<ChatSessionSummary[]>([]);
 
   async function send(text: string, fromVoice = false) {
-    if (!text.trim() || status === "submitted" || status === "streaming") return;
+    if (!historyReady || !text.trim() || status === "submitted" || status === "streaming") return;
     setInput("");
     clearError();
     voiceRequestPending.current = fromVoice;
@@ -262,7 +271,7 @@ export default function AIPage() {
 
       <div className="chat-thread" aria-live="polite" ref={threadRef}>
         {messages.length === 0 ? <div className="ai-suggestions">
-          {suggestions.map(({ icon: Icon, text }) => <button key={text} onClick={() => void send(text)}><Icon size={18} /><span>{text}</span></button>)}
+          {suggestions.map(({ icon: Icon, text }) => <button disabled={!historyReady} key={text} onClick={() => void send(text)}><Icon size={18} /><span>{text}</span></button>)}
         </div> : messages.map((message) => <article className={`chat-message ${message.role}`} key={message.id}>
           <div className="message-avatar">{message.role === "assistant" ? <Bot size={17} /> : "P"}</div>
           <div>{renderMessageParts(message.parts, (id, approved) => void decideAction(id, approved))}</div>
@@ -274,10 +283,10 @@ export default function AIPage() {
       <div className="ai-composer-wrap">
         {listening && <div className="voice-listening-indicator" role="status"><span /> กำลังฟังเสียงภาษาไทย…</div>}
         <form className="ai-composer" onSubmit={submit}>
-          <button type="button" className={`voice-button${listening ? " listening" : ""}`} onClick={toggleListening} disabled={!voiceAvailable || status === "submitted" || status === "streaming"} aria-label={voiceAvailable ? (listening ? "หยุดฟัง" : "พูดกับ AI") : "เบราว์เซอร์นี้ไม่รองรับการพูด"}>{listening ? <MicOff size={18} /> : <Mic size={18} />}</button>
-          <textarea value={input} onChange={(event) => setInput(event.target.value)} placeholder="พิมพ์คำสั่ง เช่น เลื่อน Routine ฟิตเนสของอาทิตย์นี้…" rows={2} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void send(input); } }} />
+          <button type="button" className={`voice-button${listening ? " listening" : ""}`} onClick={toggleListening} disabled={!historyReady || !voiceAvailable || status === "submitted" || status === "streaming"} aria-label={voiceAvailable ? (listening ? "หยุดฟัง" : "พูดกับ AI") : "เบราว์เซอร์นี้ไม่รองรับการพูด"}>{listening ? <MicOff size={18} /> : <Mic size={18} />}</button>
+          <textarea disabled={!historyReady} value={input} onChange={(event) => setInput(event.target.value)} placeholder={historyReady ? "พิมพ์คำสั่ง เช่น เลื่อน Routine ฟิตเนสของอาทิตย์นี้…" : "กำลังโหลดบทสนทนา…"} rows={2} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void send(input); } }} />
           <button type="button" className="voice-button" onClick={() => { window.speechSynthesis?.cancel(); setVoiceReply((enabled) => !enabled); }} aria-label={voiceReply ? "ปิดเสียงตอบกลับ" : "เปิดเสียงตอบกลับ"}>{voiceReply ? <Volume2 size={18} /> : <VolumeX size={18} />}</button>
-          <button type="submit" disabled={!input.trim() || status === "submitted" || status === "streaming"} aria-label="ส่งข้อความ"><ArrowUp size={19} /></button>
+          <button type="submit" disabled={!historyReady || !input.trim() || status === "submitted" || status === "streaming"} aria-label="ส่งข้อความ"><ArrowUp size={19} /></button>
         </form>
         <p><ShieldCheck size={12} /> เสียงจะถูกพิมพ์ลงแชต • AI เข้าถึง Vault ได้เฉพาะ metadata</p>
       </div>

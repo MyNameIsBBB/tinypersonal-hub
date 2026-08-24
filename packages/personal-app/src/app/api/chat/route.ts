@@ -292,8 +292,7 @@ export async function POST(request: Request) {
     originalMessages: baseMessages,
     headers: { "X-Chat-Session-Id": session.id },
     onError: (error) => error instanceof Error ? `AI execution failed: ${error.message}` : "AI execution failed unexpectedly",
-    onEnd: async ({ isAborted, messages }) => {
-      if (isAborted) return;
+    onEnd: async ({ messages }) => {
       try {
         const nextMessages = retainChatMessages(messages as UIMessage[]);
         await replaceChatMessages(ownerKey, session.id, nextMessages);
