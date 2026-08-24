@@ -16,18 +16,19 @@ const modules = [
 
 const appVersion = process.env.NEXT_PUBLIC_APP_VERSION ?? "dev";
 
-export function WorkspaceShell({ active, title, subtitle, action, focusMode = false, children }: {
+export function WorkspaceShell({ active, title, subtitle, action, focusMode = false, immersive = false, children }: {
   active: typeof modules[number]["label"];
   title: string;
   subtitle: string;
   action?: ReactNode;
   focusMode?: boolean;
+  immersive?: boolean;
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(focusMode);
   return (
-    <div className={`app-shell ${collapsed ? "sidebar-collapsed" : ""}`}>
+    <div className={`app-shell ${collapsed ? "sidebar-collapsed" : ""} ${immersive ? "immersive" : ""}`}>
       <aside className={`sidebar ${open ? "open" : ""}`}>
         <div className="brand-row">
           <Image className="brand-logo" src="/tinypersonal-logo-192.png" alt="TinyPersonal tiger logo" width={42} height={42} priority />

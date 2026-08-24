@@ -1,11 +1,13 @@
 "use client";
 
 import { useChat } from "@ai-sdk/react";
-import { ArrowUp, Bot, CalendarPlus, FileSearch, KeyRound, LoaderCircle, MessageSquare, Mic, MicOff, Plus, ShieldCheck, Sparkles, Trash2, Volume2, VolumeX } from "lucide-react";
+import { ArrowUp, Bot, CalendarPlus, FileSearch, KeyRound, LoaderCircle, MessageSquare, Mic, MicOff, Plus, ShieldCheck, Trash2, Volume2, VolumeX, X } from "lucide-react";
 import { getToolName, isToolUIPart, type UIMessagePart } from "ai";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import ReactMarkdown from "react-markdown";
+import rehypeKatex from "rehype-katex";
 import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
 import { WorkspaceShell } from "@/components/WorkspaceShell";
 
 const suggestions = [
@@ -16,6 +18,20 @@ const suggestions = [
 
 type ChatSessionSummary = { id: string; title: string | null; updatedAt: string; _count: { messages: number } };
 const GENERAL_CHAT_TITLE = "แชททั่วไป";
+
+type MarkdownNode = { type?: string; value?: unknown; children?: MarkdownNode[] };
+
+function normalizeAssistantMath() {
+  return (tree: MarkdownNode) => {
+    const visit = (node: MarkdownNode) => {
+      if ((node.type === "math" || node.type === "inlineMath") && typeof node.value === "string") {
+        node.value = node.value.replace(/(^|[^\\])%/g, "$1\\%");
+      }
+      node.children?.forEach(visit);
+    };
+    visit(tree);
+  };
+}
 
 function renderMessageParts(parts: UIMessagePart<any, any>[], decide: (id: string, approved: boolean) => void) {
   const latestToolPartIndexByToolName = new Map<string, number>();
@@ -29,7 +45,8 @@ function renderMessageParts(parts: UIMessagePart<any, any>[], decide: (id: strin
     if (part.type === "text") {
       return <div className="chat-markdown" key={index}>
         <ReactMarkdown
-          remarkPlugins={[remarkGfm]}
+          remarkPlugins={[remarkGfm, remarkMath, normalizeAssistantMath]}
+          rehypePlugins={[rehypeKatex]}
           components={{
             a: ({ children, ...props }) => <a {...props} target="_blank" rel="noreferrer">{children}</a>,
           }}
@@ -78,6 +95,7 @@ export default function AIPage() {
   const [voiceReply, setVoiceReply] = useState(true);
   const [voiceAvailable, setVoiceAvailable] = useState(false);
   const [persistenceError, setPersistenceError] = useState<string | null>(null);
+  const [sessionsOpen, setSessionsOpen] = useState(false);
   const { messages, sendMessage, setMessages, status, error, clearError } = useChat({ id: "tinypersonal-ai-assistant" });
   const initialPromptSent = useRef(false);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
@@ -228,7 +246,7 @@ export default function AIPage() {
     const response = await fetch(`/api/chat?sessionId=${encodeURIComponent(nextSessionId)}`, { cache: "no-store" });
     if (!response.ok) return;
     const data = await response.json() as { sessionId: string; messages: Parameters<typeof setMessages>[0] };
-    clearError(); setSessionId(data.sessionId); setMessages(data.messages);
+    clearError(); setSessionId(data.sessionId); setMessages(data.messages); setSessionsOpen(false);
   }
 
   useEffect(() => {
@@ -248,6 +266,7 @@ export default function AIPage() {
     const data = await response.json() as { session: ChatSessionSummary };
     clearError(); setMessages([]); setSessionId(data.session.id);
     setSessions((current) => [{ ...data.session, _count: { messages: 0 } }, ...current]);
+    setSessionsOpen(false);
   }
 
   async function removeSession(targetSessionId: string) {
@@ -268,10 +287,11 @@ export default function AIPage() {
     else window.alert(approved ? "ดำเนินการเรียบร้อยแล้ว" : "ยกเลิกรายการแล้ว");
   }
 
-  return <WorkspaceShell active="AI Assistant" title="Tiny AI Assistant" subtitle="Gemini พร้อมช่วยจัดการ workspace ของคุณ" focusMode>
-    <div className="ai-chat-layout">
-      <aside className="chat-sessions-panel">
-        <button className="new-chat-button" onClick={() => void createSession()}><Plus size={15} /> แชตใหม่</button>
+  return <WorkspaceShell active="AI Assistant" title="Tiny AI" subtitle="พื้นที่สนทนาส่วนตัว" focusMode immersive>
+    <div className={`ai-chat-layout ${sessionsOpen ? "sessions-open" : ""}`}>
+      <aside className="chat-sessions-panel" aria-hidden={!sessionsOpen}>
+        <div className="chat-sessions-header"><strong>บทสนทนา</strong><button aria-label="ปิดประวัติแชท" onClick={() => setSessionsOpen(false)}><X size={19} /></button></div>
+        <button className="new-chat-button" onClick={() => void createSession()}><Plus size={16} /> แชตใหม่</button>
         <div className="chat-session-list">
           {sessions.map((session) => <div className={`chat-session-row ${session.id === sessionId ? "active" : ""}`} key={session.id}>
             <button onClick={() => void openSession(session.id)}><MessageSquare size={14} /><span>{session.title || "บทสนทนาใหม่"}{session.title === GENERAL_CHAT_TITLE ? " · รีเซ็ต 08:00" : ""}</span></button>
@@ -279,10 +299,12 @@ export default function AIPage() {
           </div>)}
         </div>
       </aside>
+      {sessionsOpen && <button className="chat-sessions-scrim" aria-label="ปิดประวัติแชท" onClick={() => setSessionsOpen(false)} />}
       <section className="ai-workspace">
-      <header className="ai-hero">
-        <div className="ai-avatar"><img src="/tinypersonal-logo-192.png" alt="TinyPersonal AI" width="58" height="58" /></div>
-        <div><span><Sparkles size={14} /> Gemini connected</span><h2>วันนี้ให้ช่วยอะไรดี?</h2><p>สั่งจัดตาราง ค้นโน้ต หรือค้น metadata และลิงก์จาก Vault ได้ด้วยภาษาธรรมชาติ</p></div>
+      <header className="ai-chat-header">
+        <button aria-label="เปิดประวัติแชท" title="ประวัติแชท" onClick={() => setSessionsOpen(true)}><MessageSquare size={20} /></button>
+        <div><img src="/tinypersonal-logo-192.png" alt="" width="28" height="28" /><span><strong>Tiny AI</strong><small>พร้อมสนทนา</small></span></div>
+        <button aria-label="เริ่มแชทใหม่" title="แชทใหม่" onClick={() => void createSession()}><Plus size={21} /></button>
       </header>
 
       <div className="chat-thread" aria-live="polite" ref={threadRef}>
