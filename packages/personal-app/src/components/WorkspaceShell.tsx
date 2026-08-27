@@ -1,9 +1,10 @@
 "use client";
 
-import { Bot, CalendarDays, FileImage, KeyRound, LogOut, Menu, NotebookPen, PanelLeftClose, PanelLeftOpen, RadioTower, Sparkles, X } from "lucide-react";
+import { Bell, BellOff, Bot, CalendarDays, FileImage, KeyRound, LogOut, Menu, NotebookPen, PanelLeftClose, PanelLeftOpen, RadioTower, Sparkles, X } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import { AppModal } from "./AppModal";
 
 const modules = [
   { href: "/ai", label: "AI Assistant", icon: Bot },
@@ -27,6 +28,43 @@ export function WorkspaceShell({ active, title, subtitle, action, focusMode = fa
 }) {
   const [open, setOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(focusMode);
+  const [notificationOpen, setNotificationOpen] = useState(false);
+  const [notificationBusy, setNotificationBusy] = useState(false);
+  const [notificationEnabled, setNotificationEnabled] = useState(false);
+  const [notificationConfigured, setNotificationConfigured] = useState(true);
+  const [notificationMessage, setNotificationMessage] = useState("");
+
+  useEffect(() => {
+    if (!("serviceWorker" in navigator) || !("Notification" in globalThis)) return;
+    void fetch("/api/notifications/push", { cache: "no-store" }).then((response) => response.ok ? response.json() : null).then((data: { subscribed?: boolean; configured?: boolean } | null) => {
+      setNotificationEnabled(Boolean(data?.subscribed) && Notification.permission === "granted");
+      setNotificationConfigured(data?.configured !== false);
+    });
+  }, []);
+
+  async function toggleNotifications() {
+    setNotificationBusy(true); setNotificationMessage("");
+    try {
+      const registration = await navigator.serviceWorker.ready;
+      const existing = await registration.pushManager.getSubscription();
+      if (notificationEnabled) {
+        if (existing) await fetch("/api/notifications/push", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ endpoint: existing.endpoint }) });
+        await existing?.unsubscribe(); setNotificationEnabled(false); setNotificationOpen(false); return;
+      }
+      const configResponse = await fetch("/api/notifications/push", { cache: "no-store" });
+      const config = await configResponse.json() as { configured?: boolean; publicKey?: string | null; error?: string };
+      if (!configResponse.ok || !config.configured || !config.publicKey) throw new Error(config.error ?? "ผู้ดูแลระบบยังไม่ได้ตั้งค่า Web Push");
+      const permission = await Notification.requestPermission();
+      if (permission !== "granted") throw new Error("ไม่ได้รับอนุญาตให้ส่งการแจ้งเตือน กรุณาเปิดสิทธิ์ในการตั้งค่าระบบ");
+      const padding = "=".repeat((4 - config.publicKey.length % 4) % 4);
+      const bytes = Uint8Array.from(atob((config.publicKey + padding).replace(/-/g, "+").replace(/_/g, "/")), (value) => value.charCodeAt(0));
+      const subscription = existing ?? await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: bytes });
+      const response = await fetch("/api/notifications/push", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(subscription.toJSON()) });
+      if (!response.ok) throw new Error("บันทึกอุปกรณ์สำหรับแจ้งเตือนไม่สำเร็จ");
+      setNotificationEnabled(true); setNotificationOpen(false);
+    } catch (error) { setNotificationMessage(error instanceof Error ? error.message : "ตั้งค่าการแจ้งเตือนไม่สำเร็จ"); }
+    finally { setNotificationBusy(false); }
+  }
   return (
     <div className={`app-shell ${collapsed ? "sidebar-collapsed" : ""} ${immersive ? "immersive" : ""}`}>
       <aside className={`sidebar ${open ? "open" : ""}`}>
@@ -43,6 +81,7 @@ export function WorkspaceShell({ active, title, subtitle, action, focusMode = fa
             </Link>
           ))}
         </nav>
+        <button className="notification-toggle" onClick={() => setNotificationOpen(true)}>{notificationEnabled ? <Bell size={16} /> : <BellOff size={16} />}<span>{notificationEnabled ? "เปิดการแจ้งเตือนแล้ว" : "ตั้งค่าการแจ้งเตือน"}</span></button>
         <div className="sidebar-version" title="เวอร์ชันของ build ที่กำลังเปิดอยู่">Build {appVersion}</div>
         <div className="sidebar-note"><span><Sparkles size={15} /> Private by design</span><p>ข้อมูลสำคัญอยู่หลังขอบเขตสิทธิ์และการเข้ารหัส</p></div>
         <div className="profile-row"><div className="avatar">P</div><div><strong>Personal space</strong><span>Asia/Bangkok</span></div><button aria-label="ออกจากระบบ" onClick={async () => { await fetch("/api/auth/session", { method: "DELETE" }); window.location.assign("/login"); }}><LogOut size={16} /></button></div>
@@ -58,6 +97,10 @@ export function WorkspaceShell({ active, title, subtitle, action, focusMode = fa
         </header>
         {children}
       </main>
+      <AppModal open={notificationOpen} title={notificationEnabled ? "ปิดการแจ้งเตือน?" : "แจ้งเตือนบนอุปกรณ์นี้"} description={notificationEnabled ? "อุปกรณ์นี้จะไม่ได้รับสรุปเช้าจาก TinyPersonal อีก" : "รับสรุปเช้าบน macOS หรือ iOS โดย iPhone/iPad ต้องติดตั้งเว็บนี้ผ่าน Add to Home Screen ก่อน"} tone={notificationEnabled ? "danger" : "info"} confirmLabel={notificationEnabled ? "ปิดการแจ้งเตือน" : "เปิดการแจ้งเตือน"} cancelLabel="ไว้ภายหลัง" busy={notificationBusy} onConfirm={() => void toggleNotifications()} onClose={() => { if (!notificationBusy) { setNotificationOpen(false); setNotificationMessage(""); } }}>
+        {!notificationConfigured && <p className="app-modal-error">ผู้ดูแลระบบยังไม่ได้ตั้งค่า Web Push</p>}
+        {notificationMessage && <p className="app-modal-error">{notificationMessage}</p>}
+      </AppModal>
     </div>
   );
 }

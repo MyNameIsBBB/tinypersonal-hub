@@ -8,6 +8,7 @@ import { QuickAIChatInput } from "./QuickAIChatInput";
 import { RoutineForm } from "./RoutineForm";
 import type { RoutineDraft } from "./RoutineForm";
 import type { CalendarItem } from "./CalendarView";
+import { AppModal } from "../AppModal";
 
 const BANGKOK_TZ = "Asia/Bangkok";
 const BANGKOK_OFFSET_HOURS = 7;
@@ -69,6 +70,8 @@ export function ScheduleWorkspace() {
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<{ item: CalendarItem; kind: "item" | "routine" } | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [draft, setDraft] = useState({
     title: "",
     description: "",
@@ -195,7 +198,7 @@ export function ScheduleWorkspace() {
       setMessage("รายการจาก Routine แก้ไข/ลบได้จากตัว Routine เท่านั้น");
       return;
     }
-    if (!window.confirm(`ลบรายการ ${item.title} ?`)) return;
+    setDeleting(true);
     const response = await fetch(`/api/schedule/${encodeURIComponent(item.id)}`, {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
@@ -203,9 +206,9 @@ export function ScheduleWorkspace() {
     });
     if (!response.ok) {
       setMessage("ลบไม่สำเร็จ");
-      return;
+      setDeleting(false); setDeleteTarget(null); return;
     }
-    setMessage("ลบแล้ว");
+    setDeleting(false); setDeleteTarget(null); setMessage("ลบแล้ว");
     await loadRange();
   }
 
@@ -241,12 +244,12 @@ export function ScheduleWorkspace() {
   }
 
   async function deleteRoutine(item: CalendarItem) {
-    if (!window.confirm(`ลบ Routine ${item.title} และรายการในอนาคตทั้งหมดหรือไม่?`)) return;
+    setDeleting(true);
     const response = await fetch(`/api/schedule/${encodeURIComponent(item.id)}`, {
       method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: "CANCEL", scope: "ALL" }),
     });
-    if (!response.ok) { setMessage("ลบ Routine ไม่สำเร็จ"); return; }
-    setEditingRoutine(null); setMessage("ลบ Routine แล้ว"); await loadRange();
+    if (!response.ok) { setDeleting(false); setDeleteTarget(null); setMessage("ลบ Routine ไม่สำเร็จ"); return; }
+    setDeleting(false); setDeleteTarget(null); setEditingRoutine(null); setMessage("ลบ Routine แล้ว"); await loadRange();
   }
 
   async function toggleStatus(item: CalendarItem) {
@@ -346,7 +349,7 @@ export function ScheduleWorkspace() {
                         </div>
                         <div className="day-item-actions">
                           <button className="today-button" aria-label="แก้ไข Routine" onClick={() => setEditingRoutine(routine)}><Pencil size={14} /></button>
-                          <button className="danger-button" aria-label="ลบ Routine" onClick={() => void deleteRoutine(routine)}><Trash2 size={14} /></button>
+                          <button className="danger-button" aria-label="ลบ Routine" onClick={() => setDeleteTarget({ item: routine, kind: "routine" })}><Trash2 size={14} /></button>
                         </div>
                       </article>
                     ))}
@@ -388,7 +391,7 @@ export function ScheduleWorkspace() {
                           <p>{item.type} · {item.status}{item.priority ? ` · ${item.priority}` : ""}</p>
                           <small>{start ? start.toLocaleTimeString("th-TH", { timeZone: BANGKOK_TZ, hour: "2-digit", minute: "2-digit" }) : "ไม่ระบุเวลา"}{end ? ` - ${end.toLocaleTimeString("th-TH", { timeZone: BANGKOK_TZ, hour: "2-digit", minute: "2-digit" })}` : ""}</small>
                         </div>
-                        {manageOpen && <div className="day-item-actions"><button className="today-button" onClick={() => openEditEditor(item)} disabled={Boolean(item.parentRoutineId)}><Pencil size={14} /></button><button className="danger-button" onClick={() => void deleteItem(item)} disabled={Boolean(item.parentRoutineId)}><Trash2 size={14} /></button></div>}
+                        {manageOpen && <div className="day-item-actions"><button className="today-button" onClick={() => openEditEditor(item)} disabled={Boolean(item.parentRoutineId)}><Pencil size={14} /></button><button className="danger-button" onClick={() => setDeleteTarget({ item, kind: "item" })} disabled={Boolean(item.parentRoutineId)}><Trash2 size={14} /></button></div>}
                       </article>;
                     })}
                   </div>
@@ -397,6 +400,7 @@ export function ScheduleWorkspace() {
             </section>
           </div>
         )}
+        <AppModal open={Boolean(deleteTarget)} title={deleteTarget?.kind === "routine" ? "ลบ Routine นี้?" : "ลบรายการนี้?"} description={deleteTarget?.kind === "routine" ? `“${deleteTarget.item.title}” และรายการในอนาคตทั้งหมดจะถูกลบ` : `“${deleteTarget?.item.title ?? "รายการ"}” จะถูกลบถาวร`} tone="danger" confirmLabel="ลบ" cancelLabel="ยกเลิก" busy={deleting} onConfirm={() => { if (deleteTarget?.kind === "routine") void deleteRoutine(deleteTarget.item); else if (deleteTarget) void deleteItem(deleteTarget.item); }} onClose={() => { if (!deleting) setDeleteTarget(null); }} />
     </WorkspaceShell>
   );
 }

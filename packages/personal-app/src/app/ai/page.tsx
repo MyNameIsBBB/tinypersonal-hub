@@ -9,6 +9,7 @@ import rehypeKatex from "rehype-katex";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import { WorkspaceShell } from "@/components/WorkspaceShell";
+import { AppModal } from "@/components/AppModal";
 
 const suggestions = [
   { icon: CalendarPlus, text: "ตั้ง Routine วิ่งทุกวันจันทร์และพุธ 07:00 ถึงสิ้นเดือน" },
@@ -114,6 +115,9 @@ export default function AIPage() {
   const [historyReady, setHistoryReady] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [sessions, setSessions] = useState<ChatSessionSummary[]>([]);
+  const [deleteTarget, setDeleteTarget] = useState<ChatSessionSummary | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [dialog, setDialog] = useState<{ title: string; description: string; tone: "info" | "success" | "danger" } | null>(null);
 
   async function send(text: string, fromVoice = false) {
     const clean = text.trim();
@@ -319,22 +323,27 @@ export default function AIPage() {
     setSessionsOpen(false);
   }
 
-  async function removeSession(targetSessionId: string) {
-    if (!window.confirm("ลบบทสนทนานี้หรือไม่?")) return;
-    const response = await fetch(`/api/chat?sessionId=${encodeURIComponent(targetSessionId)}`, { method: "DELETE" });
-    if (!response.ok) return;
-    const remaining = sessions.filter(({ id }) => id !== targetSessionId);
-    setSessions(remaining);
-    if (sessionId === targetSessionId) {
-      clearError();
-      if (remaining[0]) await openSession(remaining[0].id);
-      else await createSession();
-    }
+  async function removeSession() {
+    if (!deleteTarget || deleteBusy) return;
+    setDeleteBusy(true);
+    const targetSessionId = deleteTarget.id;
+    try {
+      const response = await fetch(`/api/chat?sessionId=${encodeURIComponent(targetSessionId)}`, { method: "DELETE" });
+      const result = await response.json().catch(() => ({})) as { error?: string };
+      if (!response.ok) throw new Error(result.error ?? "ลบบทสนทนาไม่สำเร็จ");
+      const refreshed = await fetch("/api/chat", { cache: "no-store" });
+      if (!refreshed.ok) throw new Error("ลบแล้ว แต่โหลดรายการบทสนทนาใหม่ไม่สำเร็จ");
+      const data = await refreshed.json() as { sessionId: string; sessions: ChatSessionSummary[]; messages: Parameters<typeof setMessages>[0] };
+      setSessions(data.sessions); setDeleteTarget(null);
+      if (sessionId === targetSessionId) { clearError(); setSessionId(data.sessionId); setMessages(data.messages); }
+    } catch (deleteError) {
+      setDialog({ title: "ลบบทสนทนาไม่สำเร็จ", description: deleteError instanceof Error ? deleteError.message : "กรุณาลองใหม่อีกครั้ง", tone: "danger" });
+    } finally { setDeleteBusy(false); }
   }
   async function decideAction(id: string, approved: boolean) {
     const response = await fetch(`/api/confirm/${encodeURIComponent(id)}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ approved }) });
-    if (!response.ok) window.alert((await response.json() as { error?: string }).error ?? "ยืนยันรายการไม่สำเร็จ");
-    else window.alert(approved ? "ดำเนินการเรียบร้อยแล้ว" : "ยกเลิกรายการแล้ว");
+    if (!response.ok) setDialog({ title: "ดำเนินการไม่สำเร็จ", description: (await response.json() as { error?: string }).error ?? "กรุณาลองใหม่อีกครั้ง", tone: "danger" });
+    else setDialog({ title: approved ? "ดำเนินการเรียบร้อยแล้ว" : "ยกเลิกรายการแล้ว", description: approved ? "TinyPersonal ดำเนินการตามที่ยืนยันแล้ว" : "รายการนี้จะไม่ถูกดำเนินการ", tone: "success" });
   }
 
   return <WorkspaceShell active="AI Assistant" title="Tiny AI" subtitle="พื้นที่สนทนาส่วนตัว" focusMode immersive>
@@ -345,7 +354,7 @@ export default function AIPage() {
         <div className="chat-session-list">
           {sessions.map((session) => <div className={`chat-session-row ${session.id === sessionId ? "active" : ""}`} key={session.id}>
             <button onClick={() => void openSession(session.id)}><MessageSquare size={14} /><span>{session.title || "บทสนทนาใหม่"}{session.title === GENERAL_CHAT_TITLE ? " · รีเซ็ต 08:00" : ""}</span></button>
-            {session.title !== GENERAL_CHAT_TITLE && <button className="delete-chat-button" aria-label="ลบบทสนทนา" onClick={() => void removeSession(session.id)}><Trash2 size={13} /></button>}
+            {session.title !== GENERAL_CHAT_TITLE && <button className="delete-chat-button" aria-label="ลบบทสนทนา" disabled={deleteBusy} onClick={() => setDeleteTarget(session)}><Trash2 size={13} /></button>}
           </div>)}
         </div>
       </aside>
@@ -353,7 +362,6 @@ export default function AIPage() {
       <section className="ai-workspace">
       <header className="ai-chat-header">
         <button aria-label="เปิดประวัติแชท" title="ประวัติแชท" onClick={() => setSessionsOpen(true)}><MessageSquare size={20} /></button>
-        <div><img src="/tinypersonal-logo-192.png" alt="" width="28" height="28" /><span><strong>Tiny AI</strong><small>พร้อมสนทนา</small></span></div>
         <button aria-label="เริ่มแชทใหม่" title="แชทใหม่" onClick={() => void createSession()}><Plus size={21} /></button>
       </header>
 
@@ -387,6 +395,8 @@ export default function AIPage() {
         <p><ShieldCheck size={12} /> เสียงจะถูกพิมพ์ลงแชต • AI เข้าถึง Vault ได้เฉพาะ metadata</p>
       </div>
       </section>
+      <AppModal open={Boolean(deleteTarget)} title="ลบบทสนทนานี้?" description={`“${deleteTarget?.title || "บทสนทนาใหม่"}” และข้อความทั้งหมดจะถูกลบถาวร`} tone="danger" confirmLabel="ลบบทสนทนา" cancelLabel="ยกเลิก" busy={deleteBusy} onConfirm={() => void removeSession()} onClose={() => { if (!deleteBusy) setDeleteTarget(null); }} />
+      <AppModal open={Boolean(dialog)} title={dialog?.title ?? ""} description={dialog?.description} tone={dialog?.tone} onClose={() => setDialog(null)} />
     </div>
   </WorkspaceShell>;
 }

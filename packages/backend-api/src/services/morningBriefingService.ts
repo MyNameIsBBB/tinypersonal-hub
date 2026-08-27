@@ -2,6 +2,7 @@ import { getScheduleByRange, type ScheduleItem } from "./scheduleService";
 import { Prisma } from "@prisma/client";
 import { prisma } from "../db/client";
 import { getMarketQuotes, type MarketQuote } from "./integrations";
+import { sendWebPushNotification } from "./pushService";
 
 export type NewsHeadline = {
   title: string;
@@ -19,7 +20,7 @@ export type MorningBriefingContext = {
 };
 
 export type NotificationResult = {
-  channel: "discord";
+  channel: "discord" | "web-push";
   ok: boolean;
   skipped?: boolean;
   error?: string;
@@ -102,6 +103,14 @@ export async function sendMorningNotification(message: string, idempotencyKey: s
       result = { channel: "discord", ok: false, error: error instanceof Error ? error.message : "Unknown error" };
     }
     results.push(result); await finishDelivery(idempotencyKey, result);
+    }
+  }
+  if (process.env.WEB_PUSH_PUBLIC_KEY && process.env.WEB_PUSH_PRIVATE_KEY) {
+    if (!await reserveDelivery(idempotencyKey, "web-push")) results.push({ channel: "web-push", ok: true, skipped: true });
+    else {
+      const push = await sendWebPushNotification("สรุปเช้าจาก TinyPersonal", message);
+      const result: NotificationResult = { channel: "web-push", ok: push.ok, ...(push.skipped && { skipped: true }), ...(push.error && { error: push.error }) };
+      results.push(result); await finishDelivery(idempotencyKey, result);
     }
   }
   return results;
