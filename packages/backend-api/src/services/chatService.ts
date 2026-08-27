@@ -205,6 +205,81 @@ export async function saveChatMessage(
     ]);
 }
 
+export async function saveUserChatMessage(
+    ownerKey: string,
+    sessionId: string,
+    message: StoredChatMessage,
+): Promise<{ removedMessageId: string | null }> {
+    return prisma.$transaction(async (transaction) => {
+        const session = await transaction.chatSession.findFirstOrThrow({
+            where: { id: sessionId, ownerKey },
+        });
+        const latest = await transaction.chatMessage.findFirst({
+            where: { sessionId },
+            orderBy: { createdAt: "desc" },
+            select: { messageId: true, role: true },
+        });
+        const removedMessageId = latest?.role === "user" ? latest.messageId : null;
+        if (removedMessageId) {
+            await transaction.chatMessage.delete({
+                where: { sessionId_messageId: { sessionId, messageId: removedMessageId } },
+            });
+        }
+
+        const text = message.parts
+            .flatMap((part) =>
+                typeof part === "object" && part && "text" in part
+                    ? [String((part as { text: unknown }).text)]
+                    : [],
+            )
+            .join(" ")
+            .trim();
+        const title = session.title === GENERAL_CHAT_TITLE
+            ? GENERAL_CHAT_TITLE
+            : session.title || text.slice(0, 120) || "แชทพร้อมรูปภาพ";
+        await transaction.chatMessage.upsert({
+            where: { sessionId_messageId: { sessionId, messageId: message.id } },
+            create: { sessionId, messageId: message.id, role: "user", payloadJson: JSON.stringify(message) },
+            update: { role: "user", payloadJson: JSON.stringify(message) },
+        });
+        await transaction.chatSession.update({
+            where: { id: sessionId },
+            data: { title, updatedAt: new Date() },
+        });
+        return { removedMessageId };
+    });
+}
+
+export async function saveAssistantChatMessageIfCurrent(
+    ownerKey: string,
+    sessionId: string,
+    expectedUserMessageId: string,
+    message: StoredChatMessage,
+): Promise<boolean> {
+    return prisma.$transaction(async (transaction) => {
+        await transaction.chatSession.findFirstOrThrow({
+            where: { id: sessionId, ownerKey },
+            select: { id: true },
+        });
+        const latest = await transaction.chatMessage.findFirst({
+            where: { sessionId },
+            orderBy: { createdAt: "desc" },
+            select: { messageId: true },
+        });
+        if (latest?.messageId !== expectedUserMessageId) return false;
+        await transaction.chatMessage.upsert({
+            where: { sessionId_messageId: { sessionId, messageId: message.id } },
+            create: { sessionId, messageId: message.id, role: "assistant", payloadJson: JSON.stringify(message) },
+            update: { role: "assistant", payloadJson: JSON.stringify(message) },
+        });
+        await transaction.chatSession.update({
+            where: { id: sessionId },
+            data: { updatedAt: new Date() },
+        });
+        return true;
+    });
+}
+
 export async function replaceChatMessages(
     ownerKey: string,
     sessionId: string,

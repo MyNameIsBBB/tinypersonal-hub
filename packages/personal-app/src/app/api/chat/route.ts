@@ -1,5 +1,5 @@
 import { google } from "@ai-sdk/google";
-import { createPendingAction, deleteChatSession, ensureDailyGeneralChat, getOrCreateChatSession, getScheduleByRange, listActiveRoutines, listChatSessions, loadChatMessages, recordAudit, replaceChatMessages, scrapeWebPage, searchWeb } from "@tinypersonal/backend-api";
+import { createPendingAction, deleteChatSession, ensureDailyGeneralChat, getOrCreateChatSession, getScheduleByRange, listActiveRoutines, listChatSessions, loadChatMessages, recordAudit, replaceChatMessages, saveAssistantChatMessageIfCurrent, scrapeWebPage, searchWeb } from "@tinypersonal/backend-api";
 import { consumeStream, convertToModelMessages, isStepCount, streamText, tool, type UIMessage } from "ai";
 import { after } from "next/server";
 import { isValidSessionToken, SESSION_COOKIE } from "@/lib/serverAuth";
@@ -262,9 +262,11 @@ export async function POST(request: Request) {
   const session = await getOrCreateChatSession(ownerKey, payload.sessionId ?? generalSession.id);
   const storedMessages = await loadChatMessages(ownerKey, session.id) as UIMessage[];
   const incomingMessages = Array.isArray(payload.messages) ? payload.messages as UIMessage[] : [];
-  const baseMessages = retainChatMessages(incomingMessages.length ? incomingMessages : storedMessages);
+  const baseMessages = retainChatMessages(payload.jarvisMode && incomingMessages.length ? incomingMessages : storedMessages);
   const modelContextMessages = selectContextWindow(baseMessages);
   await replaceChatMessages(ownerKey, session.id, baseMessages);
+  const triggeringUserMessage = [...baseMessages].reverse().find(({ role }) => role === "user");
+  if (!triggeringUserMessage) return Response.json({ error: "A user message is required" }, { status: 400 });
 
   const agent = await selectAgentTools(latestUserText(baseMessages), ["getSchedule", "createScheduleItem", "updateTaskStatus", "updateRoutine", "deleteRoutine", "searchWeb", "fetchWebPage"]);
   await recordAudit({ actorId: ownerKey, action: "assistant.prompt", status: "SUCCEEDED", promptVersion: "jarvis-v2", targetType: "ChatSession", targetId: session.id, metadata: { selectedTools: agent.selectedToolNames, messageCount: modelContextMessages.length } });
@@ -290,8 +292,13 @@ export async function POST(request: Request) {
 
   const onPersistenceEnd = async ({ messages }: { messages: UIMessage[] }) => {
     try {
-      const nextMessages = retainChatMessages(messages);
-      await replaceChatMessages(ownerKey, session.id, nextMessages);
+      const responseMessage = messages.at(-1);
+      const hasAnswer = responseMessage?.parts.some((part) =>
+        part.type === "text" && part.text.trim().length > 0,
+      );
+      if (responseMessage?.role === "assistant" && hasAnswer) {
+        await saveAssistantChatMessageIfCurrent(ownerKey, session.id, triggeringUserMessage.id, responseMessage);
+      }
     } catch (error) {
       console.error("Failed to persist completed chat stream", error instanceof Error ? error.message : "Unknown error");
     }

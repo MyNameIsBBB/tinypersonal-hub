@@ -1,9 +1,9 @@
 "use client";
 
 import { useChat } from "@ai-sdk/react";
-import { ArrowUp, Bot, CalendarPlus, FileSearch, KeyRound, LoaderCircle, MessageSquare, Mic, MicOff, Plus, ShieldCheck, Trash2, Volume2, VolumeX, X } from "lucide-react";
-import { getToolName, isToolUIPart, type UIMessagePart } from "ai";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { ArrowUp, Bot, CalendarPlus, FileSearch, KeyRound, LoaderCircle, MessageSquare, Mic, MicOff, Paperclip, Plus, ShieldCheck, Trash2, Volume2, VolumeX, X } from "lucide-react";
+import { getToolName, isToolUIPart, type FileUIPart, type UIMessagePart } from "ai";
+import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import ReactMarkdown from "react-markdown";
 import rehypeKatex from "rehype-katex";
 import remarkGfm from "remark-gfm";
@@ -54,6 +54,12 @@ function renderMessageParts(parts: UIMessagePart<any, any>[], decide: (id: strin
       </div>;
     }
 
+    if (part.type === "file" && part.mediaType.startsWith("image/")) {
+      return <figure className="chat-image" key={index}>
+        <img src={part.url} alt={part.filename ?? "รูปภาพที่แนบ"} />
+      </figure>;
+    }
+
     if (!isToolUIPart(part)) {
       return null;
     }
@@ -96,12 +102,14 @@ export default function AIPage() {
   const [voiceAvailable, setVoiceAvailable] = useState(false);
   const [persistenceError, setPersistenceError] = useState<string | null>(null);
   const [sessionsOpen, setSessionsOpen] = useState(false);
+  const [attachments, setAttachments] = useState<FileUIPart[]>([]);
   const { messages, sendMessage, setMessages, status, error, clearError } = useChat({ id: "tinypersonal-ai-assistant" });
   const initialPromptSent = useRef(false);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const voiceRequestPending = useRef(false);
   const lastSpokenMessageId = useRef<string | null>(null);
   const threadRef = useRef<HTMLDivElement | null>(null);
+  const imageInputRef = useRef<HTMLInputElement | null>(null);
   const generalCycleRef = useRef(new Date(Date.now() - 3_600_000).toISOString().slice(0, 10));
   const [historyReady, setHistoryReady] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -109,17 +117,21 @@ export default function AIPage() {
 
   async function send(text: string, fromVoice = false) {
     const clean = text.trim();
-    if (!historyReady || !sessionId || !clean || status === "submitted" || status === "streaming") return;
+    const selectedImages = attachments;
+    if (!historyReady || !sessionId || (!clean && selectedImages.length === 0) || status === "submitted" || status === "streaming") return;
     setInput("");
     clearError();
     setPersistenceError(null);
     voiceRequestPending.current = fromVoice;
-    const message = { id: crypto.randomUUID(), role: "user" as const, parts: [{ type: "text" as const, text: clean }] };
+    const message = {
+      id: crypto.randomUUID(),
+      role: "user" as const,
+      parts: [...(clean ? [{ type: "text" as const, text: clean }] : []), ...selectedImages],
+    };
     const checkpoint = await fetch("/api/chat/messages", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ sessionId, message }),
-      keepalive: true,
     });
     if (!checkpoint.ok) {
       setInput(clean);
@@ -127,7 +139,45 @@ export default function AIPage() {
       setPersistenceError("บันทึกข้อความไม่สำเร็จ กรุณาลองส่งอีกครั้ง");
       return;
     }
+    const checkpointData = await checkpoint.json() as { removedMessageId?: string | null };
+    if (checkpointData.removedMessageId) {
+      setMessages((current) => current.filter(({ id }) => id !== checkpointData.removedMessageId));
+    }
+    setAttachments([]);
+    if (imageInputRef.current) imageInputRef.current.value = "";
     await sendMessage(message, { body: { voiceMode: fromVoice, sessionId } });
+  }
+
+  async function addImages(event: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files ?? []);
+    event.target.value = "";
+    if (!files.length) return;
+    const available = Math.max(0, 3 - attachments.length);
+    const accepted = files.slice(0, available);
+    if (files.length > available) setPersistenceError("แนบรูปได้สูงสุด 3 รูปต่อข้อความ");
+
+    const parts: FileUIPart[] = [];
+    for (const file of accepted) {
+      if (!["image/jpeg", "image/png", "image/webp", "image/gif"].includes(file.type)) {
+        setPersistenceError("รองรับเฉพาะรูป JPEG, PNG, WebP และ GIF");
+        continue;
+      }
+      if (file.size > 5 * 1024 * 1024) {
+        setPersistenceError(`รูป ${file.name} มีขนาดเกิน 5 MB`);
+        continue;
+      }
+      const url = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(reader.error ?? new Error("อ่านรูปไม่สำเร็จ"));
+        reader.readAsDataURL(file);
+      });
+      parts.push({ type: "file", mediaType: file.type, filename: file.name, url });
+    }
+    if (parts.length) {
+      setPersistenceError(null);
+      setAttachments((current) => [...current, ...parts].slice(0, 3));
+    }
   }
 
   async function speak(text: string) {
@@ -227,9 +277,9 @@ export default function AIPage() {
     const prompt = new URLSearchParams(window.location.search).get("prompt");
     if (prompt && !initialPromptSent.current) {
       initialPromptSent.current = true;
-      void sendMessage({ text: prompt }, { body: { sessionId } });
+      void send(prompt);
     }
-  }, [historyReady, sendMessage, sessionId]);
+  }, [historyReady, sessionId]);
 
   useEffect(() => {
     threadRef.current?.scrollTo({ top: threadRef.current.scrollHeight, behavior: status === "streaming" ? "auto" : "smooth" });
@@ -320,11 +370,19 @@ export default function AIPage() {
 
       <div className="ai-composer-wrap">
         {listening && <div className="voice-listening-indicator" role="status"><span /> กำลังฟังเสียงภาษาไทย…</div>}
+        {attachments.length > 0 && <div className="chat-attachment-preview">
+          {attachments.map((attachment, index) => <div key={`${attachment.filename ?? "image"}-${index}`}>
+            <img src={attachment.url} alt={attachment.filename ?? "รูปที่เลือก"} />
+            <button type="button" aria-label={`นำ ${attachment.filename ?? "รูป"} ออก`} onClick={() => setAttachments((current) => current.filter((_, itemIndex) => itemIndex !== index))}><X size={14} /></button>
+          </div>)}
+        </div>}
         <form className="ai-composer" onSubmit={submit}>
+          <input ref={imageInputRef} className="chat-image-input" type="file" accept="image/jpeg,image/png,image/webp,image/gif" multiple onChange={(event) => void addImages(event)} />
+          <button type="button" className="attachment-button" onClick={() => imageInputRef.current?.click()} disabled={!historyReady || status === "submitted" || status === "streaming"} aria-label="แนบรูปภาพ"><Paperclip size={19} /></button>
           <button type="button" className={`voice-button${listening ? " listening" : ""}`} onClick={toggleListening} disabled={!historyReady || !voiceAvailable || status === "submitted" || status === "streaming"} aria-label={voiceAvailable ? (listening ? "หยุดฟัง" : "พูดกับ AI") : "เบราว์เซอร์นี้ไม่รองรับการพูด"}>{listening ? <MicOff size={18} /> : <Mic size={18} />}</button>
           <textarea disabled={!historyReady} value={input} onChange={(event) => setInput(event.target.value)} placeholder={historyReady ? "พิมพ์คำสั่ง เช่น เลื่อน Routine ฟิตเนสของอาทิตย์นี้…" : "กำลังโหลดบทสนทนา…"} rows={2} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void send(input); } }} />
-          <button type="button" className="voice-button" onClick={() => { window.speechSynthesis?.cancel(); setVoiceReply((enabled) => !enabled); }} aria-label={voiceReply ? "ปิดเสียงตอบกลับ" : "เปิดเสียงตอบกลับ"}>{voiceReply ? <Volume2 size={18} /> : <VolumeX size={18} />}</button>
-          <button type="submit" disabled={!historyReady || !input.trim() || status === "submitted" || status === "streaming"} aria-label="ส่งข้อความ"><ArrowUp size={19} /></button>
+          <button type="button" className="voice-button voice-reply-button" onClick={() => { window.speechSynthesis?.cancel(); setVoiceReply((enabled) => !enabled); }} aria-label={voiceReply ? "ปิดเสียงตอบกลับ" : "เปิดเสียงตอบกลับ"}>{voiceReply ? <Volume2 size={18} /> : <VolumeX size={18} />}</button>
+          <button type="submit" disabled={!historyReady || (!input.trim() && attachments.length === 0) || status === "submitted" || status === "streaming"} aria-label="ส่งข้อความ"><ArrowUp size={19} /></button>
         </form>
         <p><ShieldCheck size={12} /> เสียงจะถูกพิมพ์ลงแชต • AI เข้าถึง Vault ได้เฉพาะ metadata</p>
       </div>
