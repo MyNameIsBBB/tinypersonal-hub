@@ -10,6 +10,7 @@ fi
 
 CRON_TZ_LINE="CRON_TZ=Asia/Bangkok"
 CRON_LINE="0 8 * * * cd '$PROJECT_DIR' && /usr/bin/env node '$PROJECT_DIR/scripts/run-morning-briefing.mjs' >> '$PROJECT_DIR/.data/morning-briefing.log' 2>&1"
+SCHEDULE_CRON_LINE="* * * * * cd '$PROJECT_DIR' && /usr/bin/env node '$PROJECT_DIR/scripts/run-schedule-notifications.mjs' >> '$PROJECT_DIR/.data/schedule-notifications.log' 2>&1"
 mkdir -p "$PROJECT_DIR/.data"
-(crontab -l 2>/dev/null | grep -v "run-morning-briefing.mjs" | grep -v '^CRON_TZ=Asia/Bangkok$' || true; echo "$CRON_TZ_LINE"; echo "$CRON_LINE") | crontab -
-echo "Installed morning briefing cron for 08:00 Asia/Bangkok."
+(crontab -l 2>/dev/null | grep -v "run-morning-briefing.mjs" | grep -v "run-schedule-notifications.mjs" | grep -v '^CRON_TZ=Asia/Bangkok$' || true; echo "$CRON_TZ_LINE"; echo "$CRON_LINE"; echo "$SCHEDULE_CRON_LINE") | crontab -
+echo "Installed morning briefing at 08:00 and schedule notification checks every minute."

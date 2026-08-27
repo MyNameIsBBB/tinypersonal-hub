@@ -4,6 +4,7 @@ import { z } from "zod";
 
 const subscriptionSchema = z.object({
   endpoint: z.string().url().max(4_096),
+  expirationTime: z.number().nullable().optional(),
   keys: z.object({ p256dh: z.string().min(1).max(1_024), auth: z.string().min(1).max(1_024) }).strict(),
 }).strict();
 
@@ -19,7 +20,7 @@ export async function POST(request: Request) {
   const parsed = subscriptionSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return Response.json({ error: "Invalid push subscription" }, { status: 400 });
   try {
-    await savePushSubscription(ownerKey, parsed.data);
+    await savePushSubscription(ownerKey, { endpoint: parsed.data.endpoint, keys: parsed.data.keys });
     return Response.json({ ok: true }, { status: 201 });
   } catch (error) {
     console.error("Failed to save push subscription", error);

@@ -6,7 +6,7 @@ export { getMarketQuotes, integrationHealth } from "./services/integrations";
 export type { IntegrationName } from "./services/integrations";
 export { getMorningBriefingContext, sendMorningNotification } from "./services/morningBriefingService";
 export type { NewsHeadline, MorningBriefingContext, NotificationResult } from "./services/morningBriefingService";
-export { hasPushSubscription, removePushSubscription, savePushSubscription, sendWebPushNotification } from "./services/pushService";
+export { hasPushSubscription, removePushSubscription, savePushSubscription, sendDueScheduleNotifications, sendWebPushNotification } from "./services/pushService";
 export type { PushSubscriptionInput } from "./services/pushService";
 export { embedToolText, searchToolVectors } from "./services/toolVectorService";
 export type { ToolVectorDocument, ToolVectorHit } from "./services/toolVectorService";

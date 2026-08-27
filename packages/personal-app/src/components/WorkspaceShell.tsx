@@ -76,7 +76,8 @@ export function WorkspaceShell({ active, title, subtitle, action, focusMode = fa
       const padding = "=".repeat((4 - config.publicKey.length % 4) % 4);
       const bytes = Uint8Array.from(atob((config.publicKey + padding).replace(/-/g, "+").replace(/_/g, "/")), (value) => value.charCodeAt(0));
       const subscription = existing ?? await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: bytes });
-      const response = await fetch("/api/notifications/push", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(subscription.toJSON()) });
+      const json = subscription.toJSON();
+      const response = await fetch("/api/notifications/push", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ endpoint: subscription.endpoint, keys: json.keys }) });
       if (!response.ok) {
         const result = await response.json().catch(() => ({})) as { error?: string };
         throw new Error(result.error ?? `บันทึกอุปกรณ์สำหรับแจ้งเตือนไม่สำเร็จ (HTTP ${response.status})`);

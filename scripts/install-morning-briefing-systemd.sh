@@ -51,8 +51,41 @@ Unit=tinypersonal-morning-briefing.service
 WantedBy=timers.target
 EOF
 
+cat > "$SYSTEMD_USER_DIR/tinypersonal-schedule-notifications.service" <<EOF
+[Unit]
+Description=TinyPersonal schedule notifications
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=$PROJECT_DIR
+Environment=TINYPERSONAL_BASE_URL=$BASE_URL
+EnvironmentFile=-$PROJECT_DIR/.env
+EnvironmentFile=-$PROJECT_DIR/packages/personal-app/.env.local
+ExecStart=$NODE_BIN $PROJECT_DIR/scripts/run-schedule-notifications.mjs
+StandardOutput=append:$PROJECT_DIR/.data/schedule-notifications.log
+StandardError=append:$PROJECT_DIR/.data/schedule-notifications.log
+EOF
+
+cat > "$SYSTEMD_USER_DIR/tinypersonal-schedule-notifications.timer" <<EOF
+[Unit]
+Description=Check TinyPersonal schedule notifications every minute
+
+[Timer]
+OnCalendar=*-*-* *:*:00
+AccuracySec=10s
+Persistent=true
+Unit=tinypersonal-schedule-notifications.service
+
+[Install]
+WantedBy=timers.target
+EOF
+
 systemctl --user daemon-reload
 systemctl --user enable --now tinypersonal-morning-briefing.timer
+systemctl --user enable --now tinypersonal-schedule-notifications.timer
 
 echo "Installed systemd user timer for 08:00 Asia/Bangkok."
 systemctl --user status --no-pager tinypersonal-morning-briefing.timer | sed -n '1,14p'
+systemctl --user status --no-pager tinypersonal-schedule-notifications.timer | sed -n '1,14p'
