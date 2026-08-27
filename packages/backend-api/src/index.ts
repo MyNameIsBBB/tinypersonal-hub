@@ -1,7 +1,7 @@
 export { prisma } from "./db/client";
 export { createChatSession, deleteChatSession, ensureDailyGeneralChat, GENERAL_CHAT_TITLE, getOrCreateChatSession, listChatSessions, loadChatMessages, replaceChatMessages, resetAllGeneralChats, saveAssistantChatMessageIfCurrent, saveChatMessage, saveUserChatMessage } from "./services/chatService";
 export type { StoredChatMessage } from "./services/chatService";
-export { createPendingAction, recordAudit, resolvePendingAction } from "./services/auditService";
+export { createPendingAction, executeLatestPendingAction, executePendingAction, recordAudit, resolvePendingAction } from "./services/auditService";
 export { getMarketQuotes, integrationHealth } from "./services/integrations";
 export type { IntegrationName } from "./services/integrations";
 export { getMorningBriefingContext, sendMorningNotification } from "./services/morningBriefingService";

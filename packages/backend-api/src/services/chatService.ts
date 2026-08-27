@@ -20,7 +20,7 @@ async function deterministicMorningBriefing(
     const end = new Date(start.getTime() + 86_400_000 - 1);
     const schedule = await getScheduleByRange(start, end);
     if (!schedule.length)
-        return `Good morning ครับ — วันนี้ (${cycleDate}) ตารางยังว่าง ไม่มีนัดหมายหรืองานที่บันทึกไว้ครับ`;
+        return `สวัสดีตอนเช้าครับ วันนี้ (${cycleDate}) ตารางยังว่าง ไม่มีนัดหมายหรืองานที่บันทึกไว้ครับ`;
     const lines = schedule.slice(0, 12).map((item) => {
         const time =
             item.startTime?.toLocaleTimeString("th-TH", {
@@ -30,7 +30,7 @@ async function deterministicMorningBriefing(
             }) ?? "ไม่ระบุเวลา";
         return `• ${time} ${item.title}`;
     });
-    return `Good morning ครับ — ตารางวันนี้ (${cycleDate}) มี ${schedule.length} รายการ:\n${lines.join("\n")}`;
+    return `สวัสดีตอนเช้าครับ ตารางวันนี้ (${cycleDate}) มี ${schedule.length} รายการ:\n${lines.join("\n")}`;
 }
 
 async function resetGeneralSession(

@@ -1,12 +1,12 @@
 import { google } from "@ai-sdk/google";
-import { createPendingAction, deleteChatSession, ensureDailyGeneralChat, getOrCreateChatSession, getScheduleByRange, listActiveRoutines, listChatSessions, loadChatMessages, recordAudit, replaceChatMessages, saveAssistantChatMessageIfCurrent, scrapeWebPage, searchWeb } from "@tinypersonal/backend-api";
-import { consumeStream, convertToModelMessages, isStepCount, streamText, tool, type UIMessage } from "ai";
+import { createPendingAction, deleteChatSession, ensureDailyGeneralChat, executeLatestPendingAction, getOrCreateChatSession, getScheduleByRange, listActiveRoutines, listChatSessions, loadChatMessages, recordAudit, replaceChatMessages, saveAssistantChatMessageIfCurrent, scrapeWebPage, searchWeb } from "@tinypersonal/backend-api";
+import { consumeStream, convertToModelMessages, createUIMessageStream, createUIMessageStreamResponse, isStepCount, streamText, tool, type UIMessage } from "ai";
 import { after } from "next/server";
 import { isValidSessionToken, SESSION_COOKIE } from "@/lib/serverAuth";
 import { z } from "zod";
 import { bangkokNowContext, parseBangkokDateTimeInput } from "@/lib/chat/ContextBuilder";
 import { selectAgentTools } from "@/lib/chat/ToolOrchestrator";
-import { latestUserText, retainChatMessages, selectContextWindow } from "@/lib/chat/ChatStreamHandler";
+import { confirmationDecision, latestUserText, retainChatMessages, selectContextWindow } from "@/lib/chat/ChatStreamHandler";
 import { chatRequestSchema } from "@tinypersonal/assistant-core";
 import { parseJson } from "@/lib/apiValidation";
 
@@ -220,6 +220,31 @@ function resolveChatOwnerKey(request: Request): string | null {
   }
 }
 
+async function confirmationResponse(ownerKey: string, sessionId: string, userMessageId: string, approved: boolean) {
+  let responseText: string;
+  try {
+    const execution = await executeLatestPendingAction(ownerKey, sessionId, approved);
+    if (!execution) return null;
+    responseText = execution.denied
+      ? `ยกเลิกรายการ “${execution.action.summary}” เรียบร้อยแล้วครับ`
+      : `ยืนยันและดำเนินการ “${execution.action.summary}” เรียบร้อยแล้วครับ`;
+  } catch (error) {
+    responseText = `ดำเนินการยืนยันไม่สำเร็จครับ: ${error instanceof Error ? error.message : "เกิดข้อผิดพลาดที่ไม่ทราบสาเหตุ"}`;
+  }
+
+  const responseMessage: UIMessage = { id: crypto.randomUUID(), role: "assistant", parts: [{ type: "text", text: responseText }] };
+  await saveAssistantChatMessageIfCurrent(ownerKey, sessionId, userMessageId, responseMessage);
+  const textPartId = crypto.randomUUID();
+  const stream = createUIMessageStream<UIMessage>({ execute: ({ writer }) => {
+    writer.write({ type: "start", messageId: responseMessage.id });
+    writer.write({ type: "text-start", id: textPartId });
+    writer.write({ type: "text-delta", id: textPartId, delta: responseText });
+    writer.write({ type: "text-end", id: textPartId });
+    writer.write({ type: "finish", finishReason: "stop" });
+  } });
+  return createUIMessageStreamResponse({ stream, headers: { "X-Chat-Session-Id": sessionId } });
+}
+
 export async function GET(request: Request) {
   const ownerKey = resolveChatOwnerKey(request);
   if (!ownerKey) {
@@ -267,6 +292,11 @@ export async function POST(request: Request) {
   await replaceChatMessages(ownerKey, session.id, baseMessages);
   const triggeringUserMessage = [...baseMessages].reverse().find(({ role }) => role === "user");
   if (!triggeringUserMessage) return Response.json({ error: "A user message is required" }, { status: 400 });
+  const decision = confirmationDecision(latestUserText(baseMessages));
+  if (decision !== null) {
+    const response = await confirmationResponse(ownerKey, session.id, triggeringUserMessage.id, decision);
+    if (response) return response;
+  }
 
   const agent = await selectAgentTools(latestUserText(baseMessages), ["getSchedule", "createScheduleItem", "updateTaskStatus", "updateRoutine", "deleteRoutine", "searchWeb", "fetchWebPage"]);
   await recordAudit({ actorId: ownerKey, action: "assistant.prompt", status: "SUCCEEDED", promptVersion: "jarvis-v2", targetType: "ChatSession", targetId: session.id, metadata: { selectedTools: agent.selectedToolNames, messageCount: modelContextMessages.length } });

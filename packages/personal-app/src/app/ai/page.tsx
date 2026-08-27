@@ -73,7 +73,7 @@ function renderMessageParts(parts: UIMessagePart<any, any>[], decide: (id: strin
     if (part.state === "output-available") {
       const output = part.output as { ok?: boolean; error?: { message?: string }; confirmation?: { id?: string; summary?: string }; confirmationRequired?: boolean; status?: string } | undefined;
       if (output?.confirmation?.id && (output.confirmationRequired || output.status === "confirmation-required")) {
-        return <div className="tool-status" key={index}><span>{output.confirmation.summary ?? `ยืนยัน ${toolName}`}</span><button onClick={() => decide(output.confirmation!.id!, false)}>ยกเลิก</button><button onClick={() => decide(output.confirmation!.id!, true)}>ยืนยัน</button></div>;
+        return <div className="tool-status confirmation" key={index}><span>{output.confirmation.summary ?? toolName} — ยืนยันไหมครับ?</span><button onClick={() => decide(output.confirmation!.id!, false)}>ยกเลิก</button><button onClick={() => decide(output.confirmation!.id!, true)}>ยืนยัน</button></div>;
       }
       if (output?.ok === false) return <div className="tool-status error" key={index}>เครื่องมือ {toolName} ขัดข้อง: {output.error?.message ?? "ไม่สามารถดึงข้อมูลได้"}</div>;
       return <div className="tool-status done" key={index}>ใช้เครื่องมือ {toolName} สำเร็จ</div>;

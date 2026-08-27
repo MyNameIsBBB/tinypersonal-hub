@@ -1,4 +1,7 @@
 import { prisma } from "../db/client";
+import { updateNote } from "./noteService";
+import { createScheduleItem, deleteOrCancelRoutine, updateScheduleItem, updateScheduleStatus } from "./scheduleService";
+import { updateVaultMetadata } from "./vaultService";
 
 function safeMetadata(metadata: Record<string, unknown>): string {
   const sanitized = Object.fromEntries(Object.entries(metadata).filter(([key]) =>
@@ -30,4 +33,47 @@ export async function resolvePendingAction(ownerKey: string, id: string, approve
   const action = await prisma.pendingAction.findFirst({ where: { id, ownerKey, status: "PENDING", expiresAt: { gt: new Date() } } });
   if (!action) return null;
   return prisma.pendingAction.update({ where: { id }, data: { status: approved ? "APPROVED" : "DENIED", resolvedAt: new Date() } });
+}
+
+export async function executePendingAction(ownerKey: string, id: string, approved: boolean) {
+  const action = await resolvePendingAction(ownerKey, id, approved);
+  if (!action) return null;
+  if (!approved) {
+    await recordAudit({ actorId: ownerKey, action: action.toolName, targetId: id, status: "DENIED" });
+    return { action, denied: true, result: null };
+  }
+
+  try {
+    const args = JSON.parse(action.argumentsJson) as Record<string, unknown>;
+    let result: unknown;
+    if (action.toolName === "schedule.create") result = await createScheduleItem(args as Parameters<typeof createScheduleItem>[0]);
+    else if (action.toolName === "schedule.updateStatus") result = await updateScheduleStatus(String(args.id), args.status as Parameters<typeof updateScheduleStatus>[1]);
+    else if (action.toolName === "schedule.updateRoutine") {
+      const { id: routineId, startTime, endTime, routineEndDate, ...input } = args;
+      result = await updateScheduleItem(String(routineId), {
+        ...input,
+        ...(typeof startTime === "string" ? { startTime: new Date(startTime) } : {}),
+        ...(typeof endTime === "string" ? { endTime: new Date(endTime) } : {}),
+        ...(typeof routineEndDate === "string" ? { routineEndDate: new Date(routineEndDate) } : {}),
+      });
+    }
+    else if (action.toolName === "schedule.deleteRoutine") { await deleteOrCancelRoutine(String(args.id), "ALL"); result = { id: String(args.id), status: "CANCELLED" }; }
+    else if (action.toolName === "notes.update") { const { id: targetId, ...input } = args; result = await updateNote(String(targetId), input); }
+    else if (action.toolName === "vault.updateMetadata") { const { id: targetId, ...input } = args; result = await updateVaultMetadata(String(targetId), input); }
+    else throw new Error("Unsupported pending action");
+    await recordAudit({ actorId: ownerKey, action: action.toolName, targetId: id, status: "SUCCEEDED" });
+    return { action, denied: false, result };
+  } catch (error) {
+    await recordAudit({ actorId: ownerKey, action: action.toolName, targetId: id, status: "FAILED", metadata: { error: error instanceof Error ? error.message : "Unknown error" } });
+    throw error;
+  }
+}
+
+export async function executeLatestPendingAction(ownerKey: string, sessionId: string, approved: boolean) {
+  const action = await prisma.pendingAction.findFirst({
+    where: { ownerKey, sessionId, status: "PENDING", expiresAt: { gt: new Date() } },
+    orderBy: { createdAt: "desc" },
+    select: { id: true },
+  });
+  return action ? executePendingAction(ownerKey, action.id, approved) : null;
 }

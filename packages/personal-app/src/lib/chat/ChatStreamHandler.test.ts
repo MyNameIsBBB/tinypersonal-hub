@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { UIMessage } from "ai";
-import { selectContextWindow } from "./ChatStreamHandler";
+import { confirmationDecision, selectContextWindow } from "./ChatStreamHandler";
 
 describe("chat context window", () => {
   it("keeps at most 16 recent messages", () => {
@@ -16,5 +16,18 @@ describe("chat context window", () => {
     const context = selectContextWindow(messages);
     expect(JSON.stringify(context)).not.toContain("x".repeat(1_000));
     expect(JSON.stringify(context)).toContain("raw historical payload omitted");
+  });
+});
+
+describe("confirmationDecision", () => {
+  it("recognizes concise approval and denial replies", () => {
+    expect(confirmationDecision("ยืนยันครับ")).toBe(true);
+    expect(confirmationDecision("เอาเลย")).toBe(true);
+    expect(confirmationDecision("ยกเลิก")).toBe(false);
+    expect(confirmationDecision("cancel please")).toBeNull();
+  });
+
+  it("does not execute from a general sentence", () => {
+    expect(confirmationDecision("ช่วยยืนยันเวลานัดให้หน่อย")).toBeNull();
   });
 });
