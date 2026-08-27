@@ -17,6 +17,19 @@ const modules = [
 
 const appVersion = process.env.NEXT_PUBLIC_APP_VERSION ?? "dev";
 
+function withTimeout<T>(promise: Promise<T>, milliseconds: number, message: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) => setTimeout(() => reject(new Error(message)), milliseconds)),
+  ]);
+}
+
+async function readyServiceWorker(): Promise<ServiceWorkerRegistration> {
+  if (!("serviceWorker" in navigator)) throw new Error("เบราว์เซอร์นี้ไม่รองรับ Service Worker");
+  await withTimeout(navigator.serviceWorker.register("/sw.js", { scope: "/" }), 10_000, "ติดตั้ง Service Worker ไม่สำเร็จ กรุณาตรวจการเชื่อมต่อแล้วลองใหม่");
+  return withTimeout(navigator.serviceWorker.ready, 10_000, "Service Worker ยังไม่พร้อม กรุณาปิดแล้วเปิดแอปใหม่");
+}
+
 export function WorkspaceShell({ active, title, subtitle, action, focusMode = false, immersive = false, children }: {
   active: typeof modules[number]["label"];
   title: string;
@@ -45,7 +58,11 @@ export function WorkspaceShell({ active, title, subtitle, action, focusMode = fa
   async function toggleNotifications() {
     setNotificationBusy(true); setNotificationMessage("");
     try {
-      const registration = await navigator.serviceWorker.ready;
+      if (!("Notification" in globalThis) || !("PushManager" in globalThis)) throw new Error("เบราว์เซอร์หรือระบบเวอร์ชันนี้ยังไม่รองรับ Web Push");
+      const iosNavigator = navigator as Navigator & { standalone?: boolean };
+      const isIos = /iPad|iPhone|iPod/.test(navigator.userAgent);
+      if (isIos && !iosNavigator.standalone) throw new Error("บน iPhone/iPad กรุณา Add to Home Screen แล้วเปิด TinyPersonal จากไอคอนบนหน้าจอหลัก");
+      const registration = await readyServiceWorker();
       const existing = await registration.pushManager.getSubscription();
       if (notificationEnabled) {
         if (existing) await fetch("/api/notifications/push", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ endpoint: existing.endpoint }) });
@@ -60,7 +77,10 @@ export function WorkspaceShell({ active, title, subtitle, action, focusMode = fa
       const bytes = Uint8Array.from(atob((config.publicKey + padding).replace(/-/g, "+").replace(/_/g, "/")), (value) => value.charCodeAt(0));
       const subscription = existing ?? await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: bytes });
       const response = await fetch("/api/notifications/push", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(subscription.toJSON()) });
-      if (!response.ok) throw new Error("บันทึกอุปกรณ์สำหรับแจ้งเตือนไม่สำเร็จ");
+      if (!response.ok) {
+        const result = await response.json().catch(() => ({})) as { error?: string };
+        throw new Error(result.error ?? `บันทึกอุปกรณ์สำหรับแจ้งเตือนไม่สำเร็จ (HTTP ${response.status})`);
+      }
       setNotificationEnabled(true); setNotificationOpen(false);
     } catch (error) { setNotificationMessage(error instanceof Error ? error.message : "ตั้งค่าการแจ้งเตือนไม่สำเร็จ"); }
     finally { setNotificationBusy(false); }
