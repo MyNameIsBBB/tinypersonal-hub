@@ -16,6 +16,9 @@ if [[ ! -d "$PROJECT_ROOT/.git" ]]; then
 fi
 
 CODEX_EXECUTABLE="$(command -v codex || true)"
+if [[ -z "$CODEX_EXECUTABLE" && -d "$HOME/.nvm/versions/node" ]]; then
+  CODEX_EXECUTABLE="$(find "$HOME/.nvm/versions/node" -type f -path '*/bin/codex' 2>/dev/null | sort -V | tail -n 1)"
+fi
 if [[ -z "$CODEX_EXECUTABLE" ]]; then
   echo "codex executable not found in PATH" >&2
   exit 1
