@@ -43,21 +43,27 @@ function renderMessageParts(parts: UIMessagePart<any, any>[], decide: (id: strin
 
   return parts.map((part, index) => {
     if (part.type === "text") {
-      return <div className="chat-markdown" key={index}>
-        <ReactMarkdown
-          remarkPlugins={[remarkGfm, remarkMath, normalizeAssistantMath]}
-          rehypePlugins={[rehypeKatex]}
-          components={{
-            a: ({ children, ...props }) => <a {...props} target="_blank" rel="noreferrer">{children}</a>,
-          }}
-        >{part.text}</ReactMarkdown>
-      </div>;
+      return (
+        <div className="chat-markdown" key={index}>
+          <ReactMarkdown
+            remarkPlugins={[remarkGfm, remarkMath, normalizeAssistantMath]}
+            rehypePlugins={[rehypeKatex]}
+            components={{
+              a: ({ children, ...props }) => <a {...props} target="_blank" rel="noreferrer">{children}</a>,
+            }}
+          >
+            {part.text}
+          </ReactMarkdown>
+        </div>
+      );
     }
 
     if (part.type === "file" && part.mediaType.startsWith("image/")) {
-      return <figure className="chat-image" key={index}>
-        <img src={part.url} alt={part.filename ?? "รูปภาพที่แนบ"} />
-      </figure>;
+      return (
+        <figure className="chat-image" key={index}>
+          <img src={part.url} alt={part.filename ?? "รูปภาพที่แนบ"} />
+        </figure>
+      );
     }
 
     if (!isToolUIPart(part)) {
@@ -73,7 +79,13 @@ function renderMessageParts(parts: UIMessagePart<any, any>[], decide: (id: strin
     if (part.state === "output-available") {
       const output = part.output as { ok?: boolean; error?: { message?: string }; confirmation?: { id?: string; summary?: string }; confirmationRequired?: boolean; status?: string } | undefined;
       if (output?.confirmation?.id && (output.confirmationRequired || output.status === "confirmation-required")) {
-        return <div className="tool-status confirmation" key={index}><span>{output.confirmation.summary ?? toolName} — ยืนยันไหมครับ?</span><button onClick={() => decide(output.confirmation!.id!, false)}>ยกเลิก</button><button onClick={() => decide(output.confirmation!.id!, true)}>ยืนยัน</button></div>;
+        return (
+          <div className="tool-status confirmation" key={index}>
+            <span>{output.confirmation.summary ?? toolName} — ยืนยันไหมครับ?</span>
+            <button onClick={() => decide(output.confirmation!.id!, false)}>ยกเลิก</button>
+            <button onClick={() => decide(output.confirmation!.id!, true)}>ยืนยัน</button>
+          </div>
+        );
       }
       if (output?.ok === false) return <div className="tool-status error" key={index}>เครื่องมือ {toolName} ขัดข้อง: {output.error?.message ?? "ไม่สามารถดึงข้อมูลได้"}</div>;
       return <div className="tool-status done" key={index}>ใช้เครื่องมือ {toolName} สำเร็จ</div>;
@@ -101,7 +113,6 @@ export default function AIPage() {
   const [voiceReply, setVoiceReply] = useState(true);
   const [voiceAvailable, setVoiceAvailable] = useState(false);
   const [persistenceError, setPersistenceError] = useState<string | null>(null);
-  const [sessionsOpen, setSessionsOpen] = useState(false);
   const [attachments, setAttachments] = useState<FileUIPart[]>([]);
   const { messages, sendMessage, setMessages, status, error, clearError } = useChat({ id: "tinypersonal-b1" });
   const initialPromptSent = useRef(false);
@@ -310,7 +321,9 @@ export default function AIPage() {
     const response = await fetch(`/api/chat?sessionId=${encodeURIComponent(nextSessionId)}`, { cache: "no-store" });
     if (!response.ok) return;
     const data = await response.json() as { sessionId: string; messages: Parameters<typeof setMessages>[0] };
-    clearError(); setSessionId(data.sessionId); setMessages(data.messages); setSessionsOpen(false);
+    clearError();
+    setSessionId(data.sessionId);
+    setMessages(data.messages);
   }
 
   useEffect(() => {
@@ -328,9 +341,10 @@ export default function AIPage() {
     const response = await fetch("/api/chat/sessions", { method: "POST" });
     if (!response.ok) return;
     const data = await response.json() as { session: ChatSessionSummary };
-    clearError(); setMessages([]); setSessionId(data.session.id);
+    clearError();
+    setMessages([]);
+    setSessionId(data.session.id);
     setSessions((current) => [{ ...data.session, _count: { messages: 0 } }, ...current]);
-    setSessionsOpen(false);
   }
 
   async function removeSession(targetSessionId: string) {
@@ -352,6 +366,7 @@ export default function AIPage() {
       setPersistenceError(deleteError instanceof Error ? deleteError.message : "ลบบทสนทนาไม่สำเร็จ กรุณาลองใหม่");
     } finally { setDeleteBusySessionId(null); }
   }
+
   async function decideAction(id: string, approved: boolean) {
     const response = await fetch(`/api/confirm/${encodeURIComponent(id)}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ approved }) });
     if (!response.ok) {
@@ -361,55 +376,92 @@ export default function AIPage() {
     setPersistenceError(null);
   }
 
-  return <WorkspaceShell active="AI Assistant" title="B1" subtitle="ผู้ช่วยส่วนตัวของคุณ" focusMode immersive>
-    <div className={`ai-chat-layout ${sessionsOpen ? "sessions-open" : ""}`}>
-      <aside className="chat-sessions-panel" aria-hidden={!sessionsOpen}>
-        <div className="chat-sessions-header"><strong>บทสนทนา</strong><button aria-label="ปิดประวัติแชท" onClick={() => setSessionsOpen(false)}><X size={19} /></button></div>
-        <button className="new-chat-button" onClick={() => void createSession()}><Plus size={16} /> แชตใหม่</button>
-        <div className="chat-session-list">
-          {sessions.map((session) => <div className={`chat-session-row ${session.id === sessionId ? "active" : ""}`} key={session.id}>
-            <button onClick={() => void openSession(session.id)}><MessageSquare size={14} /><span>{session.title || "บทสนทนาใหม่"}</span></button>
-            {session.title !== GENERAL_CHAT_TITLE && <button className="delete-chat-button" aria-label="ลบบทสนทนา" disabled={deleteBusySessionId === session.id} onClick={() => void removeSession(session.id)}><Trash2 size={13} /></button>}
-          </div>)}
-        </div>
-      </aside>
-      {sessionsOpen && <button className="chat-sessions-scrim" aria-label="ปิดประวัติแชท" onClick={() => setSessionsOpen(false)} />}
-      <section className="ai-workspace">
-      <header className="ai-chat-header">
-        <button aria-label="เปิดประวัติแชท" title="ประวัติแชท" onClick={() => setSessionsOpen(true)}><MessageSquare size={20} /></button>
-        <button aria-label="เริ่มแชทใหม่" title="แชทใหม่" onClick={() => void createSession()}><Plus size={21} /></button>
-      </header>
-
-      <div className="chat-thread" aria-live="polite" ref={threadRef}>
-        {messages.length === 0 ? <div className="ai-suggestions">
-          {suggestions.map(({ icon: Icon, text }) => <button disabled={!historyReady} key={text} onClick={() => void send(text)}><Icon size={18} /><span>{text}</span></button>)}
-        </div> : messages.map((message) => <article className={`chat-message ${message.role}`} key={message.id}>
-          <div className="message-avatar">{message.role === "assistant" ? <Bot size={17} /> : "P"}</div>
-          <div>{renderMessageParts(message.parts, (id, approved) => void decideAction(id, approved))}</div>
-        </article>)}
-        {(status === "submitted" || status === "streaming") && <div className="thinking"><LoaderCircle size={15} /> B1 กำลังคิด…</div>}
-        {(error || persistenceError) && <div className="chat-error">{persistenceError ?? `เชื่อมต่อ AI ไม่สำเร็จ: ${error!.message}`}</div>}
+  const sidebarExtraContent = (
+    <div className="sidebar-chat-section">
+      <div className="sidebar-chat-header">
+        <span>บทสนทนา</span>
+        <button type="button" className="sidebar-new-chat-btn" onClick={() => void createSession()} title="แชตใหม่">
+          <Plus size={14} /> <span>แชตใหม่</span>
+        </button>
       </div>
-
-      <div className="ai-composer-wrap">
-        {listening && <div className="voice-listening-indicator" role="status"><span /> กำลังฟังเสียงภาษาไทย…</div>}
-        {attachments.length > 0 && <div className="chat-attachment-preview">
-          {attachments.map((attachment, index) => <div key={`${attachment.filename ?? "image"}-${index}`}>
-            <img src={attachment.url} alt={attachment.filename ?? "รูปที่เลือก"} />
-            <button type="button" aria-label={`นำ ${attachment.filename ?? "รูป"} ออก`} onClick={() => setAttachments((current) => current.filter((_, itemIndex) => itemIndex !== index))}><X size={14} /></button>
-          </div>)}
-        </div>}
-        <form className="ai-composer" onSubmit={submit}>
-          <input ref={imageInputRef} className="chat-image-input" type="file" accept="image/jpeg,image/png,image/webp,image/gif" multiple onChange={(event) => void addImages(event)} />
-          <button type="button" className="attachment-button" onClick={() => imageInputRef.current?.click()} disabled={!historyReady || status === "submitted" || status === "streaming"} aria-label="แนบรูปภาพ"><Paperclip size={19} /></button>
-          <button type="button" className={`voice-button${listening ? " listening" : ""}`} onClick={toggleListening} disabled={!historyReady || !voiceAvailable || status === "submitted" || status === "streaming"} aria-label={voiceAvailable ? (listening ? "หยุดฟัง" : "พูดกับ B1") : "เบราว์เซอร์นี้ไม่รองรับการพูด"}>{listening ? <MicOff size={18} /> : <Mic size={18} />}</button>
-          <textarea disabled={!historyReady} value={input} onChange={(event) => setInput(event.target.value)} placeholder={historyReady ? "พิมพ์คำสั่ง เช่น เลื่อน Routine ฟิตเนสของอาทิตย์นี้…" : "กำลังโหลดบทสนทนา…"} rows={2} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void send(input); } }} />
-          <button type="button" className="voice-button voice-reply-button" onClick={() => { window.speechSynthesis?.cancel(); setVoiceReply((enabled) => !enabled); }} aria-label={voiceReply ? "ปิดเสียงตอบกลับ" : "เปิดเสียงตอบกลับ"}>{voiceReply ? <Volume2 size={18} /> : <VolumeX size={18} />}</button>
-          <button type="submit" disabled={!historyReady || (!input.trim() && attachments.length === 0) || status === "submitted" || status === "streaming"} aria-label="ส่งข้อความ"><ArrowUp size={19} /></button>
-        </form>
-        <p><ShieldCheck size={12} /> เสียงจะถูกพิมพ์ลงแชต • B1 เข้าถึง Vault ได้เฉพาะ metadata</p>
+      <div className="sidebar-chat-list">
+        {sessions.map((session) => (
+          <div className={`sidebar-chat-item ${session.id === sessionId ? "active" : ""}`} key={session.id}>
+            <button type="button" className="sidebar-chat-link" onClick={() => void openSession(session.id)}>
+              <MessageSquare size={14} />
+              <span>{session.title || "บทสนทนาใหม่"}</span>
+            </button>
+            {session.title !== GENERAL_CHAT_TITLE && (
+              <button
+                type="button"
+                className="sidebar-chat-delete"
+                aria-label="ลบบทสนทนา"
+                disabled={deleteBusySessionId === session.id}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void removeSession(session.id);
+                }}
+                title="ลบบทสนทนา"
+              >
+                <Trash2 size={13} />
+              </button>
+            )}
+          </div>
+        ))}
       </div>
-      </section>
     </div>
-  </WorkspaceShell>;
+  );
+
+  return (
+    <WorkspaceShell active="AI Assistant" title="B1" subtitle="ผู้ช่วยส่วนตัวของคุณ" focusMode immersive sidebarExtra={sidebarExtraContent}>
+      <div className="ai-chat-layout">
+        <section className="ai-workspace">
+          <div className="chat-thread" aria-live="polite" ref={threadRef}>
+            {messages.length === 0 ? (
+              <div className="ai-suggestions">
+                {suggestions.map(({ icon: Icon, text }) => (
+                  <button disabled={!historyReady} key={text} onClick={() => void send(text)}>
+                    <Icon size={18} />
+                    <span>{text}</span>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              messages.map((message) => (
+                <article className={`chat-message ${message.role}`} key={message.id}>
+                  <div className="message-avatar">{message.role === "assistant" ? <Bot size={17} /> : "P"}</div>
+                  <div>{renderMessageParts(message.parts, (id, approved) => void decideAction(id, approved))}</div>
+                </article>
+              ))
+            )}
+            {(status === "submitted" || status === "streaming") && <div className="thinking"><LoaderCircle size={15} /> B1 กำลังคิด…</div>}
+            {(error || persistenceError) && <div className="chat-error">{persistenceError ?? `เชื่อมต่อ AI ไม่สำเร็จ: ${error!.message}`}</div>}
+          </div>
+
+          <div className="ai-composer-wrap">
+            {listening && <div className="voice-listening-indicator" role="status"><span /> กำลังฟังเสียงภาษาไทย…</div>}
+            {attachments.length > 0 && (
+              <div className="chat-attachment-preview">
+                {attachments.map((attachment, index) => (
+                  <div key={`${attachment.filename ?? "image"}-${index}`}>
+                    <img src={attachment.url} alt={attachment.filename ?? "รูปที่เลือก"} />
+                    <button type="button" aria-label={`นำ ${attachment.filename ?? "รูป"} ออก`} onClick={() => setAttachments((current) => current.filter((_, itemIndex) => itemIndex !== index))}><X size={14} /></button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <form className="ai-composer" onSubmit={submit}>
+              <input ref={imageInputRef} className="chat-image-input" type="file" accept="image/jpeg,image/png,image/webp,image/gif" multiple onChange={(event) => void addImages(event)} />
+              <button type="button" className="attachment-button" onClick={() => imageInputRef.current?.click()} disabled={!historyReady || status === "submitted" || status === "streaming"} aria-label="แนบรูปภาพ"><Paperclip size={19} /></button>
+              <button type="button" className={`voice-button${listening ? " listening" : ""}`} onClick={toggleListening} disabled={!historyReady || !voiceAvailable || status === "submitted" || status === "streaming"} aria-label={voiceAvailable ? (listening ? "หยุดฟัง" : "พูดกับ B1") : "เบราว์เซอร์นี้ไม่รองรับการพูด"}>{listening ? <MicOff size={18} /> : <Mic size={18} />}</button>
+              <textarea disabled={!historyReady} value={input} onChange={(event) => setInput(event.target.value)} placeholder={historyReady ? "พิมพ์คำสั่ง เช่น เลื่อน Routine ฟิตเนสของอาทิตย์นี้…" : "กำลังโหลดบทสนทนา…"} rows={2} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void send(input); } }} />
+              <button type="button" className="voice-button voice-reply-button" onClick={() => { window.speechSynthesis?.cancel(); setVoiceReply((enabled) => !enabled); }} aria-label={voiceReply ? "ปิดเสียงตอบกลับ" : "เปิดเสียงตอบกลับ"}>{voiceReply ? <Volume2 size={18} /> : <VolumeX size={18} />}</button>
+              <button type="submit" disabled={!historyReady || (!input.trim() && attachments.length === 0) || status === "submitted" || status === "streaming"} aria-label="ส่งข้อความ"><ArrowUp size={19} /></button>
+            </form>
+            <p><ShieldCheck size={12} /> เสียงจะถูกพิมพ์ลงแชต • B1 เข้าถึง Vault ได้เฉพาะ metadata</p>
+          </div>
+        </section>
+      </div>
+    </WorkspaceShell>
+  );
 }

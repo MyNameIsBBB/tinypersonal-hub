@@ -29,17 +29,18 @@ async function readyServiceWorker(): Promise<ServiceWorkerRegistration> {
   return withTimeout(navigator.serviceWorker.ready, 10_000, "Service Worker ยังไม่พร้อม กรุณาปิดแล้วเปิดแอปใหม่");
 }
 
-export function WorkspaceShell({ active, title, subtitle, action, focusMode = false, immersive = false, children }: {
+export function WorkspaceShell({ active, title, subtitle, action, focusMode = false, immersive = false, sidebarExtra, children }: {
   active: typeof modules[number]["label"];
   title: string;
   subtitle: string;
   action?: ReactNode;
   focusMode?: boolean;
   immersive?: boolean;
+  sidebarExtra?: ReactNode;
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
-  const [collapsed, setCollapsed] = useState(focusMode);
+  const [collapsed, setCollapsed] = useState(false);
   const [notificationOpen, setNotificationOpen] = useState(false);
   const [notificationBusy, setNotificationBusy] = useState(false);
   const [notificationEnabled, setNotificationEnabled] = useState(false);
@@ -85,6 +86,7 @@ export function WorkspaceShell({ active, title, subtitle, action, focusMode = fa
     } catch (error) { setNotificationMessage(error instanceof Error ? error.message : "ตั้งค่าการแจ้งเตือนไม่สำเร็จ"); }
     finally { setNotificationBusy(false); }
   }
+
   return (
     <div className={`app-shell ${collapsed ? "sidebar-collapsed" : ""} ${immersive ? "immersive" : ""}`}>
       <aside className={`sidebar ${open ? "open" : ""}`}>
@@ -101,6 +103,7 @@ export function WorkspaceShell({ active, title, subtitle, action, focusMode = fa
             </Link>
           ))}
         </nav>
+        {sidebarExtra && <div className="sidebar-extra">{sidebarExtra}</div>}
         <button className="notification-toggle" onClick={() => setNotificationOpen(true)}>{notificationEnabled ? <Bell size={16} /> : <BellOff size={16} />}<span>{notificationEnabled ? "เปิดการแจ้งเตือนแล้ว" : "ตั้งค่าการแจ้งเตือน"}</span></button>
         <div className="sidebar-version" title="เวอร์ชันของ build ที่กำลังเปิดอยู่">Build {appVersion}</div>
         <div className="sidebar-note"><span><Sparkles size={15} /> Private by design</span><p>ข้อมูลสำคัญอยู่หลังขอบเขตสิทธิ์และการเข้ารหัส</p></div>

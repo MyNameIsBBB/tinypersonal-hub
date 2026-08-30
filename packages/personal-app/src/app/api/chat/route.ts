@@ -20,7 +20,7 @@ const weekdaySchema = z.enum(["MO", "TU", "WE", "TH", "FR", "SA", "SU"]);
 
 function parseRoutineEndInput(value: string): Date {
   return parseBangkokDateTimeInput(/^\d{4}-\d{2}-\d{2}$/.test(value.trim()) ? `${value.trim()} 23:59:59` : value);
-}w
+}
 
 function scheduleItemForModel(item: Awaited<ReturnType<typeof getScheduleByRange>>[number]) {
   return {
