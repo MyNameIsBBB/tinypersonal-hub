@@ -24,7 +24,7 @@ export type DelegateCodingTaskInput = z.infer<typeof delegateCodingTaskInputSche
 export type ControlSmartHomeDeviceInput = z.infer<typeof controlSmartHomeDeviceInputSchema>;
 
 export const delegateCodingTaskTool = tool({
-  description: "Delegate a bounded coding change to the local headless coding CLI, validate the build, and optionally commit and push a named branch.",
+  description: "Delegate an end-to-end repository task to Codex. Codex pulls, creates a branch, implements, tests, builds, and optionally commits and pushes after the application's confirmation.",
   inputSchema: delegateCodingTaskInputSchema,
   execute: async (input) => ({ ok: true as const, command: "coding.delegate" as const, input }),
 });

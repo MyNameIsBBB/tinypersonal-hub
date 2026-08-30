@@ -7,7 +7,7 @@ import { z } from "zod";
 import { bangkokNowContext, parseBangkokDateTimeInput } from "@/lib/chat/ContextBuilder";
 import { selectAgentTools } from "@/lib/chat/ToolOrchestrator";
 import { confirmationDecision, latestUserText, retainChatMessages, selectContextWindow } from "@/lib/chat/ChatStreamHandler";
-import { chatRequestSchema, controlSmartHomeDeviceInputSchema, delegateCodingTaskInputSchema, type ToolName } from "@tinypersonal/assistant-core";
+import { chatRequestSchema, delegateCodingTaskInputSchema, type ToolName } from "@tinypersonal/assistant-core";
 import { parseJson } from "@/lib/apiValidation";
 
 export const maxDuration = 600;
@@ -197,15 +197,6 @@ const delegateCodingExecutionTool = (ownerKey: string, sessionId: string) => too
   },
 });
 
-const smartHomeExecutionTool = (ownerKey: string, sessionId: string) => tool({
-  description: "Prepare an allow-listed Home Assistant service call. Every device mutation requires explicit user confirmation.",
-  inputSchema: controlSmartHomeDeviceInputSchema,
-  execute: async (input) => {
-    const action = await createPendingAction({ ownerKey, sessionId, toolName: "homeAssistant.callService", summary: `${input.service} ${input.entityId}`, arguments: input });
-    return { ok: true as const, confirmationRequired: true, confirmation: { id: action.id, summary: action.summary, expiresAt: action.expiresAt.toISOString() } };
-  },
-});
-
 function cookieValue(request: Request, name: string): string | undefined {
   const cookie = request.headers.get("cookie") ?? "";
   return cookie
@@ -317,7 +308,7 @@ export async function POST(request: Request) {
   }
 
   const allowedTools: ToolName[] = ["getSchedule", "createScheduleItem", "updateTaskStatus", "updateRoutine", "deleteRoutine", "searchWeb", "fetchWebPage"];
-  if (payload.jarvisMode) allowedTools.push("delegateCodingTask", "controlSmartHomeDevice");
+  allowedTools.push("delegateCodingTask");
   const agent = await selectAgentTools(latestUserText(baseMessages), allowedTools);
   await recordAudit({ actorId: ownerKey, action: "assistant.prompt", status: "SUCCEEDED", promptVersion: "jarvis-v2", targetType: "ChatSession", targetId: session.id, metadata: { selectedTools: agent.selectedToolNames, messageCount: modelContextMessages.length } });
   const nowContext = bangkokNowContext(new Date());
@@ -335,8 +326,7 @@ export async function POST(request: Request) {
       ...(agent.selectedToolNames.includes("deleteRoutine") && { deleteRoutine: routineDeleteTool(ownerKey, session.id) }),
       ...(agent.selectedToolNames.includes("searchWeb") && { searchWeb: webSearchExecutionTool }),
       ...(agent.selectedToolNames.includes("fetchWebPage") && { fetchWebPage: webScrapeExecutionTool }),
-      ...(payload.jarvisMode && agent.selectedToolNames.includes("delegateCodingTask") && { delegateCodingTask: delegateCodingExecutionTool(ownerKey, session.id) }),
-      ...(payload.jarvisMode && agent.selectedToolNames.includes("controlSmartHomeDevice") && { controlSmartHomeDevice: smartHomeExecutionTool(ownerKey, session.id) }),
+      ...(agent.selectedToolNames.includes("delegateCodingTask") && { delegateCodingTask: delegateCodingExecutionTool(ownerKey, session.id) }),
     },
     // Allow follow-up model steps after tool output so responses do not stop at finishReason=tool-calls.
     stopWhen: isStepCount(3),

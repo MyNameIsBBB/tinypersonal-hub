@@ -5,8 +5,8 @@ import { promisify } from "node:util";
 import { z } from "zod";
 
 const execFileAsync = promisify(execFile);
-const MAX_OUTPUT = 200_000;
-const COMMAND_TIMEOUT_MS = 10 * 60_000;
+const MAX_OUTPUT = 2_000_000;
+const COMMAND_TIMEOUT_MS = 30 * 60_000;
 
 const delegateCodingTaskSchema = z.object({
   instruction: z.string().trim().min(3).max(20_000),
@@ -60,19 +60,33 @@ export async function delegateCodingTask(untrustedInput: unknown): Promise<Codin
   };
 
   try {
-    await execute("git", ["pull", "--ff-only"]);
-    if (input.branchName) await execute("git", ["switch", "-c", input.branchName]);
+    const requestedBranch = input.branchName ?? "Choose a concise codex/* branch name based on the task";
+    const delivery = input.autoPush
+      ? "After validation succeeds, stage only task-related files, commit with a concise conventional message, and push the branch to origin with upstream tracking."
+      : "Do not commit and do not push. Leave the validated task changes in the working tree for review.";
+    const agentInstruction = `Own this coding task end-to-end inside the current repository.
+
+User task:
+${input.instruction}
+
+Required workflow:
+1. Read AGENTS.md and inspect the repository status. Preserve unrelated changes and never use destructive Git commands.
+2. Run git pull --ff-only. If it cannot run safely, stop and report the exact blocker.
+3. Create and switch to this branch: ${requestedBranch}.
+4. Implement the requested change following the repository architecture and conventions.
+5. Run the relevant tests and the repository build. Fix failures caused by the task and repeat validation until it passes or a concrete blocker remains.
+6. ${delivery}
+7. Finish with a concise summary containing the branch, changed files, tests/build results, commit, and push status.
+
+Stay within this repository. Never expose secrets or modify unrelated files.`;
+    const codexExecutable = process.platform === "win32" ? "codex.cmd" : "codex";
+    await execute(codexExecutable, [
+      "--ask-for-approval", "never",
+      "--sandbox", "workspace-write",
+      "--cd", projectRoot,
+      "exec", "--json", agentInstruction,
+    ]);
     branch = (await execute("git", ["branch", "--show-current"])).stdout.trim() || input.branchName || "HEAD";
-    const codingCli = process.env.JARVIS_CODING_CLI ?? "codex";
-    if (codingCli === "aider") await execute("aider", ["--message", input.instruction, "--yes-always"]);
-    else if (codingCli === "codex") await execute("codex", ["exec", input.instruction, "--full-auto"]);
-    else throw new Error("JARVIS_CODING_CLI must be either codex or aider");
-    await execute(process.platform === "win32" ? "npm.cmd" : "npm", ["run", "build"]);
-    if (input.autoPush) {
-      await execute("git", ["add", "--all"]);
-      await execute("git", ["commit", "-m", `chore(jarvis): ${input.instruction.slice(0, 72)}`]);
-      await execute("git", ["push", "--set-upstream", "origin", branch]);
-    }
     return { ok: true, data: { branch, logs } };
   } catch (error) {
     return { ok: false, error: { code: "CODING_TASK_FAILED", message: error instanceof Error ? error.message : "Coding task failed" }, data: { branch, logs } };
