@@ -2,7 +2,7 @@ import { tool } from "ai";
 import { z } from "zod";
 
 export const openBrowserViewTool = tool({
-  description: "Open the Jarvis display workspace with a YouTube search or a public web URL.",
+  description: "Open the B1 display workspace with a YouTube search or a public web URL.",
   inputSchema: z.object({
     actionType: z.enum(["YOUTUBE_SEARCH", "WEB_URL"]),
     queryOrUrl: z.string().trim().min(1).max(2_000),
@@ -11,6 +11,6 @@ export const openBrowserViewTool = tool({
 });
 
 export const closeBrowserViewTool = tool({
-  description: "Close the Jarvis display workspace when the user asks to close the screen, browser, or everything.",
+  description: "Close the B1 display workspace when the user asks to close the screen, browser, or everything.",
   inputSchema: z.object({}).strict(),
 });

@@ -104,11 +104,12 @@ export default function AIPage() {
   const [persistenceError, setPersistenceError] = useState<string | null>(null);
   const [sessionsOpen, setSessionsOpen] = useState(false);
   const [attachments, setAttachments] = useState<FileUIPart[]>([]);
-  const { messages, sendMessage, setMessages, status, error, clearError } = useChat({ id: "tinypersonal-jarvis" });
+  const { messages, sendMessage, setMessages, status, error, clearError } = useChat({ id: "tinypersonal-b1" });
   const initialPromptSent = useRef(false);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const voiceRequestPending = useRef(false);
   const lastSpokenMessageId = useRef<string | null>(null);
+  const lastPersistedAssistantMessageId = useRef<string | null>(null);
   const threadRef = useRef<HTMLDivElement | null>(null);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
   const generalCycleRef = useRef(new Date(Date.now() - 3_600_000).toISOString().slice(0, 10));
@@ -246,6 +247,22 @@ export default function AIPage() {
   }, [messages, status, voiceReply]);
 
   useEffect(() => {
+    if (!historyReady || !sessionId || status !== "ready") return;
+    const latest = [...messages].reverse().find((message) => message.role === "assistant");
+    if (!latest || latest.id === lastPersistedAssistantMessageId.current) return;
+    const hasText = latest.parts.some((part) => part.type === "text" && part.text.trim().length > 0);
+    if (!hasText) return;
+    lastPersistedAssistantMessageId.current = latest.id;
+    void fetch("/api/chat/messages/assistant", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionId, message: latest }),
+    }).catch(() => {
+      lastPersistedAssistantMessageId.current = null;
+    });
+  }, [historyReady, messages, sessionId, status]);
+
+  useEffect(() => {
     if (typeof window === "undefined") return;
 
     let cancelled = false;
@@ -342,7 +359,7 @@ export default function AIPage() {
     else setDialog({ title: approved ? "ดำเนินการเรียบร้อยแล้ว" : "ยกเลิกรายการแล้ว", description: approved ? "TinyPersonal ดำเนินการตามที่ยืนยันแล้ว" : "รายการนี้จะไม่ถูกดำเนินการ", tone: "success" });
   }
 
-  return <WorkspaceShell active="AI Assistant" title="Jarvis" subtitle="ผู้ช่วยส่วนตัวของคุณ" focusMode immersive>
+  return <WorkspaceShell active="AI Assistant" title="B1" subtitle="ผู้ช่วยส่วนตัวของคุณ" focusMode immersive>
     <div className={`ai-chat-layout ${sessionsOpen ? "sessions-open" : ""}`}>
       <aside className="chat-sessions-panel" aria-hidden={!sessionsOpen}>
         <div className="chat-sessions-header"><strong>บทสนทนา</strong><button aria-label="ปิดประวัติแชท" onClick={() => setSessionsOpen(false)}><X size={19} /></button></div>
@@ -368,7 +385,7 @@ export default function AIPage() {
           <div className="message-avatar">{message.role === "assistant" ? <Bot size={17} /> : "P"}</div>
           <div>{renderMessageParts(message.parts, (id, approved) => void decideAction(id, approved))}</div>
         </article>)}
-        {(status === "submitted" || status === "streaming") && <div className="thinking"><LoaderCircle size={15} /> Jarvis กำลังคิด…</div>}
+        {(status === "submitted" || status === "streaming") && <div className="thinking"><LoaderCircle size={15} /> B1 กำลังคิด…</div>}
         {(error || persistenceError) && <div className="chat-error">{persistenceError ?? `เชื่อมต่อ AI ไม่สำเร็จ: ${error!.message}`}</div>}
       </div>
 
@@ -383,12 +400,12 @@ export default function AIPage() {
         <form className="ai-composer" onSubmit={submit}>
           <input ref={imageInputRef} className="chat-image-input" type="file" accept="image/jpeg,image/png,image/webp,image/gif" multiple onChange={(event) => void addImages(event)} />
           <button type="button" className="attachment-button" onClick={() => imageInputRef.current?.click()} disabled={!historyReady || status === "submitted" || status === "streaming"} aria-label="แนบรูปภาพ"><Paperclip size={19} /></button>
-          <button type="button" className={`voice-button${listening ? " listening" : ""}`} onClick={toggleListening} disabled={!historyReady || !voiceAvailable || status === "submitted" || status === "streaming"} aria-label={voiceAvailable ? (listening ? "หยุดฟัง" : "พูดกับ Jarvis") : "เบราว์เซอร์นี้ไม่รองรับการพูด"}>{listening ? <MicOff size={18} /> : <Mic size={18} />}</button>
+          <button type="button" className={`voice-button${listening ? " listening" : ""}`} onClick={toggleListening} disabled={!historyReady || !voiceAvailable || status === "submitted" || status === "streaming"} aria-label={voiceAvailable ? (listening ? "หยุดฟัง" : "พูดกับ B1") : "เบราว์เซอร์นี้ไม่รองรับการพูด"}>{listening ? <MicOff size={18} /> : <Mic size={18} />}</button>
           <textarea disabled={!historyReady} value={input} onChange={(event) => setInput(event.target.value)} placeholder={historyReady ? "พิมพ์คำสั่ง เช่น เลื่อน Routine ฟิตเนสของอาทิตย์นี้…" : "กำลังโหลดบทสนทนา…"} rows={2} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void send(input); } }} />
           <button type="button" className="voice-button voice-reply-button" onClick={() => { window.speechSynthesis?.cancel(); setVoiceReply((enabled) => !enabled); }} aria-label={voiceReply ? "ปิดเสียงตอบกลับ" : "เปิดเสียงตอบกลับ"}>{voiceReply ? <Volume2 size={18} /> : <VolumeX size={18} />}</button>
           <button type="submit" disabled={!historyReady || (!input.trim() && attachments.length === 0) || status === "submitted" || status === "streaming"} aria-label="ส่งข้อความ"><ArrowUp size={19} /></button>
         </form>
-        <p><ShieldCheck size={12} /> เสียงจะถูกพิมพ์ลงแชต • Jarvis เข้าถึง Vault ได้เฉพาะ metadata</p>
+        <p><ShieldCheck size={12} /> เสียงจะถูกพิมพ์ลงแชต • B1 เข้าถึง Vault ได้เฉพาะ metadata</p>
       </div>
       </section>
       <AppModal open={Boolean(deleteTarget)} title="ลบบทสนทนานี้?" description={`“${deleteTarget?.title || "บทสนทนาใหม่"}” และข้อความทั้งหมดจะถูกลบถาวร`} tone="danger" confirmLabel="ลบบทสนทนา" cancelLabel="ยกเลิก" busy={deleteBusy} onConfirm={() => void removeSession()} onClose={() => { if (!deleteBusy) setDeleteTarget(null); }} />
