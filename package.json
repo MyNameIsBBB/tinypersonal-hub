@@ -24,6 +24,7 @@
     "briefing:run": "node ./scripts/run-morning-briefing.mjs",
     "briefing:install-cron": "./scripts/install-morning-briefing-cron.sh",
     "briefing:install-systemd": "bash ./scripts/install-morning-briefing-systemd.sh",
+    "docker:install-systemd": "bash ./scripts/install-start-docker-systemd.sh",
     "search:up": "./scripts/start-searxng.sh",
     "search:logs": "docker compose logs --tail=100 searxng"
   },

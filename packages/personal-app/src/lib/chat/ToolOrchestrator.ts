@@ -6,6 +6,6 @@ export function selectAgentTools(userRequest: string, allowedTools: ToolName[]) 
     { locale: "th-TH", timezone: "Asia/Bangkok" },
     userRequest,
     allowedTools,
-    { limit: 2, minimumScore: 1 },
+    { limit: 8, minimumScore: 1 },
   );
 }

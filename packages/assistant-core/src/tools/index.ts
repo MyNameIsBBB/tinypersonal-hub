@@ -1,6 +1,11 @@
 import { createScheduleItemTool, deleteOrCancelRoutineTool, getScheduleByRangeTool, updateScheduleItemTool, updateScheduleStatusTool } from "./scheduleTools";
 import { webScrapeTool, webSearchTool } from "./web";
 import { controlSmartHomeDeviceTool, delegateCodingTaskTool } from "./jarvis";
+import {
+  createNoteTool, deleteMediaAssetTool, deleteNoteTool, deleteVaultSecretTool,
+  listMediaAssetsTool, searchNotesTool, searchVaultMetadataTool,
+  updateMediaAssetLinksTool, updateNoteTool, updateVaultMetadataTool,
+} from "./knowledgeTools";
 
 /** The complete set of tools that may be exposed to the chat model. */
 export const toolRegistry = {
@@ -13,6 +18,16 @@ export const toolRegistry = {
   fetchWebPage: webScrapeTool,
   delegateCodingTask: delegateCodingTaskTool,
   controlSmartHomeDevice: controlSmartHomeDeviceTool,
+  searchNotes: searchNotesTool,
+  createNote: createNoteTool,
+  updateNote: updateNoteTool,
+  deleteNote: deleteNoteTool,
+  listMediaAssets: listMediaAssetsTool,
+  updateMediaAssetLinks: updateMediaAssetLinksTool,
+  deleteMediaAsset: deleteMediaAssetTool,
+  searchVaultMetadata: searchVaultMetadataTool,
+  updateVaultMetadata: updateVaultMetadataTool,
+  deleteVaultSecret: deleteVaultSecretTool,
 };
 
 export type ToolName = keyof typeof toolRegistry;
@@ -28,6 +43,16 @@ export const toolCatalog: Record<ToolName, { description: string; keywords: stri
   fetchWebPage: { description: "Read or summarize a specific public web page supplied by URL.", keywords: ["http", "https", "read page", "open url", "summarize link", "อ่านเว็บ", "เปิดลิงก์", "สรุปลิงก์"] },
   delegateCodingTask: { description: "Run a local coding agent for a repository change, build it, and optionally push a branch.", keywords: ["code", "coding", "codex", "aider", "git status", "git branch", "implement", "refactor", "fix code", "แก้โค้ด", "เขียนโค้ด", "เช็ก git"] },
   controlSmartHomeDevice: { description: "Turn a Home Assistant light, switch, or climate device on or off, or set climate temperature.", keywords: ["home assistant", "light", "switch", "climate", "temperature", "air conditioner", "เปิดไฟ", "ปิดไฟ", "เปิดแอร์", "ปิดแอร์", "อุณหภูมิ"] },
+  searchNotes: { description: "Search notes by text, tag, or folder.", keywords: ["note", "notes", "find note", "ค้นโน้ต", "โน้ต"] },
+  createNote: { description: "Create a new Markdown note.", keywords: ["create note", "add note", "บันทึกโน้ต", "สร้างโน้ต"] },
+  updateNote: { description: "Update an existing note.", keywords: ["update note", "edit note", "แก้โน้ต"] },
+  deleteNote: { description: "Delete an existing note after confirmation.", keywords: ["delete note", "remove note", "ลบโน้ต"] },
+  listMediaAssets: { description: "List uploaded media metadata.", keywords: ["media", "files", "images", "รูป", "ไฟล์", "มีเดีย"] },
+  updateMediaAssetLinks: { description: "Link media to a note or schedule item.", keywords: ["link media", "attach file", "ผูกไฟล์", "แนบมีเดีย"] },
+  deleteMediaAsset: { description: "Delete a media asset after confirmation.", keywords: ["delete media", "delete file", "ลบไฟล์", "ลบรูป"] },
+  searchVaultMetadata: { description: "Search safe Vault metadata without revealing secrets.", keywords: ["vault", "account", "login", "คลังรหัส", "บัญชี"] },
+  updateVaultMetadata: { description: "Update safe Vault metadata without reading secrets.", keywords: ["update vault", "edit account", "แก้ vault", "แก้บัญชี"] },
+  deleteVaultSecret: { description: "Delete a Vault record after confirmation without revealing it.", keywords: ["delete vault", "remove account", "ลบ vault", "ลบบัญชี"] },
 };
 
 export function selectTools(allowed: ToolName[]) {

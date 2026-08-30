@@ -104,7 +104,7 @@ export default function AIPage() {
   const [persistenceError, setPersistenceError] = useState<string | null>(null);
   const [sessionsOpen, setSessionsOpen] = useState(false);
   const [attachments, setAttachments] = useState<FileUIPart[]>([]);
-  const { messages, sendMessage, setMessages, status, error, clearError } = useChat({ id: "tinypersonal-ai-assistant" });
+  const { messages, sendMessage, setMessages, status, error, clearError } = useChat({ id: "tinypersonal-jarvis" });
   const initialPromptSent = useRef(false);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const voiceRequestPending = useRef(false);
@@ -142,10 +142,6 @@ export default function AIPage() {
       voiceRequestPending.current = false;
       setPersistenceError("บันทึกข้อความไม่สำเร็จ กรุณาลองส่งอีกครั้ง");
       return;
-    }
-    const checkpointData = await checkpoint.json() as { removedMessageId?: string | null };
-    if (checkpointData.removedMessageId) {
-      setMessages((current) => current.filter(({ id }) => id !== checkpointData.removedMessageId));
     }
     setAttachments([]);
     if (imageInputRef.current) imageInputRef.current.value = "";
@@ -296,25 +292,6 @@ export default function AIPage() {
       .then((data: { sessions?: ChatSessionSummary[] } | null) => { if (data?.sessions) setSessions(data.sessions); });
   }, [historyReady, messages.length, status]);
 
-  useEffect(() => {
-    if (!historyReady || !sessionId || status !== "ready") return;
-    let cancelled = false;
-    const syncActiveSession = async () => {
-      if (document.visibilityState === "hidden") return;
-      const response = await fetch(`/api/chat?sessionId=${encodeURIComponent(sessionId)}`, { cache: "no-store" });
-      if (!response.ok || cancelled) return;
-      const data = await response.json() as { messages?: UIMessage[]; sessions?: ChatSessionSummary[] };
-      if (Array.isArray(data.messages)) {
-        setMessages((current) => JSON.stringify(current) === JSON.stringify(data.messages) ? current : data.messages!);
-      }
-      if (data.sessions) setSessions(data.sessions);
-    };
-    const onVisibilityChange = () => { if (document.visibilityState === "visible") void syncActiveSession(); };
-    const timer = window.setInterval(() => void syncActiveSession(), 3_000);
-    document.addEventListener("visibilitychange", onVisibilityChange);
-    return () => { cancelled = true; window.clearInterval(timer); document.removeEventListener("visibilitychange", onVisibilityChange); };
-  }, [historyReady, sessionId, setMessages, status]);
-
   async function openSession(nextSessionId: string) {
     const response = await fetch(`/api/chat?sessionId=${encodeURIComponent(nextSessionId)}`, { cache: "no-store" });
     if (!response.ok) return;
@@ -365,14 +342,14 @@ export default function AIPage() {
     else setDialog({ title: approved ? "ดำเนินการเรียบร้อยแล้ว" : "ยกเลิกรายการแล้ว", description: approved ? "TinyPersonal ดำเนินการตามที่ยืนยันแล้ว" : "รายการนี้จะไม่ถูกดำเนินการ", tone: "success" });
   }
 
-  return <WorkspaceShell active="AI Assistant" title="Tiny AI" subtitle="พื้นที่สนทนาส่วนตัว" focusMode immersive>
+  return <WorkspaceShell active="AI Assistant" title="Jarvis" subtitle="ผู้ช่วยส่วนตัวของคุณ" focusMode immersive>
     <div className={`ai-chat-layout ${sessionsOpen ? "sessions-open" : ""}`}>
       <aside className="chat-sessions-panel" aria-hidden={!sessionsOpen}>
         <div className="chat-sessions-header"><strong>บทสนทนา</strong><button aria-label="ปิดประวัติแชท" onClick={() => setSessionsOpen(false)}><X size={19} /></button></div>
         <button className="new-chat-button" onClick={() => void createSession()}><Plus size={16} /> แชตใหม่</button>
         <div className="chat-session-list">
           {sessions.map((session) => <div className={`chat-session-row ${session.id === sessionId ? "active" : ""}`} key={session.id}>
-            <button onClick={() => void openSession(session.id)}><MessageSquare size={14} /><span>{session.title || "บทสนทนาใหม่"}{session.title === GENERAL_CHAT_TITLE ? " · รีเซ็ต 08:00" : ""}</span></button>
+            <button onClick={() => void openSession(session.id)}><MessageSquare size={14} /><span>{session.title || "บทสนทนาใหม่"}</span></button>
             {session.title !== GENERAL_CHAT_TITLE && <button className="delete-chat-button" aria-label="ลบบทสนทนา" disabled={deleteBusy} onClick={() => setDeleteTarget(session)}><Trash2 size={13} /></button>}
           </div>)}
         </div>
@@ -391,7 +368,7 @@ export default function AIPage() {
           <div className="message-avatar">{message.role === "assistant" ? <Bot size={17} /> : "P"}</div>
           <div>{renderMessageParts(message.parts, (id, approved) => void decideAction(id, approved))}</div>
         </article>)}
-        {(status === "submitted" || status === "streaming") && <div className="thinking"><LoaderCircle size={15} /> Gemini กำลังคิด…</div>}
+        {(status === "submitted" || status === "streaming") && <div className="thinking"><LoaderCircle size={15} /> Jarvis กำลังคิด…</div>}
         {(error || persistenceError) && <div className="chat-error">{persistenceError ?? `เชื่อมต่อ AI ไม่สำเร็จ: ${error!.message}`}</div>}
       </div>
 
@@ -406,12 +383,12 @@ export default function AIPage() {
         <form className="ai-composer" onSubmit={submit}>
           <input ref={imageInputRef} className="chat-image-input" type="file" accept="image/jpeg,image/png,image/webp,image/gif" multiple onChange={(event) => void addImages(event)} />
           <button type="button" className="attachment-button" onClick={() => imageInputRef.current?.click()} disabled={!historyReady || status === "submitted" || status === "streaming"} aria-label="แนบรูปภาพ"><Paperclip size={19} /></button>
-          <button type="button" className={`voice-button${listening ? " listening" : ""}`} onClick={toggleListening} disabled={!historyReady || !voiceAvailable || status === "submitted" || status === "streaming"} aria-label={voiceAvailable ? (listening ? "หยุดฟัง" : "พูดกับ AI") : "เบราว์เซอร์นี้ไม่รองรับการพูด"}>{listening ? <MicOff size={18} /> : <Mic size={18} />}</button>
+          <button type="button" className={`voice-button${listening ? " listening" : ""}`} onClick={toggleListening} disabled={!historyReady || !voiceAvailable || status === "submitted" || status === "streaming"} aria-label={voiceAvailable ? (listening ? "หยุดฟัง" : "พูดกับ Jarvis") : "เบราว์เซอร์นี้ไม่รองรับการพูด"}>{listening ? <MicOff size={18} /> : <Mic size={18} />}</button>
           <textarea disabled={!historyReady} value={input} onChange={(event) => setInput(event.target.value)} placeholder={historyReady ? "พิมพ์คำสั่ง เช่น เลื่อน Routine ฟิตเนสของอาทิตย์นี้…" : "กำลังโหลดบทสนทนา…"} rows={2} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void send(input); } }} />
           <button type="button" className="voice-button voice-reply-button" onClick={() => { window.speechSynthesis?.cancel(); setVoiceReply((enabled) => !enabled); }} aria-label={voiceReply ? "ปิดเสียงตอบกลับ" : "เปิดเสียงตอบกลับ"}>{voiceReply ? <Volume2 size={18} /> : <VolumeX size={18} />}</button>
           <button type="submit" disabled={!historyReady || (!input.trim() && attachments.length === 0) || status === "submitted" || status === "streaming"} aria-label="ส่งข้อความ"><ArrowUp size={19} /></button>
         </form>
-        <p><ShieldCheck size={12} /> เสียงจะถูกพิมพ์ลงแชต • AI เข้าถึง Vault ได้เฉพาะ metadata</p>
+        <p><ShieldCheck size={12} /> เสียงจะถูกพิมพ์ลงแชต • Jarvis เข้าถึง Vault ได้เฉพาะ metadata</p>
       </div>
       </section>
       <AppModal open={Boolean(deleteTarget)} title="ลบบทสนทนานี้?" description={`“${deleteTarget?.title || "บทสนทนาใหม่"}” และข้อความทั้งหมดจะถูกลบถาวร`} tone="danger" confirmLabel="ลบบทสนทนา" cancelLabel="ยกเลิก" busy={deleteBusy} onConfirm={() => void removeSession()} onClose={() => { if (!deleteBusy) setDeleteTarget(null); }} />

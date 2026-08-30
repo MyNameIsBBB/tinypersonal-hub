@@ -1,13 +1,23 @@
 import { prisma } from "../db/client";
-import { updateNote } from "./noteService";
+import { createNote, deleteNote, updateNote } from "./noteService";
+import { deleteMediaAsset, updateMediaAssetLinks } from "./mediaService";
 import { createScheduleItem, deleteOrCancelRoutine, updateScheduleItem, updateScheduleStatus } from "./scheduleService";
-import { updateVaultMetadata } from "./vaultService";
+import { deleteVaultSecret, updateVaultMetadata } from "./vaultService";
 import { controlSmartHomeDevice, delegateCodingTask } from "./jarvisService";
 
 function safeMetadata(metadata: Record<string, unknown>): string {
   const sanitized = Object.fromEntries(Object.entries(metadata).filter(([key]) =>
     !/(password|secret|token|otp|cipher|authorization)/i.test(key)));
   return JSON.stringify(sanitized).slice(0, 20_000);
+}
+
+export function assertSuccessfulToolResult(result: unknown): void {
+  if (!result || typeof result !== "object" || !("ok" in result) || result.ok !== false) return;
+  const error = "error" in result && result.error && typeof result.error === "object" ? result.error : null;
+  const message = error && "message" in error && typeof error.message === "string"
+    ? error.message
+    : "The operation did not complete successfully";
+  throw new Error(message);
 }
 
 export async function recordAudit(input: {
@@ -59,11 +69,17 @@ export async function executePendingAction(ownerKey: string, id: string, approve
       });
     }
     else if (action.toolName === "schedule.deleteRoutine") { await deleteOrCancelRoutine(String(args.id), "ALL"); result = { id: String(args.id), status: "CANCELLED" }; }
+    else if (action.toolName === "notes.create") result = await createNote(args as Parameters<typeof createNote>[0]);
     else if (action.toolName === "notes.update") { const { id: targetId, ...input } = args; result = await updateNote(String(targetId), input); }
+    else if (action.toolName === "notes.delete") { await deleteNote(String(args.id)); result = { id: String(args.id), deleted: true }; }
+    else if (action.toolName === "media.updateLinks") { const { id: targetId, ...input } = args; result = await updateMediaAssetLinks(String(targetId), input); }
+    else if (action.toolName === "media.delete") { await deleteMediaAsset(String(args.id)); result = { id: String(args.id), deleted: true }; }
     else if (action.toolName === "vault.updateMetadata") { const { id: targetId, ...input } = args; result = await updateVaultMetadata(String(targetId), input); }
+    else if (action.toolName === "vault.delete") { await deleteVaultSecret(String(args.id)); result = { id: String(args.id), deleted: true }; }
     else if (action.toolName === "coding.delegateTask") result = await delegateCodingTask(args);
     else if (action.toolName === "homeAssistant.callService") result = await controlSmartHomeDevice(args);
     else throw new Error("Unsupported pending action");
+    assertSuccessfulToolResult(result);
     await recordAudit({ actorId: ownerKey, action: action.toolName, targetId: id, status: "SUCCEEDED" });
     return { action, denied: false, result };
   } catch (error) {

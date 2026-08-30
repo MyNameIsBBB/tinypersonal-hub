@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 
 set -Eeuo pipefail
-docker system prune -a --volumes -f
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 APP_NAME="tinypersonal-hub"
@@ -11,6 +10,7 @@ DATA_VOLUME="${APP_NAME}-data"
 PORT="${PORT:-3000}"
 DOCKER_NETWORK="${DOCKER_NETWORK:-}"
 ENABLE_TAILSCALE_FUNNEL="${ENABLE_TAILSCALE_FUNNEL:-1}"
+CODEX_WORKER_DIR="${CODEX_WORKER_DIR:-/tmp/tinypersonal-codex-worker}"
 DOCKERFILE="$SCRIPT_DIR/Dockerfile"
 
 for command_name in docker curl; do
@@ -21,6 +21,10 @@ for command_name in docker curl; do
 done
 
 cd "$SCRIPT_DIR"
+
+if ! "$SCRIPT_DIR/scripts/start-codex-worker.sh"; then
+  echo "Warning: Codex worker failed to start; continuing without coding worker." >&2
+fi
 
 echo "Building all workspaces in Docker..."
 docker build --file "$DOCKERFILE" --tag "$IMAGE_NAME" .
@@ -37,6 +41,7 @@ docker_args=(
   --restart unless-stopped
   --publish "${PORT}:3000"
   --volume "${DATA_VOLUME}:/data"
+  --volume "${CODEX_WORKER_DIR}:/run/codex-worker"
 )
 
 if [[ -n "$DOCKER_NETWORK" ]]; then
@@ -49,6 +54,7 @@ fi
 
 docker_args+=(--env "DATABASE_URL=file:/data/dev.db")
 docker_args+=(--env "MEDIA_LOCAL_ROOT=/data/media")
+docker_args+=(--env "CODEX_WORKER_SOCKET=/run/codex-worker/worker.sock")
 docker_args+=("$IMAGE_NAME")
 docker "${docker_args[@]}" >/dev/null
 

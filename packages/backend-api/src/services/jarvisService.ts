@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import { access } from "node:fs/promises";
+import { request } from "node:http";
 import { resolve } from "node:path";
 import { promisify } from "node:util";
 import { z } from "zod";
@@ -29,6 +30,30 @@ export type CodingTaskResult =
   | { ok: true; data: { branch: string; logs: ExecutionLog[] } }
   | { ok: false; error: { code: "CODING_TASK_FAILED" | "INVALID_PROJECT_ROOT" | "INVALID_INPUT"; message: string }; data: { branch: string | null; logs: ExecutionLog[] } };
 
+function delegateToHostWorker(input: z.infer<typeof delegateCodingTaskSchema>, socketPath: string): Promise<CodingTaskResult> {
+  return new Promise((resolveResult) => {
+    const body = JSON.stringify(input);
+    const workerRequest = request({
+      socketPath,
+      path: "/coding-task",
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) },
+      timeout: COMMAND_TIMEOUT_MS + 5_000,
+    }, (response) => {
+      let raw = "";
+      response.setEncoding("utf8");
+      response.on("data", (chunk) => { raw += chunk; });
+      response.on("end", () => {
+        try { resolveResult(JSON.parse(raw) as CodingTaskResult); }
+        catch { resolveResult({ ok: false, error: { code: "CODING_TASK_FAILED", message: "Codex worker returned an invalid response" }, data: { branch: null, logs: [] } }); }
+      });
+    });
+    workerRequest.on("timeout", () => workerRequest.destroy(new Error("Codex worker timed out")));
+    workerRequest.on("error", (error) => resolveResult({ ok: false, error: { code: "CODING_TASK_FAILED", message: `Codex worker unavailable: ${error.message}` }, data: { branch: null, logs: [] } }));
+    workerRequest.end(body);
+  });
+}
+
 async function run(executable: string, args: string[], cwd: string): Promise<ExecutionLog> {
   const command = [executable, ...args].join(" ");
   try {
@@ -45,6 +70,9 @@ export async function delegateCodingTask(untrustedInput: unknown): Promise<Codin
   const parsed = delegateCodingTaskSchema.safeParse(untrustedInput);
   if (!parsed.success) return { ok: false, error: { code: "INVALID_INPUT", message: parsed.error.issues[0]?.message ?? "Invalid coding task" }, data: { branch: null, logs: [] } };
   const input = parsed.data;
+  if (process.env.CODEX_WORKER_SOCKET) {
+    return delegateToHostWorker(input, process.env.CODEX_WORKER_SOCKET);
+  }
   const projectRoot = resolve(process.env.JARVIS_PROJECT_ROOT ?? process.cwd());
   const logs: ExecutionLog[] = [];
   let branch: string | null = null;
