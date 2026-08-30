@@ -1,5 +1,5 @@
 import { google } from "@ai-sdk/google";
-import { createNote, createPendingAction, deleteChatSession, deleteMediaAsset, deleteNote, deleteVaultSecret, ensureDailyGeneralChat, executeLatestPendingAction, getOrCreateChatSession, getScheduleByRange, listActiveRoutines, listChatSessions, listMediaAssets, loadChatMessages, recordAudit, saveAssistantChatMessageIfCurrent, scrapeWebPage, searchNotes, searchVaultMetadata, searchWeb, updateMediaAssetLinks, updateNote, updateVaultMetadata } from "@tinypersonal/backend-api";
+import { createNote, createPendingAction, delegateCodingTask, deleteChatSession, deleteMediaAsset, deleteNote, deleteVaultSecret, ensureDailyGeneralChat, executeLatestPendingAction, getOrCreateChatSession, getScheduleByRange, listActiveRoutines, listChatSessions, listMediaAssets, loadChatMessages, recordAudit, saveAssistantChatMessageIfCurrent, scrapeWebPage, searchNotes, searchVaultMetadata, searchWeb, updateMediaAssetLinks, updateNote, updateVaultMetadata } from "@tinypersonal/backend-api";
 import { consumeStream, convertToModelMessages, createUIMessageStream, createUIMessageStreamResponse, isStepCount, streamText, tool, type UIMessage } from "ai";
 import { after } from "next/server";
 import { isValidSessionToken, SESSION_COOKIE } from "@/lib/serverAuth";
@@ -20,7 +20,7 @@ const weekdaySchema = z.enum(["MO", "TU", "WE", "TH", "FR", "SA", "SU"]);
 
 function parseRoutineEndInput(value: string): Date {
   return parseBangkokDateTimeInput(/^\d{4}-\d{2}-\d{2}$/.test(value.trim()) ? `${value.trim()} 23:59:59` : value);
-}
+}w
 
 function scheduleItemForModel(item: Awaited<ReturnType<typeof getScheduleByRange>>[number]) {
   return {
@@ -189,11 +189,12 @@ const webScrapeExecutionTool = tool({
 });
 
 const delegateCodingExecutionTool = (ownerKey: string, sessionId: string) => tool({
-  description: "Prepare a local coding-agent task. Every execution requires explicit user confirmation; set autoPush only when the user explicitly requested a push.",
+  description: "Run a local coding-agent task now. Set autoPush only when the user explicitly requested a push.",
   inputSchema: delegateCodingTaskInputSchema,
   execute: async (input) => {
-    const action = await createPendingAction({ ownerKey, sessionId, toolName: "coding.delegateTask", summary: `มอบหมายงานเขียนโค้ด: ${input.instruction.slice(0, 180)}`, arguments: input });
-    return { ok: true as const, confirmationRequired: true, confirmation: { id: action.id, summary: action.summary, expiresAt: action.expiresAt.toISOString() } };
+    void ownerKey;
+    void sessionId;
+    return delegateCodingTask(input);
   },
 });
 

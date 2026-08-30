@@ -9,7 +9,6 @@ import rehypeKatex from "rehype-katex";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import { WorkspaceShell } from "@/components/WorkspaceShell";
-import { AppModal } from "@/components/AppModal";
 
 const suggestions = [
   { icon: CalendarPlus, text: "ตั้ง Routine วิ่งทุกวันจันทร์และพุธ 07:00 ถึงสิ้นเดือน" },
@@ -116,9 +115,7 @@ export default function AIPage() {
   const [historyReady, setHistoryReady] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [sessions, setSessions] = useState<ChatSessionSummary[]>([]);
-  const [deleteTarget, setDeleteTarget] = useState<ChatSessionSummary | null>(null);
-  const [deleteBusy, setDeleteBusy] = useState(false);
-  const [dialog, setDialog] = useState<{ title: string; description: string; tone: "info" | "success" | "danger" } | null>(null);
+  const [deleteBusySessionId, setDeleteBusySessionId] = useState<string | null>(null);
 
   async function send(text: string, fromVoice = false) {
     const clean = text.trim();
@@ -336,10 +333,12 @@ export default function AIPage() {
     setSessionsOpen(false);
   }
 
-  async function removeSession() {
-    if (!deleteTarget || deleteBusy) return;
-    setDeleteBusy(true);
-    const targetSessionId = deleteTarget.id;
+  async function removeSession(targetSessionId: string) {
+    const target = sessions.find((session) => session.id === targetSessionId);
+    if (!target || deleteBusySessionId) return;
+    const approved = window.confirm(`ลบบทสนทนา “${target.title || "บทสนทนาใหม่"}” ใช่ไหม?`);
+    if (!approved) return;
+    setDeleteBusySessionId(targetSessionId);
     try {
       const response = await fetch(`/api/chat?sessionId=${encodeURIComponent(targetSessionId)}`, { method: "DELETE" });
       const result = await response.json().catch(() => ({})) as { error?: string };
@@ -347,16 +346,19 @@ export default function AIPage() {
       const refreshed = await fetch("/api/chat", { cache: "no-store" });
       if (!refreshed.ok) throw new Error("ลบแล้ว แต่โหลดรายการบทสนทนาใหม่ไม่สำเร็จ");
       const data = await refreshed.json() as { sessionId: string; sessions: ChatSessionSummary[]; messages: Parameters<typeof setMessages>[0] };
-      setSessions(data.sessions); setDeleteTarget(null);
+      setSessions(data.sessions);
       if (sessionId === targetSessionId) { clearError(); setSessionId(data.sessionId); setMessages(data.messages); }
     } catch (deleteError) {
-      setDialog({ title: "ลบบทสนทนาไม่สำเร็จ", description: deleteError instanceof Error ? deleteError.message : "กรุณาลองใหม่อีกครั้ง", tone: "danger" });
-    } finally { setDeleteBusy(false); }
+      setPersistenceError(deleteError instanceof Error ? deleteError.message : "ลบบทสนทนาไม่สำเร็จ กรุณาลองใหม่");
+    } finally { setDeleteBusySessionId(null); }
   }
   async function decideAction(id: string, approved: boolean) {
     const response = await fetch(`/api/confirm/${encodeURIComponent(id)}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ approved }) });
-    if (!response.ok) setDialog({ title: "ดำเนินการไม่สำเร็จ", description: (await response.json() as { error?: string }).error ?? "กรุณาลองใหม่อีกครั้ง", tone: "danger" });
-    else setDialog({ title: approved ? "ดำเนินการเรียบร้อยแล้ว" : "ยกเลิกรายการแล้ว", description: approved ? "TinyPersonal ดำเนินการตามที่ยืนยันแล้ว" : "รายการนี้จะไม่ถูกดำเนินการ", tone: "success" });
+    if (!response.ok) {
+      setPersistenceError((await response.json() as { error?: string }).error ?? "ดำเนินการไม่สำเร็จ");
+      return;
+    }
+    setPersistenceError(null);
   }
 
   return <WorkspaceShell active="AI Assistant" title="B1" subtitle="ผู้ช่วยส่วนตัวของคุณ" focusMode immersive>
@@ -367,7 +369,7 @@ export default function AIPage() {
         <div className="chat-session-list">
           {sessions.map((session) => <div className={`chat-session-row ${session.id === sessionId ? "active" : ""}`} key={session.id}>
             <button onClick={() => void openSession(session.id)}><MessageSquare size={14} /><span>{session.title || "บทสนทนาใหม่"}</span></button>
-            {session.title !== GENERAL_CHAT_TITLE && <button className="delete-chat-button" aria-label="ลบบทสนทนา" disabled={deleteBusy} onClick={() => setDeleteTarget(session)}><Trash2 size={13} /></button>}
+            {session.title !== GENERAL_CHAT_TITLE && <button className="delete-chat-button" aria-label="ลบบทสนทนา" disabled={deleteBusySessionId === session.id} onClick={() => void removeSession(session.id)}><Trash2 size={13} /></button>}
           </div>)}
         </div>
       </aside>
@@ -408,8 +410,6 @@ export default function AIPage() {
         <p><ShieldCheck size={12} /> เสียงจะถูกพิมพ์ลงแชต • B1 เข้าถึง Vault ได้เฉพาะ metadata</p>
       </div>
       </section>
-      <AppModal open={Boolean(deleteTarget)} title="ลบบทสนทนานี้?" description={`“${deleteTarget?.title || "บทสนทนาใหม่"}” และข้อความทั้งหมดจะถูกลบถาวร`} tone="danger" confirmLabel="ลบบทสนทนา" cancelLabel="ยกเลิก" busy={deleteBusy} onConfirm={() => void removeSession()} onClose={() => { if (!deleteBusy) setDeleteTarget(null); }} />
-      <AppModal open={Boolean(dialog)} title={dialog?.title ?? ""} description={dialog?.description} tone={dialog?.tone} onClose={() => setDialog(null)} />
     </div>
   </WorkspaceShell>;
 }
