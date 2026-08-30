@@ -26,6 +26,7 @@ function summarizeToolOutput(output: unknown): string {
 function sanitizeHistoricalMessage(message: UIMessage, isLatest: boolean): UIMessage {
   if (isLatest) return message;
   return { ...message, parts: message.parts.map((part): MessagePart => {
+    if (part.type === "file") return { type: "text", text: `[Historical image omitted from model context: ${part.filename ?? "image"}]` } as MessagePart;
     if (!part.type.startsWith("tool-") && part.type !== "dynamic-tool") return part;
     const toolPart = part as ToolLikePart;
     if (!("output" in toolPart)) return part;

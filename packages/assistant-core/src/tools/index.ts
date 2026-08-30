@@ -1,5 +1,6 @@
 import { createScheduleItemTool, deleteOrCancelRoutineTool, getScheduleByRangeTool, updateScheduleItemTool, updateScheduleStatusTool } from "./scheduleTools";
 import { webScrapeTool, webSearchTool } from "./web";
+import { controlSmartHomeDeviceTool, delegateCodingTaskTool } from "./jarvis";
 
 /** The complete set of tools that may be exposed to the chat model. */
 export const toolRegistry = {
@@ -10,6 +11,8 @@ export const toolRegistry = {
   deleteRoutine: deleteOrCancelRoutineTool,
   searchWeb: webSearchTool,
   fetchWebPage: webScrapeTool,
+  delegateCodingTask: delegateCodingTaskTool,
+  controlSmartHomeDevice: controlSmartHomeDeviceTool,
 };
 
 export type ToolName = keyof typeof toolRegistry;
@@ -23,6 +26,8 @@ export const toolCatalog: Record<ToolName, { description: string; keywords: stri
   deleteRoutine: { description: "Delete or stop an existing recurring routine.", keywords: ["delete routine", "stop routine", "remove routine", "ลบ routine", "หยุด routine", "ยกเลิก routine"] },
   searchWeb: { description: "Search for current external facts, recent news, prices, or live information.", keywords: ["latest", "current", "today", "news", "price", "search web", "ล่าสุด", "วันนี้", "ข่าว", "ราคา", "ค้นเว็บ"] },
   fetchWebPage: { description: "Read or summarize a specific public web page supplied by URL.", keywords: ["http", "https", "read page", "open url", "summarize link", "อ่านเว็บ", "เปิดลิงก์", "สรุปลิงก์"] },
+  delegateCodingTask: { description: "Run a local coding agent for a repository change, build it, and optionally push a branch.", keywords: ["code", "coding", "codex", "aider", "git status", "git branch", "implement", "refactor", "fix code", "แก้โค้ด", "เขียนโค้ด", "เช็ก git"] },
+  controlSmartHomeDevice: { description: "Turn a Home Assistant light, switch, or climate device on or off, or set climate temperature.", keywords: ["home assistant", "light", "switch", "climate", "temperature", "air conditioner", "เปิดไฟ", "ปิดไฟ", "เปิดแอร์", "ปิดแอร์", "อุณหภูมิ"] },
 };
 
 export function selectTools(allowed: ToolName[]) {

@@ -1,112 +1,55 @@
 "use client";
-
 import { useChat } from "@ai-sdk/react";
-import { CalendarDays, ExternalLink, LineChart, LoaderCircle, Mail, Mic, MicOff, RadioTower, Send, X } from "lucide-react";
+import { Bot, CheckCircle2, ChevronRight, Circle, Code2, Cpu, LoaderCircle, Send, Terminal, TriangleAlert, User, Zap } from "lucide-react";
 import { getToolName, isToolUIPart, type UIMessage } from "ai";
-import { useCallback, useEffect, useRef, useState, type FormEvent, type MouseEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { WorkspaceShell } from "@/components/WorkspaceShell";
 
-const STORAGE_KEY = "jarvis_browser_state";
-type BrowserState = { isOpen: boolean; currentUrl: string; title: string; displayMode: "IFRAME" | "EXTERNAL" };
-const launchers = [
-  { title: "Google Calendar", url: "https://calendar.google.com/", icon: CalendarDays },
-  { title: "Gmail", url: "https://mail.google.com/", icon: Mail },
-  { title: "Google Finance", url: "https://www.google.com/finance/", icon: LineChart },
+const quickActions = [
+  { label: "เปิดแอร์ 25°C", prompt: "เปิดแอร์ entity climate.living_room และตั้งอุณหภูมิ 25°C", icon: Zap },
+  { label: "เช็ก Uptime", prompt: "เช็ก uptime ของเซิร์ฟเวอร์ให้หน่อย", icon: Cpu },
+  { label: "Git Status", prompt: "ตรวจสอบ Git status ของโปรเจกต์และสรุปให้ฉัน โดยไม่ push", icon: Code2 },
 ] as const;
-type RecognitionEvent = { results: { length: number; [index: number]: { isFinal?: boolean; 0: { transcript: string } } } };
-type Recognition = { lang: string; interimResults: boolean; continuous: boolean; start(): void; stop(): void; abort(): void; onresult: ((event: RecognitionEvent) => void) | null; onend: (() => void) | null; onerror: (() => void) | null };
+type Log = { command: string; stdout: string; stderr: string; exitCode: number };
+type ToolOutput = { ok?: boolean; error?: { code?: string; message?: string }; data?: unknown };
+function textOf(message: UIMessage) { return message.parts.filter((part) => part.type === "text").map((part) => part.text).join(""); }
+
+function ToolInspector({ part }: { part: UIMessage["parts"][number] }) {
+  if (!isToolUIPart(part)) return null;
+  const name = getToolName(part); const running = part.state === "input-streaming" || part.state === "input-available"; const failed = part.state === "output-error";
+  const output = part.state === "output-available" ? part.output as ToolOutput : undefined;
+  const logs: Log[] = output?.data && typeof output.data === "object" && "logs" in output.data ? ((output.data as { logs?: Log[] }).logs ?? []) : [];
+  const isError = failed || output?.ok === false;
+  return <details className={`jarvis-tool ${isError ? "error" : running ? "running" : "success"}`} open={isError}>
+    <summary>{running ? <LoaderCircle className="spin-icon" size={14} /> : isError ? <TriangleAlert size={14} /> : <CheckCircle2 size={14} />}<span>{name}</span><small>{running ? "EXECUTING" : isError ? "FAILED" : "COMPLETE"}</small><ChevronRight size={14} /></summary>
+    <div className="jarvis-tool-body">
+      {part.state === "input-available" && <pre><code>{JSON.stringify(part.input, null, 2)}</code></pre>}
+      {part.state === "output-error" && <p className="jarvis-stderr">{part.errorText}</p>}
+      {output?.error?.message && <p className="jarvis-stderr">[{output.error.code ?? "ERROR"}] {output.error.message}</p>}
+      {logs.map((log, index) => <section key={`${log.command}-${index}`}><header><span>$ {log.command}</span><b>exit {log.exitCode}</b></header>{log.stdout && <pre className="jarvis-stdout"><code>{log.stdout}</code></pre>}{log.stderr && <pre className="jarvis-stderr"><code>{log.stderr}</code></pre>}</section>)}
+      {!running && !isError && logs.length === 0 && <pre><code>{JSON.stringify(output?.data ?? output ?? { ok: true }, null, 2)}</code></pre>}
+    </div>
+  </details>;
+}
 
 export default function JarvisPage() {
-  const [browser, setBrowser] = useState<BrowserState>({ isOpen: false, currentUrl: "", title: "", displayMode: "IFRAME" });
-  const [browserHydrated, setBrowserHydrated] = useState(false);
-  const [sessionId, setSessionId] = useState<string | null>(null);
-  const [input, setInput] = useState("");
-  const [transcript, setTranscript] = useState("แตะพื้นที่ฝั่งซ้ายเพื่อเริ่มสนทนา");
-  const [muted, setMuted] = useState(true);
-  const [listening, setListening] = useState(false);
-  const [speechSupported, setSpeechSupported] = useState(true);
-  const recognitionRef = useRef<Recognition | null>(null);
-  const mutedRef = useRef(true); const speakingRef = useRef(false); const busyRef = useRef(false);
-  const seenActions = useRef(new Set<string>()); const spokenId = useRef<string | null>(null);
-  const browserRef = useRef(browser); const sessionRef = useRef<string | null>(null);
-  const { messages, sendMessage, setMessages, status, error } = useChat({ id: "tinypersonal-jarvis" });
-
-  useEffect(() => { browserRef.current = browser; if (browserHydrated) localStorage.setItem(STORAGE_KEY, JSON.stringify(browser)); }, [browser, browserHydrated]);
-  useEffect(() => { sessionRef.current = sessionId; }, [sessionId]);
-  useEffect(() => { busyRef.current = status === "submitted" || status === "streaming"; }, [status]);
-
-  const beginListening = useCallback(() => {
-    if (mutedRef.current || speakingRef.current || busyRef.current || !recognitionRef.current) return;
-    try { recognitionRef.current.start(); setListening(true); setTranscript("กำลังฟัง…"); } catch { /* recognition is already active */ }
-  }, []);
-  const stopListening = useCallback(() => { try { recognitionRef.current?.stop(); } catch { /* already stopped */ } setListening(false); }, []);
-
-  const send = useCallback(async (text: string) => {
-    const clean = text.trim(); if (!clean || busyRef.current) return;
-    stopListening(); setInput(""); setTranscript(clean); busyRef.current = true;
-    const view = browserRef.current;
-    await sendMessage({ text: clean }, { body: { sessionId: sessionRef.current, voiceMode: true, jarvisMode: true, ...(view.isOpen && view.currentUrl ? { visionContext: { currentUrl: view.currentUrl, title: view.title || "Jarvis display" } } : {}) } });
-  }, [sendMessage, stopListening]);
-
-  useEffect(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) try { const value = JSON.parse(saved) as Partial<BrowserState>; if (typeof value.isOpen === "boolean" && typeof value.currentUrl === "string" && typeof value.title === "string") setBrowser({ isOpen: value.isOpen, currentUrl: value.currentUrl, title: value.title, displayMode: value.displayMode === "EXTERNAL" ? "EXTERNAL" : "IFRAME" }); } catch { localStorage.removeItem(STORAGE_KEY); }
-    setBrowserHydrated(true);
-    void fetch("/api/chat", { cache: "no-store" }).then(async (response) => { if (!response.ok) return; const data = await response.json() as { sessionId?: string | null; messages?: UIMessage[] }; setSessionId(data.sessionId ?? null); if (data.messages) setMessages(data.messages); });
-  }, [setMessages]);
-
-  useEffect(() => {
-    const speechWindow = window as typeof window & { SpeechRecognition?: new () => Recognition; webkitSpeechRecognition?: new () => Recognition };
-    const Constructor = speechWindow.SpeechRecognition ?? speechWindow.webkitSpeechRecognition;
-    if (!Constructor) { setSpeechSupported(false); return; }
-    const recognition = new Constructor(); recognition.lang = "th-TH"; recognition.interimResults = true; recognition.continuous = false;
-    recognition.onresult = (event) => { let text = ""; for (let i = 0; i < event.results.length; i++) text += event.results[i][0].transcript; setTranscript(text.trim() || "กำลังฟัง…"); const last = event.results[event.results.length - 1]; if (last?.isFinal && text.trim()) void send(text); };
-    recognition.onend = () => { setListening(false); if (!mutedRef.current && !speakingRef.current && !busyRef.current) window.setTimeout(beginListening, 250); };
-    recognition.onerror = () => { setListening(false); if (!mutedRef.current) setTranscript("ไม่ได้ยินเสียง ลองพูดอีกครั้ง"); };
-    recognitionRef.current = recognition; return () => { recognition.onend = null; recognition.abort(); recognitionRef.current = null; window.speechSynthesis?.cancel(); };
-  }, [beginListening, send]);
-
-  useEffect(() => {
-    for (const message of messages) message.parts.forEach((part, index) => {
-      if (!isToolUIPart(part) || part.state !== "output-available") return;
-      const key = `${message.id}:${index}`; if (seenActions.current.has(key)) return;
-      const output = part.output as { browserAction?: { type: "OPEN" | "CLOSE"; url?: string; title?: string; displayMode?: "IFRAME" | "EXTERNAL" } } | undefined;
-      if (!output?.browserAction) return; seenActions.current.add(key);
-      if (output.browserAction.type === "CLOSE") setBrowser({ isOpen: false, currentUrl: "", title: "", displayMode: "IFRAME" });
-      else if (output.browserAction.url) setBrowser({ isOpen: true, currentUrl: output.browserAction.url, title: output.browserAction.title ?? "Jarvis display", displayMode: output.browserAction.displayMode ?? "IFRAME" });
-    });
-  }, [messages]);
-
-  useEffect(() => {
-    if (status !== "ready") return;
-    const latest = [...messages].reverse().find((message) => message.role === "assistant"); if (!latest || latest.id === spokenId.current) return;
-    const text = latest.parts.filter((part) => part.type === "text").map((part) => part.text).join(" ").trim(); if (!text) { if (!mutedRef.current) beginListening(); return; }
-    spokenId.current = latest.id; stopListening(); speakingRef.current = true; setTranscript(text); window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text); utterance.lang = "th-TH"; utterance.voice = window.speechSynthesis.getVoices().find((voice) => voice.lang.toLowerCase().startsWith("th")) ?? null;
-    utterance.onend = utterance.onerror = () => { speakingRef.current = false; if (!mutedRef.current) window.setTimeout(beginListening, 250); };
-    window.speechSynthesis.speak(utterance);
-  }, [messages, status, beginListening, stopListening]);
-
-  function toggleMute(event: MouseEvent) { if ((event.target as HTMLElement).closest("button,input,a,iframe")) return; const next = !mutedRef.current; mutedRef.current = next; setMuted(next); if (next) { stopListening(); window.speechSynthesis.cancel(); speakingRef.current = false; setTranscript("ไมค์ถูกปิด — แตะเพื่อเปิด"); } else beginListening(); }
+  const [sessionId, setSessionId] = useState<string | null>(null); const [input, setInput] = useState(""); const scrollRef = useRef<HTMLDivElement>(null);
+  const { messages, sendMessage, setMessages, status, error, stop } = useChat({ id: "tinypersonal-jarvis" });
+  const busy = status === "submitted" || status === "streaming"; const steps = useMemo(() => messages.flatMap((message) => message.parts.filter(isToolUIPart)), [messages]);
+  useEffect(() => { void fetch("/api/chat", { cache: "no-store" }).then(async (response) => { if (!response.ok) return; const data = await response.json() as { sessionId?: string | null; messages?: UIMessage[] }; setSessionId(data.sessionId ?? null); if (data.messages) setMessages(data.messages); }); }, [setMessages]);
+  useEffect(() => { scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" }); }, [messages, status]);
+  const send = useCallback(async (prompt: string) => { const text = prompt.trim(); if (!text || busy) return; setInput(""); await sendMessage({ text }, { body: { sessionId, jarvisMode: true } }); }, [busy, sendMessage, sessionId]);
   function submit(event: FormEvent) { event.preventDefault(); void send(input); }
-  function launchExternal(title: string, url: string) { setBrowser({ isOpen: true, currentUrl: url, title, displayMode: "EXTERNAL" }); }
-
-  return <WorkspaceShell active="Jarvis Mode" title="Jarvis Interactive Workspace" subtitle="Hands-free assistant · Asia/Bangkok">
-    <div className={`jarvis-split ${browser.isOpen ? "browser-open" : ""}`}>
-      <section className="jarvis-core" onClick={toggleMute} aria-label={muted ? "แตะเพื่อเปิดไมค์" : "แตะเพื่อปิดไมค์"}>
-        <div className="jarvis-status"><span><RadioTower size={14} /> JARVIS CORE</span><strong className={muted ? "muted" : listening ? "live" : "processing"}>{muted ? "MUTED" : listening ? "LISTENING" : status === "ready" ? "READY" : "PROCESSING"}</strong></div>
-        <div className={`jarvis-orb ${listening ? "listening" : ""} ${muted ? "muted" : ""}`}><div className="orb-ring ring-one" /><div className="orb-ring ring-two" /><div className="orb-center">{muted ? <MicOff size={34} /> : <Mic size={34} />}</div></div>
-        <div className="jarvis-wave" aria-hidden="true">{Array.from({ length: 24 }, (_, index) => <i key={index} style={{ animationDelay: `${index * -45}ms` }} />)}</div>
-        <div className="jarvis-dialog"><small>{error ? "CONNECTION ERROR" : speechSupported ? "LATEST DIALOGUE" : "VOICE UNAVAILABLE"}</small><p>{error ? error.message : transcript}</p></div>
-        <form className="jarvis-command" onSubmit={submit} onClick={(event) => event.stopPropagation()}><input value={input} onChange={(event) => setInput(event.target.value)} placeholder="พิมพ์คำสั่งสำรอง…" /><button disabled={!input.trim() || status !== "ready"} aria-label="ส่งคำสั่ง">{status === "ready" ? <Send size={17} /> : <LoaderCircle className="spin-icon" size={17} />}</button></form>
-        <div className="jarvis-launchers" onClick={(event) => event.stopPropagation()}>{launchers.map(({ title, url, icon: Icon }) => <button key={title} onClick={() => launchExternal(title, url)}><Icon size={14} /> {title}</button>)}</div>
-        <p className="jarvis-tap-hint">{muted ? <><MicOff size={13} /> แตะพื้นที่นี้เพื่อเปิดไมค์</> : <><Mic size={13} /> แตะพื้นที่นี้เพื่อ Mute</>}</p>
-      </section>
-      <section className="jarvis-browser" aria-hidden={!browser.isOpen}>
-        <header><div><small>DISPLAY WORKSPACE</small><strong>{browser.title || "Browser"}</strong></div><a href={browser.currentUrl} target="_blank" rel="noreferrer" aria-label="เปิดในแท็บใหม่"><ExternalLink size={16} /></a><button onClick={() => setBrowser({ isOpen: false, currentUrl: "", title: "", displayMode: "IFRAME" })} aria-label="ปิด Workspace"><X size={18} /></button></header>
-        {browser.isOpen && browser.currentUrl && browser.displayMode === "IFRAME" && <iframe src={browser.currentUrl} title={browser.title || "Jarvis browser"} allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowFullScreen referrerPolicy="strict-origin-when-cross-origin" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-presentation" />}
-        {browser.isOpen && browser.currentUrl && browser.displayMode === "EXTERNAL" && <div className="jarvis-external-card"><div><ExternalLink size={28} /></div><small>SECURE EXTERNAL APP</small><h2>{browser.title}</h2><p>บริการนี้ไม่อนุญาตให้ฝังใน iframe เพื่อปกป้องบัญชีและ session ของคุณ กรุณาเปิดในแท็บของบริการโดยตรง</p><a href={browser.currentUrl} target="_blank" rel="noreferrer">เปิด {browser.title} <ExternalLink size={15} /></a></div>}
-      </section>
-    </div>
+  return <WorkspaceShell active="Jarvis Mode" title="JARVIS // Command Nexus" subtitle="Cybernetic orchestration interface · Asia/Bangkok">
+    <main className="jarvis-terminal-shell"><header className="jarvis-terminal-topbar"><div><i /><span>JARVIS CORE</span><small>v3.0 / SECURE CHANNEL</small></div><div className="jarvis-health"><span><Circle size={7} fill="currentColor" /> API ONLINE</span><span><Circle size={7} fill="currentColor" /> AGENT {busy ? "ACTIVE" : "READY"}</span></div></header>
+      <div className="jarvis-terminal-grid"><section className="jarvis-chat-panel"><div className="jarvis-chat-scroll" ref={scrollRef}>
+        {messages.length === 0 && <div className="jarvis-empty"><div><Bot size={30} /></div><small>AWAITING DIRECTIVE</small><h2>พร้อมรับคำสั่งครับ</h2><p>สั่งควบคุมอุปกรณ์ ตรวจระบบ หรือมอบหมายงานเขียนโค้ดได้จาก command line ด้านล่าง</p></div>}
+        {messages.map((message) => <article className={`jarvis-message ${message.role}`} key={message.id}><div className="jarvis-avatar">{message.role === "user" ? <User size={15} /> : <Bot size={15} />}</div><div className="jarvis-message-content"><header><b>{message.role === "user" ? "OPERATOR" : "JARVIS"}</b><time>{message.role === "user" ? "DIRECTIVE" : "RESPONSE"}</time></header>{textOf(message) && <p>{textOf(message)}</p>}{message.parts.map((part, index) => <ToolInspector key={index} part={part} />)}</div></article>)}
+        {status === "submitted" && <div className="jarvis-thinking"><LoaderCircle className="spin-icon" size={14} /> ANALYZING DIRECTIVE…</div>}
+      </div>{error && <div className="jarvis-terminal-error"><TriangleAlert size={14} /> {error.message}</div>}
+        <div className="jarvis-quick-actions">{quickActions.map(({ label, prompt, icon: Icon }) => <button key={label} disabled={busy} onClick={() => void send(prompt)}><Icon size={13} />{label}</button>)}</div>
+        <form className="jarvis-terminal-input" onSubmit={submit}><Terminal size={18} /><span>›</span><input value={input} onChange={(event) => setInput(event.target.value)} placeholder="Enter directive…" autoComplete="off" />{busy ? <button type="button" onClick={stop}>STOP</button> : <button disabled={!input.trim()} aria-label="ส่งคำสั่ง"><Send size={16} /></button>}</form>
+      </section><aside className="jarvis-telemetry"><header><Terminal size={14} /><span>EXECUTION TRACE</span><b>{steps.length}</b></header><div className="jarvis-trace-list">{steps.length === 0 ? <p>NO TOOL ACTIVITY</p> : steps.map((part, index) => <div key={index}><i className={part.state === "output-error" ? "error" : part.state === "output-available" ? "done" : "active"} /><span><b>STEP {String(index + 1).padStart(2, "0")}</b>{getToolName(part)}</span></div>)}</div><footer><span>SESSION</span><code>{sessionId?.slice(0, 12) ?? "CONNECTING"}</code><span>STREAM</span><code>{status.toUpperCase()}</code></footer></aside></div>
+    </main>
   </WorkspaceShell>;
 }

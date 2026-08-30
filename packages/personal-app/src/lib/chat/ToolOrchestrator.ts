@@ -3,7 +3,7 @@ import { createAgentConfigForRequest, type ToolName } from "@tinypersonal/assist
 /** Lexical routing avoids a database/vector round trip and does not load schemas while selecting. */
 export function selectAgentTools(userRequest: string, allowedTools: ToolName[]) {
   return createAgentConfigForRequest(
-    { locale: "th-TH", timezone: "Asia/Bangkok", userName: "Sir" },
+    { locale: "th-TH", timezone: "Asia/Bangkok" },
     userRequest,
     allowedTools,
     { limit: 2, minimumScore: 1 },

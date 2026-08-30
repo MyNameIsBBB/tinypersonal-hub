@@ -2,6 +2,7 @@ import { prisma } from "../db/client";
 import { updateNote } from "./noteService";
 import { createScheduleItem, deleteOrCancelRoutine, updateScheduleItem, updateScheduleStatus } from "./scheduleService";
 import { updateVaultMetadata } from "./vaultService";
+import { controlSmartHomeDevice, delegateCodingTask } from "./jarvisService";
 
 function safeMetadata(metadata: Record<string, unknown>): string {
   const sanitized = Object.fromEntries(Object.entries(metadata).filter(([key]) =>
@@ -60,6 +61,8 @@ export async function executePendingAction(ownerKey: string, id: string, approve
     else if (action.toolName === "schedule.deleteRoutine") { await deleteOrCancelRoutine(String(args.id), "ALL"); result = { id: String(args.id), status: "CANCELLED" }; }
     else if (action.toolName === "notes.update") { const { id: targetId, ...input } = args; result = await updateNote(String(targetId), input); }
     else if (action.toolName === "vault.updateMetadata") { const { id: targetId, ...input } = args; result = await updateVaultMetadata(String(targetId), input); }
+    else if (action.toolName === "coding.delegateTask") result = await delegateCodingTask(args);
+    else if (action.toolName === "homeAssistant.callService") result = await controlSmartHomeDevice(args);
     else throw new Error("Unsupported pending action");
     await recordAudit({ actorId: ownerKey, action: action.toolName, targetId: id, status: "SUCCEEDED" });
     return { action, denied: false, result };
