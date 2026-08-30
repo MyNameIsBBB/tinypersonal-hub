@@ -355,11 +355,14 @@ export async function POST(request: Request) {
       console.error("Failed to persist completed chat stream", error instanceof Error ? error.message : "Unknown error");
     }
   };
-  const persistenceStream = result.toUIMessageStream<UIMessage>({
+  const completedStream = result.toUIMessageStream<UIMessage>({
     originalMessages: baseMessages,
     onError: (error) => error instanceof Error ? `AI execution failed: ${error.message}` : "AI execution failed unexpectedly",
     onEnd: onPersistenceEnd,
   });
+  // A streamText result must only be converted once. Tee that single UI stream so the
+  // browser and persistence consumer observe the exact same completed assistant message.
+  const [clientStream, persistenceStream] = completedStream.tee();
   const persistenceTask = Promise.resolve(
     consumeStream({
       stream: persistenceStream,
@@ -368,9 +371,8 @@ export async function POST(request: Request) {
   );
   after(() => persistenceTask);
 
-  return result.toUIMessageStreamResponse({
-    originalMessages: baseMessages,
+  return createUIMessageStreamResponse({
+    stream: clientStream,
     headers: { "X-Chat-Session-Id": session.id },
-    onError: (error) => error instanceof Error ? `AI execution failed: ${error.message}` : "AI execution failed unexpectedly",
   });
 }

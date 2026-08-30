@@ -2,7 +2,7 @@
 
 import { useChat } from "@ai-sdk/react";
 import { ArrowUp, Bot, CalendarPlus, FileSearch, KeyRound, LoaderCircle, MessageSquare, Mic, MicOff, Paperclip, Plus, ShieldCheck, Trash2, Volume2, VolumeX, X } from "lucide-react";
-import { getToolName, isToolUIPart, type FileUIPart, type UIMessagePart } from "ai";
+import { getToolName, isToolUIPart, type FileUIPart, type UIMessage, type UIMessagePart } from "ai";
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import ReactMarkdown from "react-markdown";
 import rehypeKatex from "rehype-katex";
@@ -295,6 +295,25 @@ export default function AIPage() {
       .then((response) => response.ok ? response.json() : null)
       .then((data: { sessions?: ChatSessionSummary[] } | null) => { if (data?.sessions) setSessions(data.sessions); });
   }, [historyReady, messages.length, status]);
+
+  useEffect(() => {
+    if (!historyReady || !sessionId || status !== "ready") return;
+    let cancelled = false;
+    const syncActiveSession = async () => {
+      if (document.visibilityState === "hidden") return;
+      const response = await fetch(`/api/chat?sessionId=${encodeURIComponent(sessionId)}`, { cache: "no-store" });
+      if (!response.ok || cancelled) return;
+      const data = await response.json() as { messages?: UIMessage[]; sessions?: ChatSessionSummary[] };
+      if (Array.isArray(data.messages)) {
+        setMessages((current) => JSON.stringify(current) === JSON.stringify(data.messages) ? current : data.messages!);
+      }
+      if (data.sessions) setSessions(data.sessions);
+    };
+    const onVisibilityChange = () => { if (document.visibilityState === "visible") void syncActiveSession(); };
+    const timer = window.setInterval(() => void syncActiveSession(), 3_000);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => { cancelled = true; window.clearInterval(timer); document.removeEventListener("visibilitychange", onVisibilityChange); };
+  }, [historyReady, sessionId, setMessages, status]);
 
   async function openSession(nextSessionId: string) {
     const response = await fetch(`/api/chat?sessionId=${encodeURIComponent(nextSessionId)}`, { cache: "no-store" });
