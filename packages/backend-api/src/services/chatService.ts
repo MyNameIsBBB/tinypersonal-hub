@@ -157,7 +157,7 @@ export async function loadChatMessages(
     if (!session) return [];
     const rows = await prisma.chatMessage.findMany({
         where: { sessionId },
-        orderBy: { createdAt: "asc" },
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
         take: 120,
     });
     return rows.map((row) => JSON.parse(row.payloadJson) as StoredChatMessage);

@@ -9,6 +9,7 @@ import rehypeKatex from "rehype-katex";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import { WorkspaceShell } from "@/components/WorkspaceShell";
+import { AppModal } from "@/components/AppModal";
 import { markChatSessionActive, registerChatTask } from "@/lib/chat/backgroundTasks";
 
 const suggestions = [
@@ -36,7 +37,10 @@ function normalizeAssistantMath() {
   };
 }
 
-function renderMessageParts(parts: UIMessagePart<any, any>[]) {
+function renderMessageParts(
+  parts: UIMessagePart<any, any>[],
+  onConfirmAction?: (actionId: string, approved: boolean) => void,
+) {
   const latestToolPartIndexByToolName = new Map<string, number>();
   parts.forEach((part, index) => {
     if (isToolUIPart(part)) {
@@ -82,7 +86,23 @@ function renderMessageParts(parts: UIMessagePart<any, any>[]) {
     if (part.state === "output-available") {
       const output = part.output as { ok?: boolean; error?: { message?: string }; confirmation?: { id?: string; summary?: string }; confirmationRequired?: boolean; status?: string } | undefined;
       if (output?.confirmation?.id && (output.confirmationRequired || output.status === "confirmation-required")) {
-        return <div className="tool-status confirmation" key={index}><span>{output.confirmation.summary ?? toolName} — รอคำสั่งของท่านครับ โปรดพิมพ์ “ยืนยัน” เพื่อเริ่ม หรือ “ยกเลิก” เพื่อยุติภารกิจ</span></div>;
+        return (
+          <div className="tool-status confirmation" key={index}>
+            <span>{output.confirmation.summary ?? toolName}</span>
+            <button
+              type="button"
+              onClick={() => onConfirmAction?.(output.confirmation!.id!, false)}
+            >
+              ยกเลิก
+            </button>
+            <button
+              type="button"
+              onClick={() => onConfirmAction?.(output.confirmation!.id!, true)}
+            >
+              ยืนยัน
+            </button>
+          </div>
+        );
       }
       if (output?.ok === false) return <div className="tool-status error" key={index}>เครื่องมือ {toolName} ขัดข้อง: {output.error?.message ?? "ไม่สามารถดึงข้อมูลได้"}</div>;
       return <div className="tool-status done" key={index}>ใช้เครื่องมือ {toolName} สำเร็จ</div>;
@@ -116,7 +136,6 @@ export default function AIPage() {
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const voiceRequestPending = useRef(false);
   const lastSpokenMessageId = useRef<string | null>(null);
-  const lastPersistedAssistantMessageId = useRef<string | null>(null);
   const threadRef = useRef<HTMLDivElement | null>(null);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
   const generalCycleRef = useRef(new Date(Date.now() - 3_600_000).toISOString().slice(0, 10));
@@ -125,6 +144,7 @@ export default function AIPage() {
   const [sessions, setSessions] = useState<ChatSessionSummary[]>([]);
   const [codingJob, setCodingJob] = useState<CodingJobProgress | null>(null);
   const [showCodexProgress, setShowCodexProgress] = useState(false);
+  const [deleteSessionTarget, setDeleteSessionTarget] = useState<ChatSessionSummary | null>(null);
   const [deleteBusySessionId, setDeleteBusySessionId] = useState<string | null>(null);
 
   const codingJobEvents = useMemo(() => {
@@ -134,6 +154,25 @@ export default function AIPage() {
   }, [codingJob?.progressJson]);
 
   const latestProgressEvent = codingJobEvents.at(-1);
+
+  async function handleConfirmAction(actionId: string, approved: boolean) {
+    if (status === "submitted" || status === "streaming") return;
+    try {
+      const response = await fetch(`/api/confirm/${encodeURIComponent(actionId)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ approved }),
+      });
+      const data = await response.json().catch(() => ({})) as { ok?: boolean; error?: string };
+      if (!response.ok) {
+        setPersistenceError(data.error ?? "ยืนยันรายการไม่สำเร็จ");
+        return;
+      }
+      void send(approved ? "ยืนยัน" : "ยกเลิก");
+    } catch {
+      setPersistenceError("เกิดข้อผิดพลาดในการส่งคำสั่งยืนยัน");
+    }
+  }
 
   async function send(text: string, fromVoice = false) {
     const clean = text.trim();
@@ -263,22 +302,6 @@ export default function AIPage() {
   }, [messages, status, voiceReply]);
 
   useEffect(() => {
-    if (!historyReady || !sessionId || status !== "ready") return;
-    const latest = [...messages].reverse().find((message) => message.role === "assistant");
-    if (!latest || latest.id === lastPersistedAssistantMessageId.current) return;
-    const hasText = latest.parts.some((part) => part.type === "text" && part.text.trim().length > 0);
-    if (!hasText) return;
-    lastPersistedAssistantMessageId.current = latest.id;
-    void fetch("/api/chat/messages/assistant", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sessionId, message: latest }),
-    }).catch(() => {
-      lastPersistedAssistantMessageId.current = null;
-    });
-  }, [historyReady, messages, sessionId, status]);
-
-  useEffect(() => {
     if (typeof window === "undefined") return;
 
     let cancelled = false;
@@ -368,8 +391,6 @@ export default function AIPage() {
   async function removeSession(targetSessionId: string) {
     const target = sessions.find((session) => session.id === targetSessionId);
     if (!target || deleteBusySessionId) return;
-    const approved = window.confirm(`ลบบทสนทนา “${target.title || "บทสนทนาใหม่"}” ใช่ไหม?`);
-    if (!approved) return;
     setDeleteBusySessionId(targetSessionId);
     try {
       const response = await fetch(`/api/chat?sessionId=${encodeURIComponent(targetSessionId)}`, { method: "DELETE" });
@@ -384,7 +405,6 @@ export default function AIPage() {
       setPersistenceError(deleteError instanceof Error ? deleteError.message : "ลบบทสนทนาไม่สำเร็จ กรุณาลองใหม่");
     } finally { setDeleteBusySessionId(null); }
   }
-
 
   useEffect(() => {
     if (!historyReady || !sessionId) return;
@@ -430,7 +450,7 @@ export default function AIPage() {
                 disabled={deleteBusySessionId === session.id}
                 onClick={(e) => {
                   e.stopPropagation();
-                  void removeSession(session.id);
+                  setDeleteSessionTarget(session);
                 }}
                 title="ลบบทสนทนา"
               >
@@ -441,7 +461,6 @@ export default function AIPage() {
         ))}
       </div>
     </div>
-
   );
   return (
     <WorkspaceShell active="AI Assistant" title="B1" subtitle="ผู้ช่วยส่วนตัวของคุณ" focusMode immersive sidebarExtra={sidebarExtraContent}>
@@ -462,7 +481,7 @@ export default function AIPage() {
               {messages.map((message) => (
                 <article className={`chat-message ${message.role}`} key={message.id}>
                   <div className="message-avatar">{message.role === "assistant" ? <Bot size={17} /> : "P"}</div>
-                  <div>{renderMessageParts(message.parts)}</div>
+                  <div>{renderMessageParts(message.parts, (actionId, approved) => void handleConfirmAction(actionId, approved))}</div>
                 </article>
               ))}
               </>
@@ -543,10 +562,28 @@ export default function AIPage() {
               <button type="button" className="voice-button voice-reply-button" onClick={() => { window.speechSynthesis?.cancel(); setVoiceReply((enabled) => !enabled); }} aria-label={voiceReply ? "ปิดเสียงตอบกลับ" : "เปิดเสียงตอบกลับ"}>{voiceReply ? <Volume2 size={18} /> : <VolumeX size={18} />}</button>
               <button type="submit" disabled={!historyReady || (!input.trim() && attachments.length === 0) || status === "submitted" || status === "streaming"} aria-label="ส่งข้อความ"><ArrowUp size={19} /></button>
             </form>
-            <p><ShieldCheck size={12} /> เสียงจะถูกพิมพ์ลงแชต • B1 เข้าถึง Vault ได้เฉพาะ metadata</p>
           </div>
         </section>
       </div>
+      <AppModal
+        open={Boolean(deleteSessionTarget)}
+        title="ลบบทสนทนานี้?"
+        description={`บทสนทนา “${deleteSessionTarget?.title || "บทสนทนาใหม่"}” จะถูกลบถาวร`}
+        tone="danger"
+        confirmLabel="ลบบทสนทนา"
+        cancelLabel="ยกเลิก"
+        busy={Boolean(deleteBusySessionId)}
+        onConfirm={async () => {
+          if (deleteSessionTarget) {
+            const id = deleteSessionTarget.id;
+            setDeleteSessionTarget(null);
+            await removeSession(id);
+          }
+        }}
+        onClose={() => {
+          if (!deleteBusySessionId) setDeleteSessionTarget(null);
+        }}
+      />
     </WorkspaceShell>
   );
 }
