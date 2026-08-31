@@ -6,7 +6,7 @@ import { isValidSessionToken, SESSION_COOKIE } from "@/lib/serverAuth";
 import { z } from "zod";
 import { bangkokNowContext, parseBangkokDateTimeInput } from "@/lib/chat/ContextBuilder";
 import { selectAgentTools } from "@/lib/chat/ToolOrchestrator";
-import { confirmationDecision, latestUserText } from "@/lib/chat/ChatStreamHandler";
+import { confirmationDecision, latestUserText, selectContextWindow } from "@/lib/chat/ChatStreamHandler";
 import { chatRequestSchema, controlSmartHomeDeviceInputSchema, delegateCodingTaskInputSchema, type ToolName } from "@tinypersonal/assistant-core";
 import { parseJson } from "@/lib/apiValidation";
 
@@ -212,10 +212,50 @@ const smartHomeExecutionTool = (ownerKey: string, sessionId: string) => tool({
   },
 });
 
+function noteItemForModel(note: Awaited<ReturnType<typeof searchNotes>>[number]) {
+  return {
+    id: note.id,
+    title: note.title,
+    content: note.content,
+    tags: note.tags,
+    folder: note.folder,
+    scheduleItemId: note.scheduleItemId,
+    createdAt: note.createdAt.toISOString(),
+    updatedAt: note.updatedAt.toISOString(),
+  };
+}
+
+function mediaAssetForModel(asset: Awaited<ReturnType<typeof listMediaAssets>>[number]) {
+  return {
+    id: asset.id,
+    fileName: asset.fileName,
+    mimeType: asset.mimeType,
+    fileSize: asset.fileSize,
+    noteId: asset.noteId,
+    scheduleItemId: asset.scheduleItemId,
+    createdAt: asset.createdAt.toISOString(),
+  };
+}
+
+function vaultRecordForModel(record: Awaited<ReturnType<typeof searchVaultMetadata>>[number]) {
+  return {
+    id: record.id,
+    serviceName: record.serviceName,
+    category: record.category,
+    accountIdentifier: record.accountIdentifier,
+    url: record.url,
+    createdAt: record.createdAt.toISOString(),
+    updatedAt: record.updatedAt.toISOString(),
+  };
+}
+
 const noteSearchExecutionTool = tool({
   description: "Search the user's notes by words, tags, or folder.",
   inputSchema: z.object({ query: z.string().trim().min(1).max(300), limit: z.number().int().min(1).max(20).default(10) }).strict(),
-  execute: async ({ query, limit }) => ({ ok: true as const, notes: await searchNotes(query, limit) }),
+  execute: async ({ query, limit }) => {
+    const notes = await searchNotes(query, limit);
+    return { ok: true as const, notes: notes.map(noteItemForModel) };
+  },
 });
 
 const createNoteInputSchema = z.object({ title: z.string().trim().min(1).max(200), content: z.string().max(100_000), tags: z.array(z.string().trim().min(1).max(60)).max(30).optional(), folder: z.string().trim().max(160).nullable().optional(), scheduleItemId: z.string().min(1).nullable().optional() }).strict();
@@ -230,7 +270,7 @@ const noteMutationTool = (ownerKey: string, sessionId: string, operation: "creat
     void sessionId;
     try {
       const created = await createNote(input);
-      return { ok: true as const, note: created };
+      return { ok: true as const, note: noteItemForModel(created) };
     } catch (error) {
       return { ok: false as const, error: { code: "NOTE_MUTATION_FAILED", message: error instanceof Error ? error.message : "Note mutation failed" } };
     }
@@ -251,7 +291,7 @@ const updateNoteMutationTool = (ownerKey: string, sessionId: string) => tool({
         folder: input.folder,
         scheduleItemId: input.scheduleItemId,
       });
-      return { ok: true as const, note: updated };
+      return { ok: true as const, note: noteItemForModel(updated) };
     } catch (error) {
       return { ok: false as const, error: { code: "NOTE_MUTATION_FAILED", message: error instanceof Error ? error.message : "Note mutation failed" } };
     }
@@ -276,7 +316,10 @@ const deleteNoteMutationTool = (ownerKey: string, sessionId: string) => tool({
 const mediaListExecutionTool = tool({
   description: "List media metadata without exposing storage paths or file bytes.",
   inputSchema: z.object({ limit: z.number().int().min(1).max(100).default(30) }).strict(),
-  execute: async ({ limit }) => ({ ok: true as const, assets: await listMediaAssets(limit) }),
+  execute: async ({ limit }) => {
+    const assets = await listMediaAssets(limit);
+    return { ok: true as const, assets: assets.map(mediaAssetForModel) };
+  },
 });
 
 const mediaMutationTool = (ownerKey: string, sessionId: string, operation: "updateLinks" | "delete") => tool({
@@ -290,7 +333,7 @@ const mediaMutationTool = (ownerKey: string, sessionId: string, operation: "upda
         noteId: input.noteId,
         scheduleItemId: input.scheduleItemId,
       });
-      return { ok: true as const, asset: updated };
+      return { ok: true as const, asset: mediaAssetForModel(updated) };
     } catch (error) {
       return { ok: false as const, error: { code: "MEDIA_MUTATION_FAILED", message: error instanceof Error ? error.message : "Media mutation failed" } };
     }
@@ -315,7 +358,10 @@ const deleteMediaMutationTool = (ownerKey: string, sessionId: string) => tool({
 const vaultSearchExecutionTool = tool({
   description: "Search Vault metadata only. Never returns passwords, OTP seeds, ciphertext, IVs, or authentication tags.",
   inputSchema: z.object({ query: z.string().trim().min(1).max(200) }).strict(),
-  execute: async ({ query }) => ({ ok: true as const, records: await searchVaultMetadata(query) }),
+  execute: async ({ query }) => {
+    const records = await searchVaultMetadata(query);
+    return { ok: true as const, records: records.map(vaultRecordForModel) };
+  },
 });
 
 const vaultMutationTool = (ownerKey: string, sessionId: string, operation: "updateMetadata" | "delete") => tool({
@@ -332,7 +378,7 @@ const vaultMutationTool = (ownerKey: string, sessionId: string, operation: "upda
         url: input.url,
         notes: input.notes,
       });
-      return { ok: true as const, record: updated };
+      return { ok: true as const, record: vaultRecordForModel(updated) };
     } catch (error) {
       return { ok: false as const, error: { code: "VAULT_MUTATION_FAILED", message: error instanceof Error ? error.message : "Vault mutation failed" } };
     }
@@ -486,7 +532,7 @@ export async function POST(request: Request) {
   const result = streamText({
     model: google(process.env.GEMINI_MODEL ?? "gemini-3.5-flash-lite"),
     system: `${agent.system}\n\n${nowContext}\nAlways interpret and answer date/time in Asia/Bangkok (UTC+07:00). If a tool returns ok=false, explain its exact error briefly and never claim success.${visionContext}${payload.voiceMode ? "\n\nVoice mode: answer in Thai, naturally and very briefly (normally 1-2 sentences) unless essential detail is required." : ""}`,
-    messages: await convertToModelMessages(baseMessages),
+    messages: await convertToModelMessages(selectContextWindow(baseMessages)),
     tools: {
       ...(agent.selectedToolNames.includes("getSchedule") && { getSchedule: scheduleGetTool }),
       ...(agent.selectedToolNames.includes("createScheduleItem") && { createScheduleItem: scheduleCreateTool(ownerKey, session.id) }),

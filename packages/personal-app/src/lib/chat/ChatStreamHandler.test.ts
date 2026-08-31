@@ -17,6 +17,19 @@ describe("chat context window", () => {
     expect(JSON.stringify(context)).not.toContain("x".repeat(1_000));
     expect(JSON.stringify(context)).toContain("raw historical payload omitted");
   });
+
+  it("converts windowed messages with tool outputs to model messages", async () => {
+    const { convertToModelMessages } = await import("ai");
+    const testMessages = [
+      { id: "1", role: "user", parts: [{ type: "text", text: "ค้นหาโน้ต test" }] },
+      { id: "2", role: "assistant", parts: [{ type: "tool-searchNotes", toolCallId: "call-1", state: "output-available", input: { query: "test" }, output: { ok: true, notes: [{ id: "n1", title: "test note", content: "test content", tags: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }] } }] },
+      { id: "3", role: "user", parts: [{ type: "text", text: "มีกี่โน้ต" }] },
+    ] as UIMessage[];
+    const windowed = selectContextWindow(testMessages);
+    const converted = await convertToModelMessages(windowed);
+    expect(converted).toBeDefined();
+    expect(converted.length).toBeGreaterThan(0);
+  });
 });
 
 describe("confirmationDecision", () => {
