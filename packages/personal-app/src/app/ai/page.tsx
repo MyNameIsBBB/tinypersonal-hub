@@ -1,9 +1,9 @@
 "use client";
 
 import { useChat } from "@ai-sdk/react";
-import { AlertCircle, ArrowUp, Bot, CalendarPlus, CheckCircle2, ChevronDown, FileSearch, KeyRound, LoaderCircle, MessageSquare, Mic, MicOff, Paperclip, Plus, ShieldCheck, Trash2, Volume2, VolumeX, X } from "lucide-react";
+import { AlertCircle, ArrowUp, Bot, CalendarPlus, Check, CheckCircle2, ChevronDown, Copy, FileSearch, KeyRound, LoaderCircle, MessageSquare, Mic, MicOff, Paperclip, Plus, Search, ShieldCheck, Trash2, Volume2, VolumeX, X } from "lucide-react";
 import { getToolName, isToolUIPart, type FileUIPart, type UIMessage, type UIMessagePart } from "ai";
-import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import rehypeKatex from "rehype-katex";
 import remarkGfm from "remark-gfm";
@@ -37,6 +37,32 @@ function normalizeAssistantMath() {
   };
 }
 
+function CodeBlockWrapper({ children }: { children?: ReactNode }) {
+  const [copied, setCopied] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const copyCode = () => {
+    if (!containerRef.current) return;
+    const pre = containerRef.current.querySelector("pre");
+    const text = pre?.textContent ?? "";
+    void navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="code-block-container" ref={containerRef}>
+      <div className="code-block-header">
+        <button type="button" className="code-copy-btn" onClick={copyCode}>
+          {copied ? <Check size={13} /> : <Copy size={13} />}
+          <span>{copied ? "คัดลอกแล้ว" : "คัดลอกโค้ด"}</span>
+        </button>
+      </div>
+      <pre>{children}</pre>
+    </div>
+  );
+}
+
 function renderMessageParts(
   parts: UIMessagePart<any, any>[],
   onConfirmAction?: (actionId: string, approved: boolean) => void,
@@ -57,6 +83,7 @@ function renderMessageParts(
             rehypePlugins={[rehypeKatex]}
             components={{
               a: ({ children, ...props }) => <a {...props} target="_blank" rel="noreferrer">{children}</a>,
+              pre: ({ children }) => <CodeBlockWrapper>{children}</CodeBlockWrapper>,
             }}
           >
             {part.text}
@@ -431,9 +458,60 @@ export default function AIPage() {
     }
   }, [codingJob?.status, codingJobEvents.length]);
 
+  const [searchQuery, setSearchQuery] = useState("");
+
   const orderedSessions = useMemo(() => {
     return [...sessions].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
   }, [sessions]);
+
+  const filteredSessions = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return orderedSessions;
+    return orderedSessions.filter((s) => (s.title || "บทสนทนาใหม่").toLowerCase().includes(q));
+  }, [orderedSessions, searchQuery]);
+
+  const groupedSessions = useMemo(() => {
+    const todayStart = new Date().setHours(0, 0, 0, 0);
+    const yesterdayStart = todayStart - 86_400_000;
+    const weekStart = todayStart - 6 * 86_400_000;
+
+    const groups: { today: ChatSessionSummary[]; yesterday: ChatSessionSummary[]; week: ChatSessionSummary[]; older: ChatSessionSummary[] } = {
+      today: [], yesterday: [], week: [], older: [],
+    };
+
+    for (const session of filteredSessions) {
+      const time = new Date(session.updatedAt).getTime();
+      if (time >= todayStart) groups.today.push(session);
+      else if (time >= yesterdayStart) groups.yesterday.push(session);
+      else if (time >= weekStart) groups.week.push(session);
+      else groups.older.push(session);
+    }
+    return groups;
+  }, [filteredSessions]);
+
+  const renderSessionItem = (session: ChatSessionSummary) => (
+    <div className={`sidebar-chat-item ${session.id === sessionId ? "active" : ""}`} key={session.id}>
+      <button type="button" className="sidebar-chat-link" onClick={() => void openSession(session.id)}>
+        <MessageSquare size={14} />
+        <span>{session.title || "บทสนทนาใหม่"}</span>
+      </button>
+      {session.title !== GENERAL_CHAT_TITLE && (
+        <button
+          type="button"
+          className="sidebar-chat-delete"
+          aria-label="ลบบทสนทนา"
+          disabled={deleteBusySessionId === session.id}
+          onClick={(e) => {
+            e.stopPropagation();
+            setDeleteSessionTarget(session);
+          }}
+          title="ลบบทสนทนา"
+        >
+          <Trash2 size={13} />
+        </button>
+      )}
+    </div>
+  );
 
   const sidebarExtraContent = (
     <div className="sidebar-chat-section">
@@ -443,30 +521,52 @@ export default function AIPage() {
           <Plus size={14} /> <span>แชตใหม่</span>
         </button>
       </div>
+      <div className="sidebar-search-wrap">
+        <Search size={13} />
+        <input
+          type="text"
+          placeholder="ค้นหาบทสนทนา..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="sidebar-search-input"
+        />
+        {searchQuery && (
+          <button type="button" className="sidebar-search-clear" onClick={() => setSearchQuery("")} title="ล้างการค้นหา">
+            <X size={12} />
+          </button>
+        )}
+      </div>
       <div className="sidebar-chat-list">
-        {orderedSessions.map((session) => (
-          <div className={`sidebar-chat-item ${session.id === sessionId ? "active" : ""}`} key={session.id}>
-            <button type="button" className="sidebar-chat-link" onClick={() => void openSession(session.id)}>
-              <MessageSquare size={14} />
-              <span>{session.title || "บทสนทนาใหม่"}</span>
-            </button>
-            {session.title !== GENERAL_CHAT_TITLE && (
-              <button
-                type="button"
-                className="sidebar-chat-delete"
-                aria-label="ลบบทสนทนา"
-                disabled={deleteBusySessionId === session.id}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setDeleteSessionTarget(session);
-                }}
-                title="ลบบทสนทนา"
-              >
-                <Trash2 size={13} />
-              </button>
+        {filteredSessions.length === 0 ? (
+          <div className="sidebar-group-title">ไม่พบบทสนทนา</div>
+        ) : (
+          <>
+            {groupedSessions.today.length > 0 && (
+              <div className="sidebar-group">
+                <span className="sidebar-group-title">วันนี้</span>
+                {groupedSessions.today.map(renderSessionItem)}
+              </div>
             )}
-          </div>
-        ))}
+            {groupedSessions.yesterday.length > 0 && (
+              <div className="sidebar-group">
+                <span className="sidebar-group-title">เมื่อวานนี้</span>
+                {groupedSessions.yesterday.map(renderSessionItem)}
+              </div>
+            )}
+            {groupedSessions.week.length > 0 && (
+              <div className="sidebar-group">
+                <span className="sidebar-group-title">7 วันที่ผ่านมา</span>
+                {groupedSessions.week.map(renderSessionItem)}
+              </div>
+            )}
+            {groupedSessions.older.length > 0 && (
+              <div className="sidebar-group">
+                <span className="sidebar-group-title">เก่ากว่านั้น</span>
+                {groupedSessions.older.map(renderSessionItem)}
+              </div>
+            )}
+          </>
+        )}
       </div>
     </div>
   );

@@ -1,8 +1,9 @@
 import { google } from "@ai-sdk/google";
-import { createNote, createPendingAction, delegateCodingTask, deleteChatSession, deleteMediaAsset, deleteNote, deleteVaultSecret, ensureDailyGeneralChat, executeAllPendingActions, executeLatestPendingAction, getOrCreateChatSession, getScheduleByRange, listActiveRoutines, listChatSessions, listMediaAssets, loadChatMessages, recordAudit, saveAssistantChatMessageIfCurrent, scrapeWebPage, searchNotes, searchVaultMetadata, searchWeb, updateMediaAssetLinks, updateNote, updateVaultMetadata } from "@tinypersonal/backend-api";
+import { createNote, createPendingAction, deleteChatSession, deleteMediaAsset, deleteNote, deleteVaultSecret, ensureDailyGeneralChat, executeAllPendingActions, executeLatestPendingAction, generateAndUpdateSessionTitle, getOrCreateChatSession, getScheduleByRange, listActiveRoutines, listChatSessions, listMediaAssets, loadChatMessages, recordAudit, saveAssistantChatMessageIfCurrent, scrapeWebPage, searchNotes, searchVaultMetadata, searchWeb, updateMediaAssetLinks, updateNote, updateVaultMetadata } from "@tinypersonal/backend-api";
 import { consumeStream, convertToModelMessages, createUIMessageStream, createUIMessageStreamResponse, isStepCount, streamText, tool, type UIMessage } from "ai";
 import { after } from "next/server";
 import { isValidSessionToken, SESSION_COOKIE } from "@/lib/serverAuth";
+import { checkRateLimit } from "@/lib/rateLimit";
 import { z } from "zod";
 import { bangkokNowContext, parseBangkokDateTimeInput } from "@/lib/chat/ContextBuilder";
 import { selectAgentTools } from "@/lib/chat/ToolOrchestrator";
@@ -501,6 +502,11 @@ export async function POST(request: Request) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const rateCheck = checkRateLimit(`chat:${ownerKey}`, 30, 60_000);
+  if (!rateCheck.success) {
+    return Response.json({ error: "ส่งคำสั่งถี่เกินไป กรุณารอสักครู่แล้วลองอีกครั้ง" }, { status: 429 });
+  }
+
   const parsed = await parseJson(request, chatRequestSchema); if ("response" in parsed) return parsed.response;
   const payload = parsed.data;
   const generalSession = await ensureDailyGeneralChat(ownerKey);
@@ -566,6 +572,7 @@ export async function POST(request: Request) {
       );
       if (responseMessage?.role === "assistant" && hasAnswer) {
         await saveAssistantChatMessageIfCurrent(ownerKey, session.id, triggeringUserMessage.id, responseMessage);
+        await generateAndUpdateSessionTitle(ownerKey, session.id);
       }
     } catch (error) {
       console.error("Failed to persist completed chat stream", error instanceof Error ? error.message : "Unknown error");
