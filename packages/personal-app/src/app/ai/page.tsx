@@ -34,7 +34,7 @@ function normalizeAssistantMath() {
   };
 }
 
-function renderMessageParts(parts: UIMessagePart<any, any>[], decide: (id: string, approved: boolean) => void) {
+function renderMessageParts(parts: UIMessagePart<any, any>[]) {
   const latestToolPartIndexByToolName = new Map<string, number>();
   parts.forEach((part, index) => {
     if (isToolUIPart(part)) {
@@ -80,13 +80,7 @@ function renderMessageParts(parts: UIMessagePart<any, any>[], decide: (id: strin
     if (part.state === "output-available") {
       const output = part.output as { ok?: boolean; error?: { message?: string }; confirmation?: { id?: string; summary?: string }; confirmationRequired?: boolean; status?: string } | undefined;
       if (output?.confirmation?.id && (output.confirmationRequired || output.status === "confirmation-required")) {
-        return (
-          <div className="tool-status confirmation" key={index}>
-            <span>{output.confirmation.summary ?? toolName} — ยืนยันไหมครับ?</span>
-            <button onClick={() => decide(output.confirmation!.id!, false)}>ยกเลิก</button>
-            <button onClick={() => decide(output.confirmation!.id!, true)}>ยืนยัน</button>
-          </div>
-        );
+        return <div className="tool-status confirmation" key={index}><span>{output.confirmation.summary ?? toolName} — รอคำสั่งของท่านครับ โปรดพิมพ์ “ยืนยัน” เพื่อเริ่ม หรือ “ยกเลิก” เพื่อยุติภารกิจ</span></div>;
       }
       if (output?.ok === false) return <div className="tool-status error" key={index}>เครื่องมือ {toolName} ขัดข้อง: {output.error?.message ?? "ไม่สามารถดึงข้อมูลได้"}</div>;
       return <div className="tool-status done" key={index}>ใช้เครื่องมือ {toolName} สำเร็จ</div>;
@@ -379,14 +373,6 @@ export default function AIPage() {
     } finally { setDeleteBusySessionId(null); }
   }
 
-  async function decideAction(id: string, approved: boolean) {
-    const response = await fetch(`/api/confirm/${encodeURIComponent(id)}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ approved }) });
-    if (!response.ok) {
-      setPersistenceError((await response.json() as { error?: string }).error ?? "ดำเนินการไม่สำเร็จ");
-      return;
-    }
-    setPersistenceError(null);
-  }
 
   const sidebarExtraContent = (
     <div className="sidebar-chat-section">
@@ -442,7 +428,7 @@ export default function AIPage() {
               messages.map((message) => (
                 <article className={`chat-message ${message.role}`} key={message.id}>
                   <div className="message-avatar">{message.role === "assistant" ? <Bot size={17} /> : "P"}</div>
-                  <div>{renderMessageParts(message.parts, (id, approved) => void decideAction(id, approved))}</div>
+                  <div>{renderMessageParts(message.parts)}</div>
                 </article>
               ))
             )}
