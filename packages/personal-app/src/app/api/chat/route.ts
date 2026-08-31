@@ -1,5 +1,5 @@
 import { google } from "@ai-sdk/google";
-import { createNote, createPendingAction, deleteChatSession, deleteMediaAsset, deleteNote, deleteVaultSecret, ensureDailyGeneralChat, executeLatestPendingAction, getOrCreateChatSession, getScheduleByRange, listActiveRoutines, listChatSessions, listMediaAssets, loadChatMessages, recordAudit, saveAssistantChatMessageIfCurrent, scrapeWebPage, searchNotes, searchVaultMetadata, searchWeb, updateMediaAssetLinks, updateNote, updateVaultMetadata } from "@tinypersonal/backend-api";
+import { createNote, createPendingAction, delegateCodingTask, deleteChatSession, deleteMediaAsset, deleteNote, deleteVaultSecret, ensureDailyGeneralChat, executeAllPendingActions, executeLatestPendingAction, getOrCreateChatSession, getScheduleByRange, listActiveRoutines, listChatSessions, listMediaAssets, loadChatMessages, recordAudit, saveAssistantChatMessageIfCurrent, scrapeWebPage, searchNotes, searchVaultMetadata, searchWeb, updateMediaAssetLinks, updateNote, updateVaultMetadata } from "@tinypersonal/backend-api";
 import { consumeStream, convertToModelMessages, createUIMessageStream, createUIMessageStreamResponse, isStepCount, streamText, tool, type UIMessage } from "ai";
 import { after } from "next/server";
 import { isValidSessionToken, SESSION_COOKIE } from "@/lib/serverAuth";
@@ -389,11 +389,19 @@ function resolveChatOwnerKey(request: Request): string | null {
 async function confirmationResponse(ownerKey: string, sessionId: string, userMessageId: string, approved: boolean) {
   let responseText: string;
   try {
-    const execution = await executeLatestPendingAction(ownerKey, sessionId, approved);
-    if (!execution) return null;
-    if (execution.denied) responseText = `รับทราบครับ ผมยุติคำสั่ง “${execution.action.summary}” แล้ว`;
-    else if (execution.action.toolName === "coding.delegateTask") responseText = `รับคำสั่งแล้วครับ ผมส่ง “${execution.action.summary}” เข้าคิว Codex แล้ว เมื่อ worker ดำเนินการและตรวจสอบเสร็จ ผมจะรายงานผลกลับมาในบทสนทนานี้ครับ`;
-    else responseText = `รับคำสั่งแล้วครับ ดำเนินการ “${execution.action.summary}” เรียบร้อย`;
+    const executions = await executeAllPendingActions(ownerKey, sessionId, approved);
+    if (executions.length === 0) return null;
+    if (executions.length === 1) {
+      const execution = executions[0];
+      if (execution.denied) responseText = `รับทราบครับ ผมยุติคำสั่ง “${execution.action.summary}” แล้ว`;
+      else if (execution.action.toolName === "coding.delegateTask") responseText = `รับคำสั่งแล้วครับ ผมส่ง “${execution.action.summary}” เข้าคิว Codex แล้ว เมื่อ worker ดำเนินการและตรวจสอบเสร็จ ผมจะรายงานผลกลับมาในบทสนทนานี้ครับ`;
+      else responseText = `รับคำสั่งแล้วครับ ดำเนินการ “${execution.action.summary}” เรียบร้อยแล้วครับ`;
+    } else {
+      const summaries = executions.map((e, index) => `${index + 1}. ${e.action.summary}`).join("\n");
+      responseText = approved
+        ? `รับคำสั่งแล้วครับ ดำเนินการเรียบร้อยแล้วทั้ง ${executions.length} รายการ:\n${summaries}`
+        : `รับทราบครับ ยุติคำสั่งเรียบร้อยแล้วทั้ง ${executions.length} รายการ:\n${summaries}`;
+    }
   } catch (error) {
     responseText = `ดำเนินการยืนยันไม่สำเร็จครับ: ${error instanceof Error ? error.message : "เกิดข้อผิดพลาดที่ไม่ทราบสาเหตุ"}`;
   }
