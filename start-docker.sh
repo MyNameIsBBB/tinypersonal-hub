@@ -22,7 +22,7 @@ done
 
 cd "$SCRIPT_DIR"
 
-if ! HOST_JARVIS_PROJECT_ROOT="${HOST_JARVIS_PROJECT_ROOT:-$SCRIPT_DIR}" "$SCRIPT_DIR/scripts/start-codex-worker.sh"; then
+if ! HOST_JARVIS_PROJECT_ROOT="${HOST_JARVIS_PROJECT_ROOT:-$HOME/codex-playground}" "$SCRIPT_DIR/scripts/start-codex-worker.sh"; then
   echo "Warning: Codex worker failed to start; continuing without coding worker." >&2
 fi
 
