@@ -57,7 +57,7 @@ export function latestUserText(messages: UIMessage[]) {
 
 export function confirmationDecision(text: string): boolean | null {
   const normalized = text.trim().toLowerCase().replace(/[.!?]+$/g, "").trim();
-  if (/^(ยืนยัน|ยืนยันเลย|ตกลง|โอเค|ได้เลย|เอาเลย|ทำเลย|confirm|yes|ok)(ครับ|ค่ะ|คะ)?$/u.test(normalized)) return true;
+  if (/^(ยืนยัน|ยืนยันเลย|ตกลง|โอเค|ได้เลย|เอาเลย|ทำเลย|จัดการ|ดำเนินการ|confirm|yes|ok)(ครับ|ค่ะ|คะ)?$/u.test(normalized)) return true;
   if (/^(ยกเลิก|ไม่ยืนยัน|ไม่เอา|ไม่ต้อง|cancel|no)(ครับ|ค่ะ|คะ)?$/u.test(normalized)) return false;
   return null;
 }
