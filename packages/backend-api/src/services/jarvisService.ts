@@ -30,9 +30,25 @@ export type CodingTaskResult =
   | { ok: true; data: { branch: string; logs: ExecutionLog[] } }
   | { ok: false; error: { code: "CODING_TASK_FAILED" | "INVALID_PROJECT_ROOT" | "INVALID_INPUT"; message: string }; data: { branch: string | null; logs: ExecutionLog[] } };
 
-function delegateToHostWorker(input: z.infer<typeof delegateCodingTaskSchema>, socketPath: string): Promise<CodingTaskResult> {
+export type ProgressCallback = (progress: { kind: "status" | "command" | "file" | "tool"; message: string }) => void;
+
+function delegateToHostWorker(
+  input: z.infer<typeof delegateCodingTaskSchema>,
+  socketPath: string,
+  onProgress?: ProgressCallback
+): Promise<CodingTaskResult> {
   return new Promise((resolveResult) => {
     const body = JSON.stringify(input);
+    let pending = "";
+    let resolved = false;
+
+    const safeResolve = (res: CodingTaskResult) => {
+      if (!resolved) {
+        resolved = true;
+        resolveResult(res);
+      }
+    };
+
     const workerRequest = request({
       socketPath,
       path: "/coding-task",
@@ -40,16 +56,42 @@ function delegateToHostWorker(input: z.infer<typeof delegateCodingTaskSchema>, s
       headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) },
       timeout: COMMAND_TIMEOUT_MS + 5_000,
     }, (response) => {
-      let raw = "";
       response.setEncoding("utf8");
-      response.on("data", (chunk) => { raw += chunk; });
+      response.on("data", (chunk) => {
+        pending += chunk;
+        const lines = pending.split(/\r?\n/);
+        pending = lines.pop() ?? "";
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          try {
+            const parsed = JSON.parse(line);
+            if (parsed.type === "progress" && parsed.progress && onProgress) {
+              onProgress(parsed.progress);
+            } else if (parsed.type === "result" && parsed.result) {
+              safeResolve(parsed.result);
+            }
+          } catch {}
+        }
+      });
       response.on("end", () => {
-        try { resolveResult(JSON.parse(raw) as CodingTaskResult); }
-        catch { resolveResult({ ok: false, error: { code: "CODING_TASK_FAILED", message: "Codex worker returned an invalid response" }, data: { branch: null, logs: [] } }); }
+        if (pending.trim()) {
+          try {
+            const parsed = JSON.parse(pending);
+            if (parsed.type === "result" && parsed.result) {
+              return safeResolve(parsed.result);
+            }
+            if ("ok" in parsed) {
+              return safeResolve(parsed as CodingTaskResult);
+            }
+          } catch {}
+        }
+        if (!resolved) {
+          safeResolve({ ok: false, error: { code: "CODING_TASK_FAILED", message: "Codex worker returned an incomplete response" }, data: { branch: null, logs: [] } });
+        }
       });
     });
     workerRequest.on("timeout", () => workerRequest.destroy(new Error("Codex worker timed out")));
-    workerRequest.on("error", (error) => resolveResult({ ok: false, error: { code: "CODING_TASK_FAILED", message: `Codex worker unavailable: ${error.message}` }, data: { branch: null, logs: [] } }));
+    workerRequest.on("error", (error) => safeResolve({ ok: false, error: { code: "CODING_TASK_FAILED", message: `Codex worker unavailable: ${error.message}` }, data: { branch: null, logs: [] } }));
     workerRequest.end(body);
   });
 }
@@ -66,13 +108,14 @@ async function run(executable: string, args: string[], cwd: string): Promise<Exe
   }
 }
 
-export async function delegateCodingTask(untrustedInput: unknown): Promise<CodingTaskResult> {
+export async function delegateCodingTask(untrustedInput: unknown, onProgress?: ProgressCallback): Promise<CodingTaskResult> {
   const parsed = delegateCodingTaskSchema.safeParse(untrustedInput);
   if (!parsed.success) return { ok: false, error: { code: "INVALID_INPUT", message: parsed.error.issues[0]?.message ?? "Invalid coding task" }, data: { branch: null, logs: [] } };
   const input = parsed.data;
   if (process.env.CODEX_WORKER_SOCKET) {
-    return delegateToHostWorker(input, process.env.CODEX_WORKER_SOCKET);
+    return delegateToHostWorker(input, process.env.CODEX_WORKER_SOCKET, onProgress);
   }
+  onProgress?.({ kind: "status", message: "เริ่ม Codex CLI และตรวจสอบ repository" });
   const projectRoot = resolve(process.env.JARVIS_PROJECT_ROOT ?? process.cwd());
   const logs: ExecutionLog[] = [];
   let branch: string | null = null;

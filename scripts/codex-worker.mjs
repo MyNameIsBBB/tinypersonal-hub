@@ -39,7 +39,11 @@ function safeProgress(raw) {
     const event = JSON.parse(raw);
     const item = event?.item;
     if (!item || !["item.started", "item.completed", "item.updated"].includes(event.type)) return null;
-    if (item.type === "reasoning") return event.type === "item.started" ? { kind: "status", message: "กำลังวิเคราะห์ขั้นตอนถัดไป" } : null;
+    if (item.type === "reasoning") {
+      const text = item.text || item.summary || item.content || item.reasoning;
+      const msg = text ? `กำลังวิเคราะห์: ${String(text).slice(0, 150)}` : "กำลังวิเคราะห์ขั้นตอนถัดไป";
+      return event.type === "item.started" ? { kind: "status", message: msg } : null;
+    }
     if (item.type === "command_execution") {
       const command = String(item.command ?? "command").replace(/(token|password|secret|authorization)=\S+/gi, "$1=<redacted>").slice(0, 240);
       return { kind: "command", message: `${event.type === "item.started" ? "กำลังรัน" : "รันเสร็จ"}: ${command}` };

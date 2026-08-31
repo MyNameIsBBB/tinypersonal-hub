@@ -1,9 +1,9 @@
 "use client";
 
 import { useChat } from "@ai-sdk/react";
-import { ArrowUp, Bot, CalendarPlus, FileSearch, KeyRound, LoaderCircle, MessageSquare, Mic, MicOff, Paperclip, Plus, ShieldCheck, Trash2, Volume2, VolumeX, X } from "lucide-react";
+import { AlertCircle, ArrowUp, Bot, CalendarPlus, CheckCircle2, ChevronDown, FileSearch, KeyRound, LoaderCircle, MessageSquare, Mic, MicOff, Paperclip, Plus, ShieldCheck, Trash2, Volume2, VolumeX, X } from "lucide-react";
 import { getToolName, isToolUIPart, type FileUIPart, type UIMessage, type UIMessagePart } from "ai";
-import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import ReactMarkdown from "react-markdown";
 import rehypeKatex from "rehype-katex";
 import remarkGfm from "remark-gfm";
@@ -17,7 +17,8 @@ const suggestions = [
   { icon: KeyRound, text: "ขอลิงก์เข้า GitHub จาก Vault" },
 ];
 
-type CodingJobProgress = { status: string; attempts: number; createdAt: string; updatedAt: string; completedAt: string | null; error: string | null };
+type CodingJobProgressEvent = { at: string; kind: "status" | "command" | "file" | "tool"; message: string };
+type CodingJobProgress = { id: string; status: string; attempts: number; progressJson: string; createdAt: string; updatedAt: string; completedAt: string | null; error: string | null };
 type ChatSessionSummary = { id: string; title: string | null; updatedAt: string; _count: { messages: number } };
 const GENERAL_CHAT_TITLE = "แชททั่วไป";
 
@@ -123,7 +124,16 @@ export default function AIPage() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [sessions, setSessions] = useState<ChatSessionSummary[]>([]);
   const [codingJob, setCodingJob] = useState<CodingJobProgress | null>(null);
+  const [showCodexProgress, setShowCodexProgress] = useState(false);
   const [deleteBusySessionId, setDeleteBusySessionId] = useState<string | null>(null);
+
+  const codingJobEvents = useMemo(() => {
+    if (!codingJob?.progressJson) return [];
+    try { return JSON.parse(codingJob.progressJson) as CodingJobProgressEvent[]; }
+    catch { return []; }
+  }, [codingJob?.progressJson]);
+
+  const latestProgressEvent = codingJobEvents.at(-1);
 
   async function send(text: string, fromVoice = false) {
     const clean = text.trim();
@@ -386,9 +396,10 @@ export default function AIPage() {
       if (!cancelled) setCodingJob(data.job);
     };
     void poll();
-    const timer = window.setInterval(() => void poll(), 3000);
+    const interval = codingJob?.status === "RUNNING" || codingJob?.status === "QUEUED" ? 1500 : 4000;
+    const timer = window.setInterval(() => void poll(), interval);
     return () => { cancelled = true; window.clearInterval(timer); };
-  }, [historyReady, sessionId]);
+  }, [historyReady, sessionId, codingJob?.status]);
 
   const sidebarExtraContent = (
     <div className="sidebar-chat-section">
@@ -431,7 +442,57 @@ export default function AIPage() {
       <div className="ai-chat-layout">
         <section className="ai-workspace">
           <div className="chat-thread" aria-live="polite" ref={threadRef}>
-            {codingJob && <div className={`tool-status ${codingJob.status === "FAILED" ? "error" : codingJob.status === "SUCCEEDED" ? "done" : "confirmation"}`}><LoaderCircle size={14} /> Codex: {codingJob.status === "QUEUED" ? "กำลังจัดคิว" : codingJob.status === "RUNNING" ? `กำลังทำงาน รอบที่ ${codingJob.attempts}` : codingJob.status === "SUCCEEDED" ? "เสร็จสิ้นแล้ว" : "ล้มเหลว — ตรวจสอบรายละเอียดในข้อความ"}</div>}
+            {codingJob && (
+              <div className={`codex-status-card ${codingJob.status.toLowerCase()}`}>
+                <div className="codex-status-header">
+                  <div className="codex-status-main">
+                    {codingJob.status === "QUEUED" || codingJob.status === "RUNNING" ? (
+                      <LoaderCircle size={15} className="spin" />
+                    ) : codingJob.status === "SUCCEEDED" ? (
+                      <CheckCircle2 size={15} className="icon-success" />
+                    ) : (
+                      <AlertCircle size={15} className="icon-error" />
+                    )}
+                    <div className="codex-status-info">
+                      <span className="codex-title">
+                        Codex: {codingJob.status === "QUEUED" ? "กำลังจัดคิว" : codingJob.status === "RUNNING" ? (latestProgressEvent?.message ?? `กำลังทำงาน (รอบที่ ${codingJob.attempts})`) : codingJob.status === "SUCCEEDED" ? "ทำงานเสร็จสิ้นแล้ว" : "ล้มเหลว — ตรวจสอบรายละเอียดในข้อความ"}
+                      </span>
+                      {codingJob.status === "RUNNING" && latestProgressEvent && (
+                        <span className="codex-timestamp">
+                          {new Date(latestProgressEvent.at).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  {codingJobEvents.length > 0 && (
+                    <button
+                      type="button"
+                      className="codex-toggle-btn"
+                      onClick={() => setShowCodexProgress((prev) => !prev)}
+                    >
+                      {showCodexProgress ? "ซ่อนขั้นตอน" : `ดูขั้นตอน (${codingJobEvents.length})`}
+                      <ChevronDown size={14} className={showCodexProgress ? "rotated" : ""} />
+                    </button>
+                  )}
+                </div>
+
+                {showCodexProgress && codingJobEvents.length > 0 && (
+                  <div className="codex-progress-log">
+                    {codingJobEvents.map((evt, idx) => (
+                      <div className="codex-log-item" key={idx}>
+                        <span className="log-kind-badge" data-kind={evt.kind}>
+                          {evt.kind === "command" ? "💻" : evt.kind === "file" ? "📝" : evt.kind === "tool" ? "🛠️" : "🧠"}
+                        </span>
+                        <span className="log-message">{evt.message}</span>
+                        <span className="log-time">
+                          {new Date(evt.at).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
             {messages.length === 0 ? (
               <div className="ai-suggestions">
                 {suggestions.map(({ icon: Icon, text }) => (

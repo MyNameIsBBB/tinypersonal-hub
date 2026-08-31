@@ -1,4 +1,4 @@
-import { claimCodingJob, completeCodingJob, delegateCodingTask, getLatestCodingJob, saveChatMessage, sendWebPushNotification } from "@tinypersonal/backend-api";
+import { claimCodingJob, completeCodingJob, delegateCodingTask, getLatestCodingJob, saveChatMessage, sendWebPushNotification, updateCodingJobProgress } from "@tinypersonal/backend-api";
 import { timingSafeEqual } from "node:crypto";
 
 export const maxDuration = 1800;
@@ -27,7 +27,9 @@ export async function POST(request: Request) {
   let responseText: string;
   let result: Awaited<ReturnType<typeof delegateCodingTask>> | undefined;
   try {
-    result = await delegateCodingTask(JSON.parse(job.inputJson));
+    result = await delegateCodingTask(JSON.parse(job.inputJson), (progress) => {
+      void updateCodingJobProgress(job.id, progress);
+    });
     ok = result.ok;
     if (result.ok) {
       const finalLog = result.data.logs.at(-1);
