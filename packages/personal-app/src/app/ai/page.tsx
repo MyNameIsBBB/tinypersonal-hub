@@ -431,6 +431,7 @@ export default function AIPage() {
       <div className="ai-chat-layout">
         <section className="ai-workspace">
           <div className="chat-thread" aria-live="polite" ref={threadRef}>
+            {codingJob && <div className={`tool-status ${codingJob.status === "FAILED" ? "error" : codingJob.status === "SUCCEEDED" ? "done" : "confirmation"}`}><LoaderCircle size={14} /> Codex: {codingJob.status === "QUEUED" ? "กำลังจัดคิว" : codingJob.status === "RUNNING" ? `กำลังทำงาน รอบที่ ${codingJob.attempts}` : codingJob.status === "SUCCEEDED" ? "เสร็จสิ้นแล้ว" : "ล้มเหลว — ตรวจสอบรายละเอียดในข้อความ"}</div>}
             {messages.length === 0 ? (
               <div className="ai-suggestions">
                 {suggestions.map(({ icon: Icon, text }) => (
@@ -442,7 +443,6 @@ export default function AIPage() {
               </div>
             ) : (
               <>
-                {codingJob && (codingJob.status === "QUEUED" || codingJob.status === "RUNNING") && <div className="tool-status confirmation"><LoaderCircle size={14} /> {codingJob.status === "QUEUED" ? "Jarvis กำลังจัดคิว Codex…" : `Codex กำลังทำงาน (รอบที่ ${codingJob.attempts})…`}</div>}
               {messages.map((message) => (
                 <article className={`chat-message ${message.role}`} key={message.id}>
                   <div className="message-avatar">{message.role === "assistant" ? <Bot size={17} /> : "P"}</div>
