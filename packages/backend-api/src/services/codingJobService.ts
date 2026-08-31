@@ -25,10 +25,3 @@ export async function completeCodingJob(id: string, outcome: { ok: boolean; resu
       : { status: outcome.ok ? "SUCCEEDED" : "FAILED", resultJson: outcome.result === undefined ? null : JSON.stringify(outcome.result), error: outcome.error?.slice(0, 4_000), leaseUntil: null, completedAt: new Date() } });
   });
 }
-export async function getLatestCodingJob(ownerKey: string, sessionId: string) {
-  return prisma.codingJob.findFirst({
-    where: { ownerKey, sessionId },
-    orderBy: { createdAt: "desc" },
-    select: { id: true, status: true, attempts: true, createdAt: true, updatedAt: true, completedAt: true, error: true },
-  });
-}

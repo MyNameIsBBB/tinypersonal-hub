@@ -17,7 +17,6 @@ const suggestions = [
   { icon: KeyRound, text: "ขอลิงก์เข้า GitHub จาก Vault" },
 ];
 
-type CodingJobProgress = { id: string; status: "QUEUED" | "RUNNING" | "SUCCEEDED" | "FAILED"; attempts: number; createdAt: string; updatedAt: string; completedAt: string | null; error: string | null };
 type ChatSessionSummary = { id: string; title: string | null; updatedAt: string; _count: { messages: number } };
 const GENERAL_CHAT_TITLE = "แชททั่วไป";
 
@@ -121,8 +120,6 @@ export default function AIPage() {
   const generalCycleRef = useRef(new Date(Date.now() - 3_600_000).toISOString().slice(0, 10));
   const [historyReady, setHistoryReady] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
-  const [codingJob, setCodingJob] = useState<CodingJobProgress | null>(null);
-  const previousCodingJobStatus = useRef<string | null>(null);
   const [sessions, setSessions] = useState<ChatSessionSummary[]>([]);
   const [deleteBusySessionId, setDeleteBusySessionId] = useState<string | null>(null);
 
@@ -343,24 +340,6 @@ export default function AIPage() {
       const general = sessions.find(({ title }) => title === GENERAL_CHAT_TITLE);
       if (general && general.id === sessionId) void openSession(general.id);
     }, 60_000);
-  useEffect(() => {
-    if (!historyReady || !sessionId) return;
-    let cancelled = false;
-    const refreshJob = async () => {
-      const response = await fetch(`/api/jobs/coding?sessionId=${encodeURIComponent(sessionId)}`, { cache: "no-store" });
-      if (!response.ok || cancelled) return;
-      const data = await response.json() as { job: CodingJobProgress | null };
-      if (cancelled) return;
-      setCodingJob(data.job);
-      const wasActive = previousCodingJobStatus.current === "QUEUED" || previousCodingJobStatus.current === "RUNNING";
-      previousCodingJobStatus.current = data.job?.status ?? null;
-      if (wasActive && (data.job?.status === "SUCCEEDED" || data.job?.status === "FAILED") && status === "ready") void openSession(sessionId);
-    };
-    void refreshJob();
-    const timer = window.setInterval(() => void refreshJob(), 2500);
-    return () => { cancelled = true; window.clearInterval(timer); };
-  }, [historyReady, sessionId, status]);
-
     return () => window.clearInterval(timer);
   }, [sessionId, sessions, status]);
 
@@ -422,7 +401,6 @@ export default function AIPage() {
                 }}
                 title="ลบบทสนทนา"
               >
-            {codingJob && (codingJob.status === "QUEUED" || codingJob.status === "RUNNING") && <div className="coding-progress"><LoaderCircle size={15} /><div><strong>{codingJob.status === "QUEUED" ? "Jarvis กำลังจัดคิว Codex" : "Codex กำลังทำงาน"}</strong><span>{codingJob.status === "QUEUED" ? "กำลังรอ worker รับภารกิจ" : `กำลังตรวจสอบและดำเนินภารกิจ · รอบที่ ${codingJob.attempts}`}</span></div></div>}
                 <Trash2 size={13} />
               </button>
             )}
