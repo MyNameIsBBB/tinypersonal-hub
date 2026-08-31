@@ -80,9 +80,12 @@ export async function searchWeb(query: string, count = 5): Promise<WebSearchResu
   const url = new URL("/search", baseUrl);
   url.searchParams.set("q", query);
   url.searchParams.set("format", "json");
-  url.searchParams.set("language", "th-TH");
+  url.searchParams.set("language", "auto");
   url.searchParams.set("safesearch", "1");
-  const response = await fetch(url, { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(12_000) });
+  const response = await fetch(url, {
+    headers: { Accept: "application/json", "User-Agent": "TinyPersonal-Hub/1.0" },
+    signal: AbortSignal.timeout(15_000),
+  });
   if (!response.ok) throw new Error(`SearXNG returned ${response.status}`);
   const payload = await response.json() as { results?: Array<{ title?: string; url?: string; content?: string }> };
   return (payload.results ?? []).slice(0, Math.max(1, Math.min(count, 10))).flatMap((item) => item.title && item.url

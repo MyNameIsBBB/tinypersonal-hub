@@ -201,6 +201,10 @@ export default function AIPage() {
     setAttachments([]);
     if (imageInputRef.current) imageInputRef.current.value = "";
     registerChatTask(sessionId, message.id);
+    setSessions((current) => {
+      const nowStr = new Date().toISOString();
+      return current.map((s) => (s.id === sessionId ? { ...s, updatedAt: nowStr } : s));
+    });
     await sendMessage(message, { body: { voiceMode: fromVoice, sessionId } });
   }
 
@@ -427,6 +431,10 @@ export default function AIPage() {
     }
   }, [codingJob?.status, codingJobEvents.length]);
 
+  const orderedSessions = useMemo(() => {
+    return [...sessions].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+  }, [sessions]);
+
   const sidebarExtraContent = (
     <div className="sidebar-chat-section">
       <div className="sidebar-chat-header">
@@ -436,7 +444,7 @@ export default function AIPage() {
         </button>
       </div>
       <div className="sidebar-chat-list">
-        {sessions.map((session) => (
+        {orderedSessions.map((session) => (
           <div className={`sidebar-chat-item ${session.id === sessionId ? "active" : ""}`} key={session.id}>
             <button type="button" className="sidebar-chat-link" onClick={() => void openSession(session.id)}>
               <MessageSquare size={14} />
