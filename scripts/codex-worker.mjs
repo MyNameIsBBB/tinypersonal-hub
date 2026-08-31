@@ -67,8 +67,7 @@ function runCodex(args, emit) {
     child.stdout.setEncoding("utf8"); child.stderr.setEncoding("utf8");
     child.stdout.on("data", (chunk) => {
       stdout = (stdout + chunk).slice(-maxOutput); pending += chunk;
-      const lines = pending.split(/\r?
-/); pending = lines.pop() ?? "";
+      const lines = pending.split(/\r?\n/); pending = lines.pop() ?? "";
       for (const line of lines) { const progress = safeProgress(line); if (progress) emit(progress); }
     });
     child.stderr.on("data", (chunk) => { stderr = (stderr + chunk).slice(-maxOutput); });
