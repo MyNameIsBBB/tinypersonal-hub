@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { chmod, mkdir, rm } from "node:fs/promises";
 import { createServer } from "node:http";
 import { dirname, resolve } from "node:path";
@@ -34,7 +34,46 @@ async function run(program, args) {
   }
 }
 
-async function executeTask(input) {
+function safeProgress(raw) {
+  try {
+    const event = JSON.parse(raw);
+    const item = event?.item;
+    if (!item || !["item.started", "item.completed", "item.updated"].includes(event.type)) return null;
+    if (item.type === "reasoning") return event.type === "item.started" ? { kind: "status", message: "กำลังวิเคราะห์ขั้นตอนถัดไป" } : null;
+    if (item.type === "command_execution") {
+      const command = String(item.command ?? "command").replace(/(token|password|secret|authorization)=\S+/gi, "$1=<redacted>").slice(0, 240);
+      return { kind: "command", message: `${event.type === "item.started" ? "กำลังรัน" : "รันเสร็จ"}: ${command}` };
+    }
+    if (item.type === "file_change") {
+      const paths = Array.isArray(item.changes) ? item.changes.map((change) => change?.path).filter(Boolean).slice(0, 4).join(", ") : "ไฟล์ใน workspace";
+      return { kind: "file", message: `${event.type === "item.started" ? "กำลังแก้ไข" : "แก้ไขแล้ว"}: ${paths}` };
+    }
+    if (item.type === "mcp_tool_call") return { kind: "tool", message: `กำลังใช้เครื่องมือ: ${String(item.tool ?? item.name ?? "tool").slice(0, 120)}` };
+    if (item.type === "web_search") return { kind: "tool", message: "กำลังค้นข้อมูลที่เกี่ยวข้อง" };
+    if (item.type === "agent_message") return event.type === "item.completed" ? { kind: "status", message: "กำลังสรุปและตรวจสอบผลลัพธ์" } : null;
+  } catch {}
+  return null;
+}
+
+function runCodex(args, emit) {
+  return new Promise((resolveRun, rejectRun) => {
+    const child = spawn(codexExecutable, args, { cwd: projectRoot, windowsHide: true });
+    let stdout = ""; let stderr = ""; let pending = "";
+    const timer = setTimeout(() => child.kill("SIGTERM"), timeout);
+    child.stdout.setEncoding("utf8"); child.stderr.setEncoding("utf8");
+    child.stdout.on("data", (chunk) => {
+      stdout = (stdout + chunk).slice(-maxOutput); pending += chunk;
+      const lines = pending.split(/\r?
+/); pending = lines.pop() ?? "";
+      for (const line of lines) { const progress = safeProgress(line); if (progress) emit(progress); }
+    });
+    child.stderr.on("data", (chunk) => { stderr = (stderr + chunk).slice(-maxOutput); });
+    child.once("error", rejectRun);
+    child.once("close", (code) => { clearTimeout(timer); const log = { command: `${codexExecutable} exec --json`, stdout, stderr, exitCode: code ?? 1 }; code === 0 ? resolveRun(log) : rejectRun(Object.assign(new Error(`Codex exited with code ${code}`), { log })); });
+  });
+}
+
+async function executeTask(input, emit = () => {}) {
   const logs = [];
   let branch = null;
   const execute = async (program, args) => {
@@ -67,7 +106,8 @@ Required workflow:
 7. Summarize the branch, changed files, tests/build, commit, and push status.
 
 Stay within this repository. Never expose secrets or modify unrelated files.`;
-    await execute(codexExecutable, ["--ask-for-approval", "never", "--sandbox", "workspace-write", "--cd", projectRoot, "exec", "--json", instruction]);
+    emit({ kind: "status", message: "เริ่ม Codex CLI และตรวจสอบ repository" });
+    logs.push(await runCodex(["--ask-for-approval", "never", "--sandbox", "workspace-write", "--cd", projectRoot, "exec", "--json", instruction], emit));
     branch = (await execute("git", ["branch", "--show-current"])).stdout.trim() || input.branchName || "HEAD";
     return { ok: true, data: { branch, logs } };
   } catch (error) {
@@ -97,9 +137,10 @@ const server = createServer(async (request, response) => {
     response.end(JSON.stringify({ ok: false, error: { code: "INVALID_INPUT", message: "Invalid coding task" }, data: { branch: null, logs: [] } }));
     return;
   }
-  const result = await executeTask(input);
-  response.writeHead(result.ok ? 200 : 500, { "Content-Type": "application/json" });
-  response.end(JSON.stringify(result));
+  response.writeHead(200, { "Content-Type": "application/x-ndjson", "Cache-Control": "no-store" });
+  const emit = (progress) => response.write(JSON.stringify({ type: "progress", progress }) + "\n");
+  const result = await executeTask(input, emit);
+  response.end(JSON.stringify({ type: "result", result }) + "\n");
 });
 server.listen(socketPath, async () => {
   await chmod(socketPath, 0o666);

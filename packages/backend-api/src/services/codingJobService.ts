@@ -25,4 +25,16 @@ export async function completeCodingJob(id: string, outcome: { ok: boolean; resu
       : { status: outcome.ok ? "SUCCEEDED" : "FAILED", resultJson: outcome.result === undefined ? null : JSON.stringify(outcome.result), error: outcome.error?.slice(0, 4_000), leaseUntil: null, completedAt: new Date() } });
   });
 }
-export async function getLatestCodingJob(ownerKey: string, sessionId: string) { return prisma.codingJob.findFirst({ where: { ownerKey, sessionId }, orderBy: { createdAt: "desc" }, select: { id: true, status: true, attempts: true, createdAt: true, updatedAt: true, completedAt: true, error: true } }); }
+export type CodingJobProgressEvent = { at: string; kind: "status" | "command" | "file" | "tool"; message: string };
+
+export async function updateCodingJobProgress(id: string, event: Omit<CodingJobProgressEvent, "at">) {
+  return prisma.$transaction(async (tx) => {
+    const job = await tx.codingJob.findUniqueOrThrow({ where: { id }, select: { progressJson: true } });
+    let progress: CodingJobProgressEvent[] = [];
+    try { progress = JSON.parse(job.progressJson) as CodingJobProgressEvent[]; } catch { progress = []; }
+    progress.push({ ...event, at: new Date().toISOString() });
+    return tx.codingJob.update({ where: { id }, data: { progressJson: JSON.stringify(progress.slice(-20)) } });
+  });
+}
+
+export async function getLatestCodingJob(ownerKey: string, sessionId: string) { return prisma.codingJob.findFirst({ where: { ownerKey, sessionId }, orderBy: { createdAt: "desc" }, select: { id: true, status: true, attempts: true, progressJson: true, createdAt: true, updatedAt: true, completedAt: true, error: true } }); }

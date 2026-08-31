@@ -214,6 +214,7 @@ model CodingJob {
   attempts      Int      @default(0)
   leaseUntil    DateTime?
   resultJson    String?
+  progressJson  String   @default("[]")
   error         String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt

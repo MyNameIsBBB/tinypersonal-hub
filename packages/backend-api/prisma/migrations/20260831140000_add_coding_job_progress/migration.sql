@@ -1,0 +1,1 @@
+ALTER TABLE "CodingJob" ADD COLUMN "progressJson" TEXT NOT NULL DEFAULT '[]';
