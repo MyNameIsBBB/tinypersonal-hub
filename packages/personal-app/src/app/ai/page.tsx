@@ -343,6 +343,23 @@ export default function AIPage() {
       const general = sessions.find(({ title }) => title === GENERAL_CHAT_TITLE);
       if (general && general.id === sessionId) void openSession(general.id);
     }, 60_000);
+  useEffect(() => {
+    if (!historyReady || !sessionId) return;
+    let cancelled = false;
+    const refreshJob = async () => {
+      const response = await fetch(`/api/jobs/coding?sessionId=${encodeURIComponent(sessionId)}`, { cache: "no-store" });
+      if (!response.ok || cancelled) return;
+      const data = await response.json() as { job: CodingJobProgress | null };
+      if (cancelled) return;
+      setCodingJob(data.job);
+      const wasActive = previousCodingJobStatus.current === "QUEUED" || previousCodingJobStatus.current === "RUNNING";
+      previousCodingJobStatus.current = data.job?.status ?? null;
+      if (wasActive && (data.job?.status === "SUCCEEDED" || data.job?.status === "FAILED") && status === "ready") void openSession(sessionId);
+    };
+    void refreshJob();
+    const timer = window.setInterval(() => void refreshJob(), 2500);
+    return () => { cancelled = true; window.clearInterval(timer); };
+  }, [historyReady, sessionId, status]);
 
     return () => window.clearInterval(timer);
   }, [sessionId, sessions, status]);
@@ -363,24 +380,6 @@ export default function AIPage() {
     const approved = window.confirm(`ลบบทสนทนา “${target.title || "บทสนทนาใหม่"}” ใช่ไหม?`);
     if (!approved) return;
     setDeleteBusySessionId(targetSessionId);
-  useEffect(() => {
-    if (!historyReady || !sessionId) return;
-    let cancelled = false;
-    const refreshJob = async () => {
-      const response = await fetch(`/api/jobs/coding?sessionId=${encodeURIComponent(sessionId)}`, { cache: "no-store" });
-      if (!response.ok || cancelled) return;
-      const data = await response.json() as { job: CodingJobProgress | null };
-      if (cancelled) return;
-      setCodingJob(data.job);
-      const wasActive = previousCodingJobStatus.current === "QUEUED" || previousCodingJobStatus.current === "RUNNING";
-      previousCodingJobStatus.current = data.job?.status ?? null;
-      if (wasActive && (data.job?.status === "SUCCEEDED" || data.job?.status === "FAILED") && status === "ready") void openSession(sessionId);
-    };
-    void refreshJob();
-    const timer = window.setInterval(() => void refreshJob(), 2500);
-    return () => { cancelled = true; window.clearInterval(timer); };
-  }, [historyReady, sessionId, status]);
-
     try {
       const response = await fetch(`/api/chat?sessionId=${encodeURIComponent(targetSessionId)}`, { method: "DELETE" });
       const result = await response.json().catch(() => ({})) as { error?: string };
