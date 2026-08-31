@@ -480,6 +480,10 @@ button { color: inherit; }
 .jarvis-split.browser-open .jarvis-core { max-width: 40%; flex-basis: 40%; }
 .jarvis-split.browser-open .jarvis-browser { max-width: 60%; flex-basis: 60%; visibility: visible; }
 
+.background-chat-alert { position: fixed; right: 18px; bottom: max(18px, env(safe-area-inset-bottom)); z-index: 75; display: flex; max-width: min(430px, calc(100vw - 28px)); align-items: center; gap: 9px; border: 1px solid #d8bd89; border-radius: 13px; background: #fff9ed; padding: 11px 12px; color: #7a5826; box-shadow: 0 12px 40px rgba(63,47,23,.18); }
+.background-chat-alert a { overflow: hidden; flex: 1; color: #4f463b; font-size: 12px; font-weight: 700; text-decoration: none; text-overflow: ellipsis; white-space: nowrap; }
+.background-chat-alert button { display: grid; width: 28px; height: 28px; place-items: center; border: 0; border-radius: 7px; background: transparent; color: #786c5d; cursor: pointer; }
+
 @media (max-width: 1100px) {
   .workspace-grid { grid-template-columns: 1fr; }
   .workspace-grid.manage-open { grid-template-columns: 1fr; }

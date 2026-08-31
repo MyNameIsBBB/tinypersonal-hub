@@ -74,5 +74,8 @@ export async function retrieveToolNames(
   if ((selected.includes("updateRoutine") || selected.includes("deleteRoutine")) && allowed.has("getSchedule") && !selected.includes("getSchedule")) {
     selected.push("getSchedule");
   }
+  if ((selected.includes("updateNote") || selected.includes("deleteNote")) && allowed.has("searchNotes") && !selected.includes("searchNotes")) {
+    selected.push("searchNotes");
+  }
   return selected;
 }

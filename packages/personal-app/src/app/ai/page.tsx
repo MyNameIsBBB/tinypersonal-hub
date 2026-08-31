@@ -9,6 +9,7 @@ import rehypeKatex from "rehype-katex";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import { WorkspaceShell } from "@/components/WorkspaceShell";
+import { markChatSessionActive, registerChatTask } from "@/lib/chat/backgroundTasks";
 
 const suggestions = [
   { icon: CalendarPlus, text: "ตั้ง Routine วิ่งทุกวันจันทร์และพุธ 07:00 ถึงสิ้นเดือน" },
@@ -114,7 +115,7 @@ export default function AIPage() {
   const [voiceAvailable, setVoiceAvailable] = useState(false);
   const [persistenceError, setPersistenceError] = useState<string | null>(null);
   const [attachments, setAttachments] = useState<FileUIPart[]>([]);
-  const { messages, sendMessage, setMessages, status, error, clearError } = useChat({ id: "tinypersonal-b1" });
+  const { messages, sendMessage, setMessages, status, error, clearError, stop } = useChat({ id: "tinypersonal-b1" });
   const initialPromptSent = useRef(false);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const voiceRequestPending = useRef(false);
@@ -154,6 +155,7 @@ export default function AIPage() {
     }
     setAttachments([]);
     if (imageInputRef.current) imageInputRef.current.value = "";
+    registerChatTask(sessionId, message.id);
     await sendMessage(message, { body: { voiceMode: fromVoice, sessionId } });
   }
 
@@ -276,7 +278,9 @@ export default function AIPage() {
     let cancelled = false;
     const loadHistory = async () => {
       try {
-        const response = await fetch("/api/chat", { method: "GET", cache: "no-store" });
+        const requested = new URLSearchParams(window.location.search).get("sessionId");
+        const chatUrl = requested ? "/api/chat?sessionId=" + encodeURIComponent(requested) : "/api/chat";
+        const response = await fetch(chatUrl, { method: "GET", cache: "no-store" });
         if (!response.ok) return;
         const data = await response.json() as { sessionId?: string | null; sessions?: ChatSessionSummary[]; messages?: Parameters<typeof setMessages>[0] };
         if (!cancelled && Array.isArray(data.messages)) {
@@ -318,6 +322,7 @@ export default function AIPage() {
   }, [historyReady, messages.length, status]);
 
   async function openSession(nextSessionId: string) {
+    if (status === "submitted" || status === "streaming") stop();
     const response = await fetch(`/api/chat?sessionId=${encodeURIComponent(nextSessionId)}`, { cache: "no-store" });
     if (!response.ok) return;
     const data = await response.json() as { sessionId: string; messages: Parameters<typeof setMessages>[0] };
@@ -325,6 +330,13 @@ export default function AIPage() {
     setSessionId(data.sessionId);
     setMessages(data.messages);
   }
+
+  useEffect(() => {
+    markChatSessionActive(sessionId);
+    return () => {
+      if (localStorage.getItem("tinypersonal_active_chat_session") === sessionId) markChatSessionActive(null);
+    };
+  }, [sessionId]);
 
   useEffect(() => {
     const timer = window.setInterval(() => {

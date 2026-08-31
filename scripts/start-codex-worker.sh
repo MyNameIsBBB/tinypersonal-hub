@@ -4,7 +4,7 @@ set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WORKER_DIR="${CODEX_WORKER_DIR:-/tmp/tinypersonal-codex-worker}"
-PROJECT_ROOT="${HOST_JARVIS_PROJECT_ROOT:-/home/best/production-app}"
+PROJECT_ROOT="${HOST_JARVIS_PROJECT_ROOT:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 LOG_FILE="$WORKER_DIR/worker.log"
 UNIT_NAME="tinypersonal-codex-worker.service"
 

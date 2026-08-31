@@ -5,6 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useEffect, useState, type ReactNode } from "react";
 import { AppModal } from "./AppModal";
+import { BackgroundChatMonitor } from "./BackgroundChatMonitor";
 
 const modules = [
   { href: "/ai", label: "AI Assistant", icon: Bot },
@@ -120,6 +121,7 @@ export function WorkspaceShell({ active, title, subtitle, action, focusMode = fa
         </header>
         {children}
       </main>
+      <BackgroundChatMonitor />
       <AppModal open={notificationOpen} title={notificationEnabled ? "ปิดการแจ้งเตือน?" : "แจ้งเตือนบนอุปกรณ์นี้"} description={notificationEnabled ? "อุปกรณ์นี้จะไม่ได้รับสรุปเช้าจาก TinyPersonal อีก" : "รับสรุปเช้าบน macOS หรือ iOS โดย iPhone/iPad ต้องติดตั้งเว็บนี้ผ่าน Add to Home Screen ก่อน"} tone={notificationEnabled ? "danger" : "info"} confirmLabel={notificationEnabled ? "ปิดการแจ้งเตือน" : "เปิดการแจ้งเตือน"} cancelLabel="ไว้ภายหลัง" busy={notificationBusy} onConfirm={() => void toggleNotifications()} onClose={() => { if (!notificationBusy) { setNotificationOpen(false); setNotificationMessage(""); } }}>
         {!notificationConfigured && <p className="app-modal-error">ผู้ดูแลระบบยังไม่ได้ตั้งค่า Web Push</p>}
         {notificationMessage && <p className="app-modal-error">{notificationMessage}</p>}

@@ -22,12 +22,12 @@ export async function hasPushSubscription(ownerKey: string) {
   return (await prisma.pushSubscription.count({ where: { ownerKey } })) > 0;
 }
 
-export async function sendWebPushNotification(title: string, body: string, url = "/schedule") {
+export async function sendWebPushNotification(title: string, body: string, url = "/schedule", ownerKey?: string) {
   const publicKey = process.env.WEB_PUSH_PUBLIC_KEY;
   const privateKey = process.env.WEB_PUSH_PRIVATE_KEY;
   if (!publicKey || !privateKey) return { ok: false as const, skipped: true, error: "Web Push is not configured" };
   webpush.setVapidDetails(process.env.WEB_PUSH_SUBJECT ?? "mailto:admin@localhost", publicKey, privateKey);
-  const subscriptions = await prisma.pushSubscription.findMany();
+  const subscriptions = await prisma.pushSubscription.findMany({ where: ownerKey ? { ownerKey } : undefined });
   if (!subscriptions.length) return { ok: true as const, skipped: true };
   const payload = JSON.stringify({ title, body, url });
   const results = await Promise.all(subscriptions.map(async (subscription) => {

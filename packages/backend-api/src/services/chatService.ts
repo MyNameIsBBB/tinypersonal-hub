@@ -112,6 +112,11 @@ export async function listChatSessions(ownerKey: string, limit = 30) {
             createdAt: true,
             updatedAt: true,
             _count: { select: { messages: true } },
+            messages: {
+                orderBy: { createdAt: "desc" },
+                take: 1,
+                select: { messageId: true, role: true, createdAt: true },
+            },
         },
     });
 }

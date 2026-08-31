@@ -108,7 +108,7 @@ export async function sendMorningNotification(message: string, idempotencyKey: s
   if (process.env.WEB_PUSH_PUBLIC_KEY && process.env.WEB_PUSH_PRIVATE_KEY) {
     if (!await reserveDelivery(idempotencyKey, "web-push")) results.push({ channel: "web-push", ok: true, skipped: true });
     else {
-      const push = await sendWebPushNotification("สรุปเช้าจาก TinyPersonal", message);
+      const push = await sendWebPushNotification("สรุปเช้าจาก TinyPersonal", message, "/ai");
       const result: NotificationResult = { channel: "web-push", ok: push.ok, ...(push.skipped && { skipped: true }), ...(push.error && { error: push.error }) };
       results.push(result); await finishDelivery(idempotencyKey, result);
     }
