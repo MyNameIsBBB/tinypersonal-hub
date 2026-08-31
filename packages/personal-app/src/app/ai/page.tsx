@@ -401,6 +401,12 @@ export default function AIPage() {
     return () => { cancelled = true; window.clearInterval(timer); };
   }, [historyReady, sessionId, codingJob?.status]);
 
+  useEffect(() => {
+    if (codingJob?.status === "RUNNING" || codingJob?.status === "QUEUED") {
+      threadRef.current?.scrollTo({ top: threadRef.current.scrollHeight, behavior: "smooth" });
+    }
+  }, [codingJob?.status, codingJobEvents.length]);
+
   const sidebarExtraContent = (
     <div className="sidebar-chat-section">
       <div className="sidebar-chat-header">
@@ -442,6 +448,26 @@ export default function AIPage() {
       <div className="ai-chat-layout">
         <section className="ai-workspace">
           <div className="chat-thread" aria-live="polite" ref={threadRef}>
+            {messages.length === 0 ? (
+              <div className="ai-suggestions">
+                {suggestions.map(({ icon: Icon, text }) => (
+                  <button disabled={!historyReady} key={text} onClick={() => void send(text)}>
+                    <Icon size={18} />
+                    <span>{text}</span>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <>
+              {messages.map((message) => (
+                <article className={`chat-message ${message.role}`} key={message.id}>
+                  <div className="message-avatar">{message.role === "assistant" ? <Bot size={17} /> : "P"}</div>
+                  <div>{renderMessageParts(message.parts)}</div>
+                </article>
+              ))}
+              </>
+            )}
+
             {codingJob && (
               <div className={`codex-status-card ${codingJob.status.toLowerCase()}`}>
                 <div className="codex-status-header">
@@ -492,25 +518,6 @@ export default function AIPage() {
                   </div>
                 )}
               </div>
-            )}
-            {messages.length === 0 ? (
-              <div className="ai-suggestions">
-                {suggestions.map(({ icon: Icon, text }) => (
-                  <button disabled={!historyReady} key={text} onClick={() => void send(text)}>
-                    <Icon size={18} />
-                    <span>{text}</span>
-                  </button>
-                ))}
-              </div>
-            ) : (
-              <>
-              {messages.map((message) => (
-                <article className={`chat-message ${message.role}`} key={message.id}>
-                  <div className="message-avatar">{message.role === "assistant" ? <Bot size={17} /> : "P"}</div>
-                  <div>{renderMessageParts(message.parts)}</div>
-                </article>
-              ))}
-              </>
             )}
             {(status === "submitted" || status === "streaming") && <div className="thinking"><LoaderCircle size={15} /> B1 กำลังคิด…</div>}
             {(error || persistenceError) && <div className="chat-error">{persistenceError ?? `เชื่อมต่อ AI ไม่สำเร็จ: ${error!.message}`}</div>}
