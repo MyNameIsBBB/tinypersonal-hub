@@ -1,4 +1,4 @@
-import { claimCodingJob, completeCodingJob, delegateCodingTask, saveChatMessage, sendWebPushNotification } from "@tinypersonal/backend-api";
+import { claimCodingJob, completeCodingJob, delegateCodingTask, getLatestCodingJob, saveChatMessage, sendWebPushNotification } from "@tinypersonal/backend-api";
 import { timingSafeEqual } from "node:crypto";
 
 export const maxDuration = 1800;
@@ -9,6 +9,14 @@ function authorized(request: Request) {
   if (!expected || !supplied) return false;
   const left = Buffer.from(expected); const right = Buffer.from(supplied);
   return left.length === right.length && timingSafeEqual(left, right);
+}
+
+export async function GET(request: Request) {
+  const { authorizedOwnerKey } = await import("@/lib/serverAuth");
+  const ownerKey = authorizedOwnerKey(request);
+  const sessionId = new URL(request.url).searchParams.get("sessionId");
+  if (!ownerKey || !sessionId) return Response.json({ error: "Unauthorized" }, { status: 401 });
+  return Response.json({ job: await getLatestCodingJob(ownerKey, sessionId) }, { headers: { "Cache-Control": "no-store" } });
 }
 
 export async function POST(request: Request) {

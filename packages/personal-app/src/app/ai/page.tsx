@@ -17,6 +17,7 @@ const suggestions = [
   { icon: KeyRound, text: "ขอลิงก์เข้า GitHub จาก Vault" },
 ];
 
+type CodingJobProgress = { status: string; attempts: number; createdAt: string; updatedAt: string; completedAt: string | null; error: string | null };
 type ChatSessionSummary = { id: string; title: string | null; updatedAt: string; _count: { messages: number } };
 const GENERAL_CHAT_TITLE = "แชททั่วไป";
 
@@ -121,6 +122,7 @@ export default function AIPage() {
   const [historyReady, setHistoryReady] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [sessions, setSessions] = useState<ChatSessionSummary[]>([]);
+  const [codingJob, setCodingJob] = useState<CodingJobProgress | null>(null);
   const [deleteBusySessionId, setDeleteBusySessionId] = useState<string | null>(null);
 
   async function send(text: string, fromVoice = false) {
@@ -374,6 +376,20 @@ export default function AIPage() {
   }
 
 
+  useEffect(() => {
+    if (!historyReady || !sessionId) return;
+    let cancelled = false;
+    const poll = async () => {
+      const response = await fetch(`/api/jobs/coding?sessionId=${encodeURIComponent(sessionId)}`, { cache: "no-store" });
+      if (!response.ok || cancelled) return;
+      const data = await response.json() as { job: CodingJobProgress | null };
+      if (!cancelled) setCodingJob(data.job);
+    };
+    void poll();
+    const timer = window.setInterval(() => void poll(), 3000);
+    return () => { cancelled = true; window.clearInterval(timer); };
+  }, [historyReady, sessionId]);
+
   const sidebarExtraContent = (
     <div className="sidebar-chat-section">
       <div className="sidebar-chat-header">
@@ -408,8 +424,8 @@ export default function AIPage() {
         ))}
       </div>
     </div>
-  );
 
+  );
   return (
     <WorkspaceShell active="AI Assistant" title="B1" subtitle="ผู้ช่วยส่วนตัวของคุณ" focusMode immersive sidebarExtra={sidebarExtraContent}>
       <div className="ai-chat-layout">
@@ -425,12 +441,15 @@ export default function AIPage() {
                 ))}
               </div>
             ) : (
-              messages.map((message) => (
+              <>
+                {codingJob && (codingJob.status === "QUEUED" || codingJob.status === "RUNNING") && <div className="tool-status confirmation"><LoaderCircle size={14} /> {codingJob.status === "QUEUED" ? "Jarvis กำลังจัดคิว Codex…" : `Codex กำลังทำงาน (รอบที่ ${codingJob.attempts})…`}</div>}
+              {messages.map((message) => (
                 <article className={`chat-message ${message.role}`} key={message.id}>
                   <div className="message-avatar">{message.role === "assistant" ? <Bot size={17} /> : "P"}</div>
                   <div>{renderMessageParts(message.parts)}</div>
                 </article>
-              ))
+              ))}
+              </>
             )}
             {(status === "submitted" || status === "streaming") && <div className="thinking"><LoaderCircle size={15} /> B1 กำลังคิด…</div>}
             {(error || persistenceError) && <div className="chat-error">{persistenceError ?? `เชื่อมต่อ AI ไม่สำเร็จ: ${error!.message}`}</div>}
