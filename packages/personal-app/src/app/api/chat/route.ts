@@ -1,5 +1,5 @@
 import { google } from "@ai-sdk/google";
-import { createNote, createPendingAction, delegateCodingTask, deleteChatSession, deleteMediaAsset, deleteNote, deleteVaultSecret, ensureDailyGeneralChat, executeLatestPendingAction, getOrCreateChatSession, getScheduleByRange, listActiveRoutines, listChatSessions, listMediaAssets, loadChatMessages, recordAudit, saveAssistantChatMessageIfCurrent, scrapeWebPage, searchNotes, searchVaultMetadata, searchWeb, updateMediaAssetLinks, updateNote, updateVaultMetadata } from "@tinypersonal/backend-api";
+import { createNote, createPendingAction, deleteChatSession, deleteMediaAsset, deleteNote, deleteVaultSecret, ensureDailyGeneralChat, executeLatestPendingAction, getOrCreateChatSession, getScheduleByRange, listActiveRoutines, listChatSessions, listMediaAssets, loadChatMessages, recordAudit, saveAssistantChatMessageIfCurrent, scrapeWebPage, searchNotes, searchVaultMetadata, searchWeb, updateMediaAssetLinks, updateNote, updateVaultMetadata } from "@tinypersonal/backend-api";
 import { consumeStream, convertToModelMessages, createUIMessageStream, createUIMessageStreamResponse, isStepCount, streamText, tool, type UIMessage } from "ai";
 import { after } from "next/server";
 import { isValidSessionToken, SESSION_COOKIE } from "@/lib/serverAuth";
@@ -189,12 +189,11 @@ const webScrapeExecutionTool = tool({
 });
 
 const delegateCodingExecutionTool = (ownerKey: string, sessionId: string) => tool({
-  description: "Run a local coding-agent task now. Set autoPush only when the user explicitly requested a push.",
+  description: "Prepare a durable local Codex task. Every coding task requires explicit user confirmation before it is queued.",
   inputSchema: delegateCodingTaskInputSchema,
   execute: async (input) => {
-    void ownerKey;
-    void sessionId;
-    return delegateCodingTask(input);
+    const action = await createPendingAction({ ownerKey, sessionId, toolName: "coding.delegateTask", summary: "ส่งงานให้ Codex: " + input.instruction.slice(0, 180), arguments: input });
+    return { ok: true as const, confirmationRequired: true, confirmation: { id: action.id, summary: action.summary, expiresAt: action.expiresAt.toISOString() } };
   },
 });
 

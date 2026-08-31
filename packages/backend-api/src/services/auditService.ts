@@ -3,7 +3,8 @@ import { createNote, deleteNote, updateNote } from "./noteService";
 import { deleteMediaAsset, updateMediaAssetLinks } from "./mediaService";
 import { createScheduleItem, deleteOrCancelRoutine, updateScheduleItem, updateScheduleStatus } from "./scheduleService";
 import { deleteVaultSecret, updateVaultMetadata } from "./vaultService";
-import { controlSmartHomeDevice, delegateCodingTask } from "./jarvisService";
+import { controlSmartHomeDevice } from "./jarvisService";
+import { enqueueCodingJob } from "./codingJobService";
 
 function safeMetadata(metadata: Record<string, unknown>): string {
   const sanitized = Object.fromEntries(Object.entries(metadata).filter(([key]) =>
@@ -76,7 +77,12 @@ export async function executePendingAction(ownerKey: string, id: string, approve
     else if (action.toolName === "media.delete") { await deleteMediaAsset(String(args.id)); result = { id: String(args.id), deleted: true }; }
     else if (action.toolName === "vault.updateMetadata") { const { id: targetId, ...input } = args; result = await updateVaultMetadata(String(targetId), input); }
     else if (action.toolName === "vault.delete") { await deleteVaultSecret(String(args.id)); result = { id: String(args.id), deleted: true }; }
-    else if (action.toolName === "coding.delegateTask") result = await delegateCodingTask(args);
+    else if (action.toolName === "coding.delegateTask") {
+      if (!action.sessionId) throw new Error("Coding task is missing a chat session");
+      const latestUser = await prisma.chatMessage.findFirst({ where: { sessionId: action.sessionId, role: "user" }, orderBy: { createdAt: "desc" }, select: { messageId: true } });
+      if (!latestUser) throw new Error("Coding task is missing its user message");
+      result = await enqueueCodingJob({ ownerKey, sessionId: action.sessionId, userMessageId: latestUser.messageId, task: args });
+    }
     else if (action.toolName === "homeAssistant.callService") result = await controlSmartHomeDevice(args);
     else throw new Error("Unsupported pending action");
     assertSuccessfulToolResult(result);

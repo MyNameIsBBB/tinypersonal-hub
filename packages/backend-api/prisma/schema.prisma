@@ -204,6 +204,25 @@ model PendingAction {
   @@index([ownerKey, status, expiresAt])
 }
 
+model CodingJob {
+  id            String   @id @default(cuid())
+  ownerKey      String
+  sessionId     String
+  userMessageId String
+  inputJson     String
+  status        String   @default("QUEUED")
+  attempts      Int      @default(0)
+  leaseUntil    DateTime?
+  resultJson    String?
+  error         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  completedAt   DateTime?
+
+  @@index([status, createdAt])
+  @@index([ownerKey, sessionId, createdAt])
+}
+
 model AuditLog {
   id          String   @id @default(cuid())
   actorId     String

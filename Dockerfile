@@ -20,4 +20,4 @@ ENV NODE_ENV=production \
 
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 CMD node -e "fetch('http://127.0.0.1:3000/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
-CMD ["sh", "-c", "npm run db:deploy && npm run start --workspace=@tinypersonal/personal-app -- --hostname 0.0.0.0 --port 3000"]
+CMD ["sh", "-c", "npm run db:deploy && npm run start --workspace=@tinypersonal/personal-app -- --hostname 0.0.0.0 --port 3000 & app_pid=$!; if [ -n \"$CRON_SECRET\" ]; then node scripts/run-coding-jobs.mjs & fi; wait $app_pid"]
