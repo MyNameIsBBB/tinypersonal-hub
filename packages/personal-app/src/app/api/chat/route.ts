@@ -391,9 +391,9 @@ async function confirmationResponse(ownerKey: string, sessionId: string, userMes
   try {
     const execution = await executeLatestPendingAction(ownerKey, sessionId, approved);
     if (!execution) return null;
-    responseText = execution.denied
-      ? `ยกเลิกรายการ “${execution.action.summary}” เรียบร้อยแล้วครับ`
-      : `ยืนยันและดำเนินการ “${execution.action.summary}” เรียบร้อยแล้วครับ`;
+    if (execution.denied) responseText = `รับทราบครับ ผมยุติคำสั่ง “${execution.action.summary}” แล้ว`;
+    else if (execution.action.toolName === "coding.delegateTask") responseText = `รับคำสั่งแล้วครับ ผมส่ง “${execution.action.summary}” เข้าคิว Codex แล้ว เมื่อ worker ดำเนินการและตรวจสอบเสร็จ ผมจะรายงานผลกลับมาในบทสนทนานี้ครับ`;
+    else responseText = `รับคำสั่งแล้วครับ ดำเนินการ “${execution.action.summary}” เรียบร้อย`;
   } catch (error) {
     responseText = `ดำเนินการยืนยันไม่สำเร็จครับ: ${error instanceof Error ? error.message : "เกิดข้อผิดพลาดที่ไม่ทราบสาเหตุ"}`;
   }
