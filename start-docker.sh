@@ -91,5 +91,10 @@ if ! docker top "$CONTAINER_NAME" -eo args | grep -q "scripts/codex/run-jobs.mjs
   docker logs --tail 100 "$CONTAINER_NAME" >&2
   exit 1
 fi
+if ! docker top "$CONTAINER_NAME" -eo args | grep -q "scripts/chat/run-jobs.mjs"; then
+  echo "Error: chat generation runner is not running inside $CONTAINER_NAME." >&2
+  docker logs --tail 100 "$CONTAINER_NAME" >&2
+  exit 1
+fi
 
 ENABLE_TAILSCALE_FUNNEL="$ENABLE_TAILSCALE_FUNNEL" "$SCRIPT_DIR/scripts/open-funnel.sh" "$PORT" || true

@@ -21,6 +21,7 @@ const suggestions = [
 
 type CodingJobProgressEvent = { at: string; kind: "status" | "command" | "file" | "tool"; message: string };
 type CodingJobProgress = { id: string; status: string; attempts: number; progressJson: string; createdAt: string; updatedAt: string; completedAt: string | null; error: string | null };
+type ChatGenerationJobProgress = { id: string; userMessageId: string; status: string; attempts: number; createdAt: string; updatedAt: string; completedAt: string | null; error: string | null };
 type ChatSessionSummary = { id: string; title: string | null; updatedAt: string; _count: { messages: number } };
 const GENERAL_CHAT_TITLE = "แชททั่วไป";
 
@@ -167,6 +168,7 @@ export default function AIPage() {
   const lastSpokenMessageId = useRef<string | null>(null);
   const checkpointedAssistantId = useRef<string | null>(null);
   const reloadedCodingJobId = useRef<string | null>(null);
+  const reloadedChatGenerationJobId = useRef<string | null>(null);
   const threadRef = useRef<HTMLDivElement | null>(null);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
   const generalCycleRef = useRef(new Date(Date.now() - 3_600_000).toISOString().slice(0, 10));
@@ -174,6 +176,7 @@ export default function AIPage() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [sessions, setSessions] = useState<ChatSessionSummary[]>([]);
   const [codingJob, setCodingJob] = useState<CodingJobProgress | null>(null);
+  const [chatGenerationJob, setChatGenerationJob] = useState<ChatGenerationJobProgress | null>(null);
   const [showCodexProgress, setShowCodexProgress] = useState(false);
   const [deleteSessionTarget, setDeleteSessionTarget] = useState<ChatSessionSummary | null>(null);
   const [deleteBusySessionId, setDeleteBusySessionId] = useState<string | null>(null);
@@ -223,7 +226,7 @@ export default function AIPage() {
     const checkpoint = await fetch("/api/chat/messages", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sessionId, message }),
+      body: JSON.stringify({ sessionId, message, voiceMode: fromVoice }),
     });
     if (!checkpoint.ok) {
       setInput(clean);
@@ -231,6 +234,18 @@ export default function AIPage() {
       setPersistenceError("บันทึกข้อความไม่สำเร็จ กรุณาลองส่งอีกครั้ง");
       return;
     }
+    const checkpointResult = await checkpoint.json() as { jobId: string };
+    const queuedAt = new Date().toISOString();
+    setChatGenerationJob({
+      id: checkpointResult.jobId,
+      userMessageId: message.id,
+      status: "QUEUED",
+      attempts: 0,
+      createdAt: queuedAt,
+      updatedAt: queuedAt,
+      completedAt: null,
+      error: null,
+    });
     setAttachments([]);
     if (imageInputRef.current) imageInputRef.current.value = "";
     registerChatTask(sessionId, message.id);
@@ -330,7 +345,7 @@ export default function AIPage() {
   useEffect(() => {
     if (status !== "ready" || !voiceRequestPending.current) return;
     const latest = [...messages].reverse().find((message) => message.role === "assistant");
-    if (!latest || latest.id === lastSpokenMessageId.current) return;
+    if (!latest || latest.id.startsWith("chat-queued-") || latest.id === lastSpokenMessageId.current) return;
     const text = latest.parts.filter((part) => part.type === "text").map((part) => part.text).join(" ").trim();
     if (!text) return;
     lastSpokenMessageId.current = latest.id;
@@ -341,7 +356,8 @@ export default function AIPage() {
   useEffect(() => {
     if (!historyReady || !sessionId || status !== "ready") return;
     const latestAssistant = [...messages].reverse().find((message) => message.role === "assistant");
-    if (!latestAssistant || checkpointedAssistantId.current === latestAssistant.id) return;
+    const hasContent = latestAssistant?.parts.some((part) => part.type !== "text" || part.text.trim().length > 0);
+    if (!latestAssistant || latestAssistant.id.startsWith("chat-queued-") || !hasContent || checkpointedAssistantId.current === latestAssistant.id) return;
     checkpointedAssistantId.current = latestAssistant.id;
     void fetch("/api/chat/messages/assistant", {
       method: "POST",
@@ -487,6 +503,34 @@ export default function AIPage() {
     return () => { cancelled = true; window.clearInterval(timer); };
   }, [historyReady, sessionId, codingJob?.status, setMessages, status]);
 
+  useEffect(() => {
+    if (!historyReady || !sessionId) return;
+    let cancelled = false;
+    const poll = async () => {
+      const response = await fetch(`/api/jobs/chat?sessionId=${encodeURIComponent(sessionId)}`, { cache: "no-store" });
+      if (!response.ok || cancelled) return;
+      const data = await response.json() as { job: ChatGenerationJobProgress | null };
+      if (cancelled) return;
+      setChatGenerationJob((current) => current && current.id === data.job?.id && current.updatedAt === data.job?.updatedAt ? current : data.job);
+      const terminal = data.job?.status === "SUCCEEDED" || data.job?.status === "FAILED";
+      if (terminal && data.job && reloadedChatGenerationJobId.current !== data.job.id && status === "ready") {
+        const chatResponse = await fetch(`/api/chat?sessionId=${encodeURIComponent(sessionId)}`, { cache: "no-store" });
+        if (!chatResponse.ok || cancelled) return;
+        const chatData = await chatResponse.json() as { messages?: Parameters<typeof setMessages>[0] };
+        if (Array.isArray(chatData.messages)) {
+          const merged = mergeServerMessages(messagesRef.current, chatData.messages);
+          messagesRef.current = merged;
+          reloadedChatGenerationJobId.current = data.job.id;
+          setMessages(merged);
+        }
+      }
+    };
+    void poll();
+    const interval = chatGenerationJob?.status === "RUNNING" ? 1_500 : chatGenerationJob?.status === "QUEUED" ? 2_500 : 30_000;
+    const timer = window.setInterval(() => void poll(), interval);
+    return () => { cancelled = true; window.clearInterval(timer); };
+  }, [chatGenerationJob?.status, historyReady, sessionId, setMessages, status]);
+
   const [searchQuery, setSearchQuery] = useState("");
 
   const orderedSessions = useMemo(() => {
@@ -622,6 +666,10 @@ export default function AIPage() {
                 </article>
               ))}
               </>
+            )}
+
+            {(chatGenerationJob?.status === "QUEUED" || chatGenerationJob?.status === "RUNNING") && (
+              <div className="thinking" role="status"><LoaderCircle size={15} /> {chatGenerationJob.status === "QUEUED" ? "คำตอบอยู่ในคิวของเซิร์ฟเวอร์…" : "AI กำลังสร้างคำตอบที่เซิร์ฟเวอร์…"}</div>
             )}
 
             {codingJob && (

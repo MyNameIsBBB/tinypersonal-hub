@@ -58,7 +58,8 @@ export function latestUserText(messages: UIMessage[]) {
 /** Merge durable messages without dropping optimistic or still-streaming UI messages. */
 export function mergeServerMessages(local: UIMessage[], server: UIMessage[]) {
   const serverIds = new Set(server.map(({ id }) => id));
-  return [...server, ...local.filter(({ id }) => !serverIds.has(id))];
+  const completedJobIds = new Set(server.filter(({ id }) => id.startsWith("chat-job-")).map(({ id }) => id.slice("chat-job-".length)));
+  return [...server, ...local.filter(({ id }) => !serverIds.has(id) && !(id.startsWith("chat-queued-") && completedJobIds.has(id.slice("chat-queued-".length))))];
 }
 
 export function confirmationDecision(text: string): boolean | null {

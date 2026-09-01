@@ -3,10 +3,16 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 export const SESSION_COOKIE = "tinypersonal_session";
 const SESSION_SECONDS = 60 * 60 * 24 * 30;
 
-function safeEqual(left: string, right: string): boolean {
+export function safeEqual(left: string, right: string): boolean {
   const leftBuffer = Buffer.from(left);
   const rightBuffer = Buffer.from(right);
   return leftBuffer.length === rightBuffer.length && timingSafeEqual(leftBuffer, rightBuffer);
+}
+
+export function isCronAuthorizedRequest(request: Request): boolean {
+  const expected = process.env.CRON_SECRET;
+  const supplied = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
+  return Boolean(expected && supplied && safeEqual(supplied, expected));
 }
 
 function sessionKey(): string {

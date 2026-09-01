@@ -160,7 +160,10 @@ export async function loadChatMessages(
         orderBy: [{ createdAt: "desc" }, { id: "desc" }],
         take: 120,
     });
-    return rows.reverse().map((row) => JSON.parse(row.payloadJson) as StoredChatMessage);
+    return rows
+        .reverse()
+        .filter((row) => row.role !== "assistant_pending")
+        .map((row) => JSON.parse(row.payloadJson) as StoredChatMessage);
 }
 
 export async function saveChatMessage(

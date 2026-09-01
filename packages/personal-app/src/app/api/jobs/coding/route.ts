@@ -1,5 +1,5 @@
 import { claimCodingJob, completeCodingJob, delegateCodingTask, getLatestCodingJob, saveChatMessage, sendWebPushNotification, updateCodingJobProgress } from "@tinypersonal/backend-api";
-import { timingSafeEqual } from "node:crypto";
+import { authorizedOwnerKey, isCronAuthorizedRequest } from "@/lib/serverAuth";
 
 export const maxDuration = 1800;
 
@@ -16,16 +16,7 @@ function codexSummary(logs: Array<{ command: string; stdout: string; stderr: str
   return (summary || log.stderr || "Codex completed without a textual summary").trim().slice(-12_000);
 }
 
-function authorized(request: Request) {
-  const expected = process.env.CRON_SECRET;
-  const supplied = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
-  if (!expected || !supplied) return false;
-  const left = Buffer.from(expected); const right = Buffer.from(supplied);
-  return left.length === right.length && timingSafeEqual(left, right);
-}
-
 export async function GET(request: Request) {
-  const { authorizedOwnerKey } = await import("@/lib/serverAuth");
   const ownerKey = authorizedOwnerKey(request);
   const sessionId = new URL(request.url).searchParams.get("sessionId");
   if (!ownerKey || !sessionId) return Response.json({ error: "Unauthorized" }, { status: 401 });
@@ -33,7 +24,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  if (!authorized(request)) return Response.json({ error: "Unauthorized" }, { status: 401 });
+  if (!isCronAuthorizedRequest(request)) return Response.json({ error: "Unauthorized" }, { status: 401 });
   const job = await claimCodingJob();
   if (!job) return new Response(null, { status: 204 });
   let ok = false;

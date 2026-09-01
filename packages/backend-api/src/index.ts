@@ -1,5 +1,6 @@
 export { prisma } from "./db/client";
 export { claimCodingJob, completeCodingJob, enqueueCodingJob, getLatestCodingJob, updateCodingJobProgress } from "./services/codingJobService";
+export { claimChatGenerationJob, completeChatGenerationJob, enqueueChatGenerationJob, getLatestChatGenerationJob, saveUserMessageAndEnqueueChatGeneration } from "./services/chatGenerationJobService";
 export { createChatSession, deleteChatSession, ensureDailyGeneralChat, generateAndUpdateSessionTitle, GENERAL_CHAT_TITLE, getOrCreateChatSession, listChatSessions, loadChatMessages, replaceChatMessages, resetAllGeneralChats, saveAssistantChatMessageIfCurrent, saveChatMessage, saveUserChatMessage } from "./services/chatService";
 export type { StoredChatMessage } from "./services/chatService";
 export { createPendingAction, executeAllPendingActions, executeLatestPendingAction, executePendingAction, recordAudit, resolvePendingAction } from "./services/auditService";
