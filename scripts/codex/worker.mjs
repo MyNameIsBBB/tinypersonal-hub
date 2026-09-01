@@ -78,7 +78,10 @@ function lifecycle(event, details = {}) {
 
 function runCodex(args, emit) {
   return new Promise((resolveRun, rejectRun) => {
-    const child = spawn(codexExecutable, args, { cwd: projectRoot, windowsHide: true });
+    // Codex appends piped stdin to the prompt and waits for EOF. The worker has
+    // no interactive input, so connect stdin to /dev/null instead of leaving an
+    // unwritten pipe open indefinitely.
+    const child = spawn(codexExecutable, args, { cwd: projectRoot, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
     let stdout = ""; let stderr = ""; let pending = "";
     const timer = setTimeout(() => child.kill("SIGTERM"), timeout);
     child.stdout.setEncoding("utf8"); child.stderr.setEncoding("utf8");
