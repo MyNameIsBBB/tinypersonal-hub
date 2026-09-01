@@ -1,8 +1,20 @@
 import { describe, expect, it } from "vitest";
 import type { UIMessage } from "ai";
-import { confirmationDecision, selectContextWindow } from "./ChatStreamHandler";
+import { confirmationDecision, mergeServerMessages, selectContextWindow } from "./ChatStreamHandler";
 
 describe("chat context window", () => {
+  it("keeps a local message missing from a delayed server snapshot", () => {
+    const server = [{ id: "a", role: "user", parts: [{ type: "text", text: "A" }] }] as UIMessage[];
+    const local = [...server, { id: "b", role: "assistant", parts: [{ type: "text", text: "B" }] }] as UIMessage[];
+    expect(mergeServerMessages(local, server).map(({ id }) => id)).toEqual(["a", "b"]);
+  });
+
+  it("uses durable server content after the same message ID persists", () => {
+    const local = [{ id: "b", role: "assistant", parts: [{ type: "text", text: "partial" }] }] as UIMessage[];
+    const server = [{ id: "b", role: "assistant", parts: [{ type: "text", text: "complete" }] }] as UIMessage[];
+    expect((mergeServerMessages(local, server)[0].parts[0] as { text: string }).text).toBe("complete");
+  });
+
   it("keeps at most 16 recent messages", () => {
     const messages = Array.from({ length: 20 }, (_, index) => ({ id: String(index), role: "user" as const, parts: [{ type: "text" as const, text: String(index) }] }));
     expect(selectContextWindow(messages)).toHaveLength(16);

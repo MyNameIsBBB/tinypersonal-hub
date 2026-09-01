@@ -55,6 +55,12 @@ export function latestUserText(messages: UIMessage[]) {
   return message?.parts.filter((part) => part.type === "text").map((part) => part.text).join(" ").trim() ?? "";
 }
 
+/** Merge durable messages without dropping optimistic or still-streaming UI messages. */
+export function mergeServerMessages(local: UIMessage[], server: UIMessage[]) {
+  const serverIds = new Set(server.map(({ id }) => id));
+  return [...server, ...local.filter(({ id }) => !serverIds.has(id))];
+}
+
 export function confirmationDecision(text: string): boolean | null {
   const normalized = text.trim().toLowerCase().replace(/[.!?]+$/g, "").trim();
   if (/^(ยืนยัน|ยืนยันเลย|ตกลง|โอเค|ได้เลย|เอาเลย|ทำเลย|จัดการ|ดำเนินการ|confirm|yes|ok)(ครับ|ค่ะ|คะ)?$/u.test(normalized)) return true;

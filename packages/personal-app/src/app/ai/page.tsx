@@ -11,6 +11,7 @@ import remarkMath from "remark-math";
 import { WorkspaceShell } from "@/components/WorkspaceShell";
 import { AppModal } from "@/components/AppModal";
 import { markChatSessionActive, registerChatTask } from "@/lib/chat/backgroundTasks";
+import { mergeServerMessages } from "@/lib/chat/ChatStreamHandler";
 
 const suggestions = [
   { icon: CalendarPlus, text: "ตั้ง Routine วิ่งทุกวันจันทร์และพุธ 07:00 ถึงสิ้นเดือน" },
@@ -159,10 +160,12 @@ export default function AIPage() {
   const [persistenceError, setPersistenceError] = useState<string | null>(null);
   const [attachments, setAttachments] = useState<FileUIPart[]>([]);
   const { messages, sendMessage, setMessages, status, error, clearError, stop } = useChat({ id: "tinypersonal-b1" });
+  const messagesRef = useRef(messages);
   const initialPromptSent = useRef(false);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const voiceRequestPending = useRef(false);
   const lastSpokenMessageId = useRef<string | null>(null);
+  const checkpointedAssistantId = useRef<string | null>(null);
   const reloadedCodingJobId = useRef<string | null>(null);
   const threadRef = useRef<HTMLDivElement | null>(null);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
@@ -182,6 +185,8 @@ export default function AIPage() {
   }, [codingJob?.progressJson]);
 
   const latestProgressEvent = codingJobEvents.at(-1);
+
+  useEffect(() => { messagesRef.current = messages; }, [messages]);
 
   async function handleConfirmAction(actionId: string, approved: boolean) {
     if (status === "submitted" || status === "streaming") return;
@@ -334,6 +339,22 @@ export default function AIPage() {
   }, [messages, status, voiceReply]);
 
   useEffect(() => {
+    if (!historyReady || !sessionId || status !== "ready") return;
+    const latestAssistant = [...messages].reverse().find((message) => message.role === "assistant");
+    if (!latestAssistant || checkpointedAssistantId.current === latestAssistant.id) return;
+    checkpointedAssistantId.current = latestAssistant.id;
+    void fetch("/api/chat/messages/assistant", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionId, message: latestAssistant }),
+    }).then((response) => {
+      if (!response.ok && checkpointedAssistantId.current === latestAssistant.id) checkpointedAssistantId.current = null;
+    }).catch(() => {
+      if (checkpointedAssistantId.current === latestAssistant.id) checkpointedAssistantId.current = null;
+    });
+  }, [historyReady, messages, sessionId, status]);
+
+  useEffect(() => {
     if (typeof window === "undefined") return;
 
     let cancelled = false;
@@ -454,7 +475,9 @@ export default function AIPage() {
         const chatData = await chatResponse.json() as { messages?: Parameters<typeof setMessages>[0] };
         if (Array.isArray(chatData.messages)) {
           reloadedCodingJobId.current = data.job.id;
-          setMessages(chatData.messages);
+          const merged = mergeServerMessages(messagesRef.current, chatData.messages);
+          messagesRef.current = merged;
+          setMessages(merged);
         }
       }
     };
