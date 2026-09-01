@@ -3,8 +3,9 @@
 set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 WORKER_DIR="${CODEX_WORKER_DIR:-/tmp/tinypersonal-codex-worker}"
-PROJECT_ROOT="${HOST_JARVIS_PROJECT_ROOT:-$(cd "$SCRIPT_DIR/.." && pwd)}"
+PROJECT_ROOT="${HOST_JARVIS_PROJECT_ROOT:-$PROJECT_DIR}"
 LOG_FILE="$WORKER_DIR/worker.log"
 UNIT_NAME="tinypersonal-codex-worker.service"
 
@@ -33,7 +34,7 @@ systemd-run --user \
   --setenv=CODEX_WORKER_SOCKET="$WORKER_DIR/worker.sock" \
   --setenv=CODEX_WORKER_PROJECT_ROOT="$PROJECT_ROOT" \
   --setenv=CODEX_EXECUTABLE="$CODEX_EXECUTABLE" \
-  node "$SCRIPT_DIR/codex-worker.mjs" >/dev/null
+  node "$SCRIPT_DIR/worker.mjs" >/dev/null
 
 for _ in {1..50}; do
   [[ -S "$WORKER_DIR/worker.sock" ]] && exit 0

@@ -22,9 +22,10 @@ done
 
 cd "$SCRIPT_DIR"
 
-if ! HOST_JARVIS_PROJECT_ROOT="${HOST_JARVIS_PROJECT_ROOT:-$HOME/codex-playground}" "$SCRIPT_DIR/scripts/start-codex-worker.sh"; then
-  echo "Warning: Codex worker failed to start; continuing without coding worker." >&2
-fi
+HOST_JARVIS_PROJECT_ROOT="${HOST_JARVIS_PROJECT_ROOT:-$SCRIPT_DIR}" "$SCRIPT_DIR/scripts/codex/start-worker.sh"
+
+echo "Clearing Docker build cache before build..."
+docker builder prune --all --force
 
 echo "Building all workspaces in Docker..."
 docker build --file "$DOCKERFILE" --tag "$IMAGE_NAME" .
@@ -71,8 +72,5 @@ for attempt in {1..30}; do
   fi
   sleep 2
 done
-
-echo "Clearing Docker build cache..."
-docker builder prune --all --force
 
 ENABLE_TAILSCALE_FUNNEL="$ENABLE_TAILSCALE_FUNNEL" "$SCRIPT_DIR/scripts/open-funnel.sh" "$PORT" || true
