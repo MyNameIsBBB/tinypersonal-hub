@@ -3,6 +3,19 @@ import { timingSafeEqual } from "node:crypto";
 
 export const maxDuration = 1800;
 
+function codexSummary(logs: Array<{ command: string; stdout: string; stderr: string }>) {
+  const log = [...logs].reverse().find((entry) => entry.command.includes("codex") && entry.command.includes("exec"));
+  if (!log) return "Codex completed without a textual summary";
+  let summary = "";
+  for (const line of log.stdout.split(/\r?\n/)) {
+    try {
+      const event = JSON.parse(line) as { type?: string; item?: { type?: string; text?: string } };
+      if (event.type === "item.completed" && event.item?.type === "agent_message" && event.item.text) summary = event.item.text;
+    } catch {}
+  }
+  return (summary || log.stderr || "Codex completed without a textual summary").trim().slice(-12_000);
+}
+
 function authorized(request: Request) {
   const expected = process.env.CRON_SECRET;
   const supplied = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
@@ -32,8 +45,7 @@ export async function POST(request: Request) {
     });
     ok = result.ok;
     if (result.ok) {
-      const finalLog = result.data.logs.at(-1);
-      const summary = (finalLog?.stdout || finalLog?.stderr || "Codex completed without a textual summary").trim().slice(-12_000);
+      const summary = codexSummary(result.data.logs);
       responseText = `Codex ทำงานเสร็จแล้วครับ\n\nBranch: ${result.data.branch}\n\n${summary}`;
     } else {
       responseText = `Codex ทำงานไม่สำเร็จครับ: ${result.error.message}`;

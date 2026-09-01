@@ -131,10 +131,12 @@ export async function delegateCodingTask(untrustedInput: unknown, onProgress?: P
   };
 
   try {
-    const requestedBranch = input.branchName ?? "Choose a concise codex/* branch name based on the task";
-    const delivery = input.autoPush
-      ? "After validation succeeds, stage only task-related files, commit with a concise conventional message, and push the branch to origin with upstream tracking."
-      : "Do not commit and do not push. Leave the validated task changes in the working tree for review.";
+    const requestedBranch = input.branchName ?? `codex/task-${Date.now()}`;
+    const statusBefore = (await execute("git", ["status", "--porcelain"])).stdout.trim();
+    if (statusBefore) throw new Error("Repository has uncommitted changes; refusing to mix them with a delegated task");
+    await execute("git", ["pull", "--ff-only"]);
+    await execute("git", ["switch", "-c", requestedBranch]);
+    branch = requestedBranch;
     const agentInstruction = `Own this coding task end-to-end inside the current repository.
 
 User task:
@@ -142,12 +144,11 @@ ${input.instruction}
 
 Required workflow:
 1. Read AGENTS.md and inspect the repository status. Preserve unrelated changes and never use destructive Git commands.
-2. Run git pull --ff-only. If it cannot run safely, stop and report the exact blocker.
-3. Create and switch to this branch: ${requestedBranch}.
-4. Implement the requested change following the repository architecture and conventions.
-5. Run the relevant tests and the repository build. Fix failures caused by the task and repeat validation until it passes or a concrete blocker remains.
-6. ${delivery}
-7. Finish with a concise summary containing the branch, changed files, tests/build results, commit, and push status.
+2. The worker has already pulled and switched to branch ${requestedBranch}; do not create, switch, commit, or push Git branches.
+3. Implement the requested change following the repository architecture and conventions.
+4. Run the relevant tests and the repository build. Fix failures caused by the task and repeat validation until it passes or a concrete blocker remains.
+5. Leave the task changes in the working tree for the worker to verify and optionally deliver.
+6. Finish with a concise summary containing changed files and tests/build results.
 
 Stay within this repository. Never expose secrets or modify unrelated files.`;
     const codexExecutable = process.platform === "win32" ? "codex.cmd" : "codex";
@@ -157,7 +158,15 @@ Stay within this repository. Never expose secrets or modify unrelated files.`;
       "--cd", projectRoot,
       "exec", "--json", agentInstruction,
     ]);
-    branch = (await execute("git", ["branch", "--show-current"])).stdout.trim() || input.branchName || "HEAD";
+    branch = (await execute("git", ["branch", "--show-current"])).stdout.trim() || "HEAD";
+    if (branch !== requestedBranch) throw new Error(`Expected branch ${requestedBranch}, but current branch is ${branch}`);
+    const statusAfter = (await execute("git", ["status", "--porcelain"])).stdout.trim();
+    if (!statusAfter) throw new Error("Codex exited successfully but produced no file changes");
+    if (input.autoPush) {
+      await execute("git", ["add", "--all"]);
+      await execute("git", ["commit", "-m", "chore(codex): complete delegated task"]);
+      await execute("git", ["push", "--set-upstream", "origin", requestedBranch]);
+    }
     return { ok: true, data: { branch, logs } };
   } catch (error) {
     return { ok: false, error: { code: "CODING_TASK_FAILED", message: error instanceof Error ? error.message : "Coding task failed" }, data: { branch, logs } };
