@@ -11,10 +11,12 @@ const COMMAND_TIMEOUT_MS = 30 * 60_000;
 
 const delegateCodingTaskSchema = z.object({
   instruction: z.string().trim().min(3).max(20_000),
+  readOnly: z.boolean().default(false),
   branchName: z.string().trim().regex(/^[A-Za-z0-9][A-Za-z0-9._\/-]{0,119}$/).optional(),
   autoPush: z.boolean().default(false),
-}).strict().superRefine(({ autoPush, branchName }, context) => {
+}).strict().superRefine(({ readOnly, autoPush, branchName }, context) => {
   if (autoPush && !branchName) context.addIssue({ code: z.ZodIssueCode.custom, path: ["branchName"], message: "branchName is required when autoPush is enabled" });
+  if (readOnly && (autoPush || branchName)) context.addIssue({ code: z.ZodIssueCode.custom, path: ["readOnly"], message: "readOnly tasks cannot create a branch or push" });
 });
 const controlSmartHomeDeviceSchema = z.object({
   domain: z.enum(["climate", "switch", "light"]), service: z.enum(["turn_on", "turn_off", "set_temperature"]),
@@ -131,12 +133,19 @@ export async function delegateCodingTask(untrustedInput: unknown, onProgress?: P
   };
 
   try {
-    const requestedBranch = input.branchName ?? `codex/task-${Date.now()}`;
-    const statusBefore = (await execute("git", ["status", "--porcelain"])).stdout.trim();
-    if (statusBefore) throw new Error("Repository has uncommitted changes; refusing to mix them with a delegated task");
-    await execute("git", ["pull", "--ff-only"]);
-    await execute("git", ["switch", "-c", requestedBranch]);
-    branch = requestedBranch;
+    const requestedBranch = input.readOnly ? null : input.branchName ?? `codex/task-${Date.now()}`;
+    if (input.readOnly) {
+      branch = (await execute("git", ["branch", "--show-current"])).stdout.trim() || "HEAD";
+    } else {
+      const statusBefore = (await execute("git", ["status", "--porcelain"])).stdout.trim();
+      if (statusBefore) throw new Error("Repository has uncommitted changes; refusing to mix them with a delegated task");
+      await execute("git", ["pull", "--ff-only"]);
+      await execute("git", ["switch", "-c", requestedBranch!]);
+      branch = requestedBranch;
+    }
+    const workflow = input.readOnly
+      ? "Inspect the current workspace exactly as it is. Do not pull, switch or create branches, edit files, commit, or push. Run only read-only commands and summarize the evidence you observe."
+      : `The worker has already pulled and switched to branch ${requestedBranch}; do not create, switch, commit, or push Git branches. Implement the requested change, run relevant tests/builds, and leave changes in the working tree for worker verification.`;
     const agentInstruction = `Own this coding task end-to-end inside the current repository.
 
 User task:
@@ -144,28 +153,25 @@ ${input.instruction}
 
 Required workflow:
 1. Read AGENTS.md and inspect the repository status. Preserve unrelated changes and never use destructive Git commands.
-2. The worker has already pulled and switched to branch ${requestedBranch}; do not create, switch, commit, or push Git branches.
-3. Implement the requested change following the repository architecture and conventions.
-4. Run the relevant tests and the repository build. Fix failures caused by the task and repeat validation until it passes or a concrete blocker remains.
-5. Leave the task changes in the working tree for the worker to verify and optionally deliver.
-6. Finish with a concise summary containing changed files and tests/build results.
+2. ${workflow}
+3. Finish with a concise evidence-based summary.
 
 Stay within this repository. Never expose secrets or modify unrelated files.`;
     const codexExecutable = process.platform === "win32" ? "codex.cmd" : "codex";
     await execute(codexExecutable, [
       "--ask-for-approval", "never",
-      "--sandbox", "workspace-write",
+      "--sandbox", input.readOnly ? "read-only" : "workspace-write",
       "--cd", projectRoot,
       "exec", "--json", agentInstruction,
     ]);
     branch = (await execute("git", ["branch", "--show-current"])).stdout.trim() || "HEAD";
-    if (branch !== requestedBranch) throw new Error(`Expected branch ${requestedBranch}, but current branch is ${branch}`);
+    if (!input.readOnly && branch !== requestedBranch) throw new Error(`Expected branch ${requestedBranch}, but current branch is ${branch}`);
     const statusAfter = (await execute("git", ["status", "--porcelain"])).stdout.trim();
-    if (!statusAfter) throw new Error("Codex exited successfully but produced no file changes");
-    if (input.autoPush) {
+    if (!input.readOnly && !statusAfter) throw new Error("Codex exited successfully but produced no file changes");
+    if (!input.readOnly && input.autoPush) {
       await execute("git", ["add", "--all"]);
       await execute("git", ["commit", "-m", "chore(codex): complete delegated task"]);
-      await execute("git", ["push", "--set-upstream", "origin", requestedBranch]);
+      await execute("git", ["push", "--set-upstream", "origin", requestedBranch!]);
     }
     return { ok: true, data: { branch, logs } };
   } catch (error) {
