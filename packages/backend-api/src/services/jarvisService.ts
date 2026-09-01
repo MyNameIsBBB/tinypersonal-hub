@@ -34,6 +34,12 @@ export type CodingTaskResult =
 
 export type ProgressCallback = (progress: { kind: "status" | "command" | "file" | "tool"; message: string }) => void;
 
+function inferredReadOnlyInstruction(instruction: string) {
+  const mutation = /(สร้าง|เขียน|เพิ่ม|แก้|เปลี่ยน|ลบ|ย้าย|commit|push|create|write|add|implement|fix|update|delete|remove|refactor)/iu.test(instruction);
+  const inspection = /(ตรวจ|ดู|เห็นอะไร|สถานะ|สรุป|รายการ|โครงสร้าง|inspect|status|list|review|summari[sz]e|what.*visible)/iu.test(instruction);
+  return inspection && !mutation;
+}
+
 function delegateToHostWorker(
   input: z.infer<typeof delegateCodingTaskSchema>,
   socketPath: string,
@@ -113,7 +119,10 @@ async function run(executable: string, args: string[], cwd: string): Promise<Exe
 export async function delegateCodingTask(untrustedInput: unknown, onProgress?: ProgressCallback): Promise<CodingTaskResult> {
   const parsed = delegateCodingTaskSchema.safeParse(untrustedInput);
   if (!parsed.success) return { ok: false, error: { code: "INVALID_INPUT", message: parsed.error.issues[0]?.message ?? "Invalid coding task" }, data: { branch: null, logs: [] } };
-  const input = parsed.data;
+  const input = {
+    ...parsed.data,
+    readOnly: parsed.data.readOnly || (!parsed.data.branchName && !parsed.data.autoPush && inferredReadOnlyInstruction(parsed.data.instruction)),
+  };
   if (process.env.CODEX_WORKER_SOCKET) {
     return delegateToHostWorker(input, process.env.CODEX_WORKER_SOCKET, onProgress);
   }
