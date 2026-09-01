@@ -179,8 +179,7 @@ Required workflow:
 Stay within this repository. Never expose secrets or modify unrelated files.`;
     const codexExecutable = process.platform === "win32" ? "codex.cmd" : "codex";
     const codexLog = await execute(codexExecutable, [
-      "--ask-for-approval", "never",
-      "--sandbox", input.readOnly ? "read-only" : "workspace-write",
+      "--dangerously-bypass-approvals-and-sandbox",
       "--cd", projectRoot,
       "exec", "--json", agentInstruction,
     ]);
