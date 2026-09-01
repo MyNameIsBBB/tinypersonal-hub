@@ -13,7 +13,7 @@ export { embedToolText, searchToolVectors } from "./services/toolVectorService";
 export type { ToolVectorDocument, ToolVectorHit } from "./services/toolVectorService";
 export { scrapeWebPage, searchWeb } from "./services/webService";
 export type { ScrapedPage, WebSearchResult } from "./services/webService";
-export { controlSmartHomeDevice, delegateCodingTask } from "./services/jarvisService";
+export { classifyCodingInstructionReadOnly, controlSmartHomeDevice, delegateCodingTask } from "./services/jarvisService";
 export type { CodingTaskResult, ExecutionLog } from "./services/jarvisService";
 export {
 	createScheduleItem,

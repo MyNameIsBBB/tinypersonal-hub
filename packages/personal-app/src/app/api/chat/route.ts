@@ -1,5 +1,5 @@
 import { google } from "@ai-sdk/google";
-import { createNote, createPendingAction, deleteChatSession, deleteMediaAsset, deleteNote, deleteVaultSecret, ensureDailyGeneralChat, executeAllPendingActions, executeLatestPendingAction, generateAndUpdateSessionTitle, getLatestCodingJob, getOrCreateChatSession, getScheduleByRange, listActiveRoutines, listChatSessions, listMediaAssets, loadChatMessages, recordAudit, saveAssistantChatMessageIfCurrent, scrapeWebPage, searchNotes, searchVaultMetadata, searchWeb, updateMediaAssetLinks, updateNote, updateVaultMetadata } from "@tinypersonal/backend-api";
+import { classifyCodingInstructionReadOnly, createNote, createPendingAction, deleteChatSession, deleteMediaAsset, deleteNote, deleteVaultSecret, ensureDailyGeneralChat, executeAllPendingActions, executeLatestPendingAction, generateAndUpdateSessionTitle, getLatestCodingJob, getOrCreateChatSession, getScheduleByRange, listActiveRoutines, listChatSessions, listMediaAssets, loadChatMessages, recordAudit, saveAssistantChatMessageIfCurrent, scrapeWebPage, searchNotes, searchVaultMetadata, searchWeb, updateMediaAssetLinks, updateNote, updateVaultMetadata } from "@tinypersonal/backend-api";
 import { consumeStream, convertToModelMessages, createUIMessageStream, createUIMessageStreamResponse, isStepCount, streamText, tool, type UIMessage } from "ai";
 import { after } from "next/server";
 import { isValidSessionToken, SESSION_COOKIE } from "@/lib/serverAuth";
@@ -453,9 +453,7 @@ function directCodexTask(text: string) {
   const directlyAddressed = /(?:ถาม|สั่ง|ให้|ลองให้)\s*codex|codex\s*[:：]/iu.test(trimmed);
   if (!slashCommand && !directlyAddressed) return null;
   const instruction = slashCommand?.[1]?.trim() || trimmed;
-  const mutation = /(สร้าง|เขียน|เพิ่ม|แก้|เปลี่ยน|ลบ|ย้าย|commit|push|create|write|add|implement|fix|update|delete|remove|refactor)/iu.test(instruction);
-  const inspection = /(ตรวจ|ดู|เห็นอะไร|สถานะ|สรุป|รายการ|โครงสร้าง|inspect|status|list|review|summari[sz]e|what.*visible)/iu.test(instruction);
-  const readOnly = inspection && !mutation;
+  const readOnly = classifyCodingInstructionReadOnly(instruction);
   const branchName = readOnly ? undefined : instruction.match(/\bcodex\/[A-Za-z0-9._/-]+/i)?.[0];
   const autoPush = !readOnly && /(?:push|ขึ้น\s*(?:remote|origin|git))/iu.test(instruction);
   return { instruction, readOnly, autoPush, ...(branchName ? { branchName } : {}) };

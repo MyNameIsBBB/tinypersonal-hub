@@ -34,10 +34,11 @@ export type CodingTaskResult =
 
 export type ProgressCallback = (progress: { kind: "status" | "command" | "file" | "tool"; message: string }) => void;
 
-function inferredReadOnlyInstruction(instruction: string) {
+export function classifyCodingInstructionReadOnly(instruction: string) {
+  const explicitlyReadOnly = /(ห้าม(?:ทำการ)?(?:แก้ไข|เปลี่ยน|เขียน|ลบ)|ไม่(?:ต้อง|ให้)?(?:แก้ไข|เปลี่ยน|เขียน|ลบ)|อ่านอย่างเดียว|ดูอย่างเดียว|read[ -]?only|do not (?:modify|edit|write|change|delete)|without (?:modifying|editing|changing))/iu.test(instruction);
   const mutation = /(สร้าง|เขียน|เพิ่ม|แก้|เปลี่ยน|ลบ|ย้าย|commit|push|create|write|add|implement|fix|update|delete|remove|refactor)/iu.test(instruction);
   const inspection = /(ตรวจ|ดู|เห็นอะไร|สถานะ|สรุป|รายการ|โครงสร้าง|inspect|status|list|review|summari[sz]e|what.*visible)/iu.test(instruction);
-  return inspection && !mutation;
+  return explicitlyReadOnly || (inspection && !mutation);
 }
 
 function delegateToHostWorker(
@@ -121,7 +122,7 @@ export async function delegateCodingTask(untrustedInput: unknown, onProgress?: P
   if (!parsed.success) return { ok: false, error: { code: "INVALID_INPUT", message: parsed.error.issues[0]?.message ?? "Invalid coding task" }, data: { branch: null, logs: [] } };
   const input = {
     ...parsed.data,
-    readOnly: parsed.data.readOnly || (!parsed.data.branchName && !parsed.data.autoPush && inferredReadOnlyInstruction(parsed.data.instruction)),
+    readOnly: parsed.data.readOnly || (!parsed.data.branchName && !parsed.data.autoPush && classifyCodingInstructionReadOnly(parsed.data.instruction)),
   };
   if (process.env.CODEX_WORKER_SOCKET) {
     return delegateToHostWorker(input, process.env.CODEX_WORKER_SOCKET, onProgress);
