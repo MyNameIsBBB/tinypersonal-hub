@@ -448,11 +448,10 @@ async function directTextResponse(ownerKey: string, sessionId: string, userMessa
 }
 
 function directCodexTask(text: string) {
-  const trimmed = text.trim();
-  const slashCommand = trimmed.match(/^\/codex\s+([\s\S]+)$/i);
-  const directlyAddressed = /(?:ถาม|สั่ง|ให้|ลองให้)\s*codex|codex\s*[:：]/iu.test(trimmed);
+  const slashCommand = text.match(/^\s*\/codex[ \t]+([\s\S]+)$/i);
+  const directlyAddressed = /(?:ถาม|สั่ง|ให้|ลองให้)\s*codex|codex\s*[:：]/iu.test(text);
   if (!slashCommand && !directlyAddressed) return null;
-  const instruction = slashCommand?.[1]?.trim() || trimmed;
+  const instruction = slashCommand?.[1] || text;
   const readOnly = classifyCodingInstructionReadOnly(instruction);
   const branchName = readOnly ? undefined : instruction.match(/\bcodex\/[A-Za-z0-9._/-]+/i)?.[0];
   const autoPush = !readOnly && /(?:push|ขึ้น\s*(?:remote|origin|git))/iu.test(instruction);
@@ -556,7 +555,8 @@ export async function POST(request: Request) {
     }
     return directTextResponse(ownerKey, session.id, triggeringUserMessage.id, codingStatusText(job));
   }
-  const directTask = directCodexTask(userText);
+  const rawUserText = triggeringUserMessage.parts.filter((part) => part.type === "text").map((part) => part.text).join(" ");
+  const directTask = directCodexTask(rawUserText);
   if (directTask) {
     const summary = `ส่งข้อความตรงให้ Codex: ${directTask.instruction.slice(0, 180)}`;
     if (directTask.readOnly) {

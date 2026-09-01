@@ -446,7 +446,7 @@ export default function AIPage() {
       if (!response.ok || cancelled) return;
       const data = await response.json() as { job: CodingJobProgress | null };
       if (cancelled) return;
-      setCodingJob(data.job);
+      setCodingJob((current) => current && current.id === data.job?.id && current.updatedAt === data.job?.updatedAt ? current : data.job);
       const terminal = data.job?.status === "SUCCEEDED" || data.job?.status === "FAILED";
       if (terminal && data.job && reloadedCodingJobId.current !== data.job.id && status === "ready") {
         const chatResponse = await fetch(`/api/chat?sessionId=${encodeURIComponent(sessionId)}`, { cache: "no-store" });
@@ -459,7 +459,7 @@ export default function AIPage() {
       }
     };
     void poll();
-    const interval = codingJob?.status === "RUNNING" || codingJob?.status === "QUEUED" ? 1500 : 4000;
+    const interval = codingJob?.status === "RUNNING" ? 1500 : codingJob?.status === "QUEUED" ? 4000 : 30_000;
     const timer = window.setInterval(() => void poll(), interval);
     return () => { cancelled = true; window.clearInterval(timer); };
   }, [historyReady, sessionId, codingJob?.status, setMessages, status]);

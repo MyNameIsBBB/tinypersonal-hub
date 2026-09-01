@@ -10,7 +10,7 @@ const MAX_OUTPUT = 2_000_000;
 const COMMAND_TIMEOUT_MS = 30 * 60_000;
 
 const delegateCodingTaskSchema = z.object({
-  instruction: z.string().trim().min(3).max(20_000),
+  instruction: z.string().max(20_000).refine((value) => value.trim().length >= 3, "Instruction must contain at least 3 non-whitespace characters"),
   readOnly: z.boolean().default(false),
   branchName: z.string().trim().regex(/^[A-Za-z0-9][A-Za-z0-9._\/-]{0,119}$/).optional(),
   autoPush: z.boolean().default(false),
@@ -33,6 +33,17 @@ export type CodingTaskResult =
   | { ok: false; error: { code: "CODING_TASK_FAILED" | "INVALID_PROJECT_ROOT" | "INVALID_INPUT"; message: string }; data: { branch: string | null; logs: ExecutionLog[] } };
 
 export type ProgressCallback = (progress: { kind: "status" | "command" | "file" | "tool"; message: string }) => void;
+
+function finalCodexAgentMessage(stdout: string) {
+  let message = "";
+  for (const line of stdout.split(/\r?\n/)) {
+    try {
+      const event = JSON.parse(line) as { type?: string; item?: { type?: string; text?: string } };
+      if (event.type === "item.completed" && event.item?.type === "agent_message" && event.item.text) message = event.item.text.trim();
+    } catch {}
+  }
+  return message;
+}
 
 export function classifyCodingInstructionReadOnly(instruction: string) {
   const explicitlyReadOnly = /(ห้าม(?:ทำการ)?(?:แก้ไข|เปลี่ยน|เขียน|ลบ)|ไม่(?:ต้อง|ให้)?(?:แก้ไข|เปลี่ยน|เขียน|ลบ)|อ่านอย่างเดียว|ดูอย่างเดียว|read[ -]?only|do not (?:modify|edit|write|change|delete)|without (?:modifying|editing|changing))/iu.test(instruction);
@@ -149,7 +160,6 @@ export async function delegateCodingTask(untrustedInput: unknown, onProgress?: P
     } else {
       const statusBefore = (await execute("git", ["status", "--porcelain"])).stdout.trim();
       if (statusBefore) throw new Error("Repository has uncommitted changes; refusing to mix them with a delegated task");
-      await execute("git", ["pull", "--ff-only"]);
       await execute("git", ["switch", "-c", requestedBranch!]);
       branch = requestedBranch;
     }
@@ -168,12 +178,13 @@ Required workflow:
 
 Stay within this repository. Never expose secrets or modify unrelated files.`;
     const codexExecutable = process.platform === "win32" ? "codex.cmd" : "codex";
-    await execute(codexExecutable, [
+    const codexLog = await execute(codexExecutable, [
       "--ask-for-approval", "never",
       "--sandbox", input.readOnly ? "read-only" : "workspace-write",
       "--cd", projectRoot,
       "exec", "--json", agentInstruction,
     ]);
+    if (!finalCodexAgentMessage(codexLog.stdout)) throw new Error("Codex exited without a final agent message");
     branch = (await execute("git", ["branch", "--show-current"])).stdout.trim() || "HEAD";
     if (!input.readOnly && branch !== requestedBranch) throw new Error(`Expected branch ${requestedBranch}, but current branch is ${branch}`);
     const statusAfter = (await execute("git", ["status", "--porcelain"])).stdout.trim();

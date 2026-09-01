@@ -2,7 +2,7 @@ import { tool } from "ai";
 import { z } from "zod";
 
 export const delegateCodingTaskInputSchema = z.object({
-  instruction: z.string().trim().min(3).max(20_000),
+  instruction: z.string().max(20_000).refine((value) => value.trim().length >= 3, "Instruction must contain at least 3 non-whitespace characters"),
   readOnly: z.boolean().default(false).describe("Set true for inspection, status, review, listing, or summarization tasks that must not change the repository."),
   branchName: z.string().trim().regex(/^[A-Za-z0-9][A-Za-z0-9._\/-]{0,119}$/).optional(),
   autoPush: z.boolean().default(false),

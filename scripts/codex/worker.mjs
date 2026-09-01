@@ -8,7 +8,7 @@ import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
 const socketPath = process.env.CODEX_WORKER_SOCKET ?? "/tmp/tinypersonal-codex-worker/worker.sock";
-const projectRoot = resolve(process.env.CODEX_WORKER_PROJECT_ROOT ?? "/home/best/production-app");
+const projectRoot = resolve(process.env.CODEX_WORKER_PROJECT_ROOT ?? "/home/best/codex-playground");
 const codexExecutable = process.env.CODEX_EXECUTABLE ?? "codex";
 const maxOutput = 2_000_000;
 const timeout = 30 * 60_000;
@@ -61,6 +61,21 @@ function safeProgress(raw) {
   return null;
 }
 
+function finalAgentMessage(stdout) {
+  let message = "";
+  for (const line of stdout.split(/\r?\n/)) {
+    try {
+      const event = JSON.parse(line);
+      if (event?.type === "item.completed" && event?.item?.type === "agent_message" && typeof event.item.text === "string") message = event.item.text.trim();
+    } catch {}
+  }
+  return message;
+}
+
+function lifecycle(event, details = {}) {
+  console.log(JSON.stringify({ at: new Date().toISOString(), event, projectRoot, ...details }));
+}
+
 function runCodex(args, emit) {
   return new Promise((resolveRun, rejectRun) => {
     const child = spawn(codexExecutable, args, { cwd: projectRoot, windowsHide: true });
@@ -74,7 +89,11 @@ function runCodex(args, emit) {
     });
     child.stderr.on("data", (chunk) => { stderr = (stderr + chunk).slice(-maxOutput); });
     child.once("error", rejectRun);
-    child.once("close", (code) => { clearTimeout(timer); const log = { command: `${codexExecutable} exec --json`, stdout, stderr, exitCode: code ?? 1 }; code === 0 ? resolveRun(log) : rejectRun(Object.assign(new Error(`Codex exited with code ${code}`), { log })); });
+    child.once("close", (code) => {
+      clearTimeout(timer);
+      const log = { command: `${codexExecutable} exec --json`, stdout, stderr, exitCode: code ?? 1, finalMessage: finalAgentMessage(stdout) };
+      code === 0 ? resolveRun(log) : rejectRun(Object.assign(new Error(`Codex exited with code ${code}`), { log }));
+    });
   });
 }
 
@@ -92,13 +111,14 @@ async function executeTask(input, emit = () => {}) {
     }
   };
   try {
+    const startedAt = Date.now();
     const requestedBranch = input.readOnly ? null : input.branchName ?? `codex/task-${Date.now()}`;
+    lifecycle("task.received", { mode: input.readOnly ? "read-only" : "workspace-write", requestedBranch });
     if (input.readOnly) {
       branch = (await execute("git", ["branch", "--show-current"])).stdout.trim() || "HEAD";
     } else {
       const statusBefore = (await execute("git", ["status", "--porcelain"])).stdout.trim();
       if (statusBefore) throw new Error("Repository has uncommitted changes; refusing to mix them with a delegated task");
-      await execute("git", ["pull", "--ff-only"]);
       await execute("git", ["switch", "-c", requestedBranch]);
       branch = requestedBranch;
     }
@@ -117,7 +137,10 @@ Required workflow:
 
 Stay within this repository. Never expose secrets or modify unrelated files.`;
     emit({ kind: "status", message: "เริ่ม Codex CLI และตรวจสอบ repository" });
-    logs.push(await runCodex(["--ask-for-approval", "never", "--sandbox", input.readOnly ? "read-only" : "workspace-write", "--cd", projectRoot, "exec", "--json", instruction], emit));
+    lifecycle("codex.started", { mode: input.readOnly ? "read-only" : "workspace-write", branch });
+    const codexLog = await runCodex(["--ask-for-approval", "never", "--sandbox", input.readOnly ? "read-only" : "workspace-write", "--cd", projectRoot, "exec", "--json", instruction], emit);
+    logs.push(codexLog);
+    if (!codexLog.finalMessage) throw new Error("Codex exited without a final agent message");
     branch = (await execute("git", ["branch", "--show-current"])).stdout.trim() || "HEAD";
     if (!input.readOnly && branch !== requestedBranch) throw new Error(`Expected branch ${requestedBranch}, but current branch is ${branch}`);
     const statusAfter = (await execute("git", ["status", "--porcelain"])).stdout.trim();
@@ -127,8 +150,10 @@ Stay within this repository. Never expose secrets or modify unrelated files.`;
       await execute("git", ["commit", "-m", "chore(codex): complete delegated task"]);
       await execute("git", ["push", "--set-upstream", "origin", requestedBranch]);
     }
+    lifecycle("task.completed", { mode: input.readOnly ? "read-only" : "workspace-write", branch, durationMs: Date.now() - startedAt });
     return { ok: true, data: { branch, logs } };
   } catch (error) {
+    lifecycle("task.failed", { branch, error: error instanceof Error ? error.message.slice(0, 500) : "Coding task failed" });
     return { ok: false, error: { code: "CODING_TASK_FAILED", message: error instanceof Error ? error.message : "Coding task failed" }, data: { branch, logs } };
   }
 }

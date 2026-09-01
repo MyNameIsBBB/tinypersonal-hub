@@ -3,6 +3,14 @@
 set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+if [[ -f "$SCRIPT_DIR/.env" ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  source "$SCRIPT_DIR/.env"
+  set +a
+fi
+
 APP_NAME="tinypersonal-hub"
 IMAGE_NAME="${APP_NAME}:local"
 CONTAINER_NAME="${APP_NAME}"
@@ -22,7 +30,12 @@ done
 
 cd "$SCRIPT_DIR"
 
-HOST_JARVIS_PROJECT_ROOT="${HOST_JARVIS_PROJECT_ROOT:-$SCRIPT_DIR}" "$SCRIPT_DIR/scripts/codex/start-worker.sh"
+if [[ -z "${CRON_SECRET:-}" ]]; then
+  echo "Error: CRON_SECRET is required so the coding-job runner can process queued tasks." >&2
+  exit 1
+fi
+
+HOST_JARVIS_PROJECT_ROOT="${HOST_JARVIS_PROJECT_ROOT:-/home/best/codex-playground}" "$SCRIPT_DIR/scripts/codex/start-worker.sh"
 
 echo "Clearing Docker build cache before build..."
 docker builder prune --all --force
@@ -72,5 +85,11 @@ for attempt in {1..30}; do
   fi
   sleep 2
 done
+
+if ! docker top "$CONTAINER_NAME" -eo args | grep -q "scripts/codex/run-jobs.mjs"; then
+  echo "Error: coding-job runner is not running inside $CONTAINER_NAME." >&2
+  docker logs --tail 100 "$CONTAINER_NAME" >&2
+  exit 1
+fi
 
 ENABLE_TAILSCALE_FUNNEL="$ENABLE_TAILSCALE_FUNNEL" "$SCRIPT_DIR/scripts/open-funnel.sh" "$PORT" || true
