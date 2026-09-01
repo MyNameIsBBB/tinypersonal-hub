@@ -163,6 +163,7 @@ export default function AIPage() {
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const voiceRequestPending = useRef(false);
   const lastSpokenMessageId = useRef<string | null>(null);
+  const reloadedCodingJobId = useRef<string | null>(null);
   const threadRef = useRef<HTMLDivElement | null>(null);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
   const generalCycleRef = useRef(new Date(Date.now() - 3_600_000).toISOString().slice(0, 10));
@@ -444,19 +445,24 @@ export default function AIPage() {
       const response = await fetch(`/api/jobs/coding?sessionId=${encodeURIComponent(sessionId)}`, { cache: "no-store" });
       if (!response.ok || cancelled) return;
       const data = await response.json() as { job: CodingJobProgress | null };
-      if (!cancelled) setCodingJob(data.job);
+      if (cancelled) return;
+      setCodingJob(data.job);
+      const terminal = data.job?.status === "SUCCEEDED" || data.job?.status === "FAILED";
+      if (terminal && data.job && reloadedCodingJobId.current !== data.job.id && status === "ready") {
+        const chatResponse = await fetch(`/api/chat?sessionId=${encodeURIComponent(sessionId)}`, { cache: "no-store" });
+        if (!chatResponse.ok || cancelled) return;
+        const chatData = await chatResponse.json() as { messages?: Parameters<typeof setMessages>[0] };
+        if (Array.isArray(chatData.messages)) {
+          reloadedCodingJobId.current = data.job.id;
+          setMessages(chatData.messages);
+        }
+      }
     };
     void poll();
     const interval = codingJob?.status === "RUNNING" || codingJob?.status === "QUEUED" ? 1500 : 4000;
     const timer = window.setInterval(() => void poll(), interval);
     return () => { cancelled = true; window.clearInterval(timer); };
-  }, [historyReady, sessionId, codingJob?.status]);
-
-  useEffect(() => {
-    if (codingJob?.status === "RUNNING" || codingJob?.status === "QUEUED") {
-      threadRef.current?.scrollTo({ top: threadRef.current.scrollHeight, behavior: "smooth" });
-    }
-  }, [codingJob?.status, codingJobEvents.length]);
+  }, [historyReady, sessionId, codingJob?.status, setMessages, status]);
 
   const [searchQuery, setSearchQuery] = useState("");
 

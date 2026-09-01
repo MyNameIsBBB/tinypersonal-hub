@@ -1,5 +1,5 @@
 import { google } from "@ai-sdk/google";
-import { classifyCodingInstructionReadOnly, createNote, createPendingAction, deleteChatSession, deleteMediaAsset, deleteNote, deleteVaultSecret, ensureDailyGeneralChat, executeAllPendingActions, executeLatestPendingAction, generateAndUpdateSessionTitle, getLatestCodingJob, getOrCreateChatSession, getScheduleByRange, listActiveRoutines, listChatSessions, listMediaAssets, loadChatMessages, recordAudit, saveAssistantChatMessageIfCurrent, scrapeWebPage, searchNotes, searchVaultMetadata, searchWeb, updateMediaAssetLinks, updateNote, updateVaultMetadata } from "@tinypersonal/backend-api";
+import { classifyCodingInstructionReadOnly, createNote, createPendingAction, deleteChatSession, deleteMediaAsset, deleteNote, deleteVaultSecret, enqueueCodingJob, ensureDailyGeneralChat, executeLatestPendingAction, generateAndUpdateSessionTitle, getLatestCodingJob, getOrCreateChatSession, getScheduleByRange, listActiveRoutines, listChatSessions, listMediaAssets, loadChatMessages, recordAudit, saveAssistantChatMessageIfCurrent, scrapeWebPage, searchNotes, searchVaultMetadata, searchWeb, updateMediaAssetLinks, updateNote, updateVaultMetadata } from "@tinypersonal/backend-api";
 import { consumeStream, convertToModelMessages, createUIMessageStream, createUIMessageStreamResponse, isStepCount, streamText, tool, type UIMessage } from "ai";
 import { after } from "next/server";
 import { isValidSessionToken, SESSION_COOKIE } from "@/lib/serverAuth";
@@ -460,7 +460,7 @@ function directCodexTask(text: string) {
 }
 
 function asksForCodingStatus(text: string) {
-  return /^(?:เป็นไง(?:บ้าง|แล้ว)?(?:ได้ไหม)?|ถึงไหนแล้ว|สถานะ(?:งาน)?(?:เป็นไง)?|codex\s*(?:เป็นไง|status)|งาน\s*codex\s*(?:เป็นไง|ถึงไหน))\??$/iu.test(text.trim());
+  return /^(?:เป็นไง(?:บ้าง|แล้ว)?(?:ได้ไหม)?|ถึงไหนแล้ว|ไหน(?:ล่ะ|อะ|อ่ะ)?|ขอดูผล(?:ลัพธ์)?|ผล(?:ลัพธ์)?(?:เป็นไง)?|สถานะ(?:งาน)?(?:เป็นไง)?|codex\s*(?:เป็นไง|status)|งาน\s*codex\s*(?:เป็นไง|ถึงไหน))\??$/iu.test(text.trim());
 }
 
 function codingStatusText(job: Awaited<ReturnType<typeof getLatestCodingJob>>) {
@@ -479,19 +479,11 @@ function codingStatusText(job: Awaited<ReturnType<typeof getLatestCodingJob>>) {
 async function confirmationResponse(ownerKey: string, sessionId: string, userMessageId: string, approved: boolean) {
   let responseText: string;
   try {
-    const executions = await executeAllPendingActions(ownerKey, sessionId, approved);
-    if (executions.length === 0) return null;
-    if (executions.length === 1) {
-      const execution = executions[0];
-      if (execution.denied) responseText = `รับทราบครับ ผมยุติคำสั่ง “${execution.action.summary}” แล้ว`;
-      else if (execution.action.toolName === "coding.delegateTask") responseText = `รับคำสั่งแล้วครับ ผมส่ง “${execution.action.summary}” เข้าคิว Codex แล้ว เมื่อ worker ดำเนินการและตรวจสอบเสร็จ ผมจะรายงานผลกลับมาในบทสนทนานี้ครับ`;
-      else responseText = `รับคำสั่งแล้วครับ ดำเนินการ “${execution.action.summary}” เรียบร้อยแล้วครับ`;
-    } else {
-      const summaries = executions.map((e, index) => `${index + 1}. ${e.action.summary}`).join("\n");
-      responseText = approved
-        ? `รับคำสั่งแล้วครับ ดำเนินการเรียบร้อยแล้วทั้ง ${executions.length} รายการ:\n${summaries}`
-        : `รับทราบครับ ยุติคำสั่งเรียบร้อยแล้วทั้ง ${executions.length} รายการ:\n${summaries}`;
-    }
+    const execution = await executeLatestPendingAction(ownerKey, sessionId, approved);
+    if (!execution) return null;
+    if (execution.denied) responseText = `รับทราบครับ ผมยุติคำสั่ง “${execution.action.summary}” แล้ว`;
+    else if (execution.action.toolName === "coding.delegateTask") responseText = `รับคำสั่งแล้วครับ ผมส่ง “${execution.action.summary}” เข้าคิว Codex แล้ว เมื่อ worker ดำเนินการเสร็จ ผลลัพธ์จะปรากฏในบทสนทนานี้ครับ`;
+    else responseText = `รับคำสั่งแล้วครับ ดำเนินการ “${execution.action.summary}” เรียบร้อยแล้วครับ`;
   } catch (error) {
     responseText = `ดำเนินการยืนยันไม่สำเร็จครับ: ${error instanceof Error ? error.message : "เกิดข้อผิดพลาดที่ไม่ทราบสาเหตุ"}`;
   }
@@ -556,11 +548,21 @@ export async function POST(request: Request) {
   const userText = latestUserText(baseMessages);
   if (asksForCodingStatus(userText)) {
     const job = await getLatestCodingJob(ownerKey, session.id);
+    if (job?.status === "SUCCEEDED") {
+      const storedMessages = await loadChatMessages(ownerKey, session.id) as UIMessage[];
+      const resultMessage = storedMessages.find(({ id }) => id === `coding-job-${job.id}`);
+      const resultText = resultMessage?.parts.filter((part) => part.type === "text").map((part) => part.text).join("\n").trim();
+      if (resultText) return directTextResponse(ownerKey, session.id, triggeringUserMessage.id, resultText);
+    }
     return directTextResponse(ownerKey, session.id, triggeringUserMessage.id, codingStatusText(job));
   }
   const directTask = directCodexTask(userText);
   if (directTask) {
     const summary = `ส่งข้อความตรงให้ Codex: ${directTask.instruction.slice(0, 180)}`;
+    if (directTask.readOnly) {
+      await enqueueCodingJob({ ownerKey, sessionId: session.id, userMessageId: triggeringUserMessage.id, task: directTask });
+      return directTextResponse(ownerKey, session.id, triggeringUserMessage.id, `ส่งข้อความต้นฉบับเข้า Codex แบบอ่านอย่างเดียวแล้วครับ\n\n“${directTask.instruction}”\n\nไม่ต้องยืนยันเพิ่มเติม ผลลัพธ์จะปรากฏในบทสนทนานี้เมื่อทำงานเสร็จ`);
+    }
     const action = await createPendingAction({ ownerKey, sessionId: session.id, toolName: "coding.delegateTask", summary, arguments: directTask });
     return directTextResponse(ownerKey, session.id, triggeringUserMessage.id, `เตรียมส่งข้อความต้นฉบับให้ Codex โดยตรงแล้วครับ\n\n“${directTask.instruction}”\n\nโหมด: ${directTask.readOnly ? "อ่านอย่างเดียว" : "แก้ไข repository"}\nรอคำสั่งของท่านครับ — โปรดพิมพ์ ‘ยืนยัน’ เพื่อเริ่มภารกิจ หรือ ‘ยกเลิก’ เพื่อยุติคำสั่งนี้ครับ\n\nรหัสยืนยัน: ${action.id}`);
   }
