@@ -86,12 +86,12 @@ for attempt in {1..30}; do
   sleep 2
 done
 
-if ! docker top "$CONTAINER_NAME" -eo args | grep -q "scripts/codex/run-jobs.mjs"; then
+if ! docker top "$CONTAINER_NAME" -eo pid,args | grep -q "scripts/codex/run-jobs.mjs"; then
   echo "Error: coding-job runner is not running inside $CONTAINER_NAME." >&2
   docker logs --tail 100 "$CONTAINER_NAME" >&2
   exit 1
 fi
-if ! docker top "$CONTAINER_NAME" -eo args | grep -q "scripts/chat/run-jobs.mjs"; then
+if ! docker top "$CONTAINER_NAME" -eo pid,args | grep -q "scripts/chat/run-jobs.mjs"; then
   echo "Error: chat generation runner is not running inside $CONTAINER_NAME." >&2
   docker logs --tail 100 "$CONTAINER_NAME" >&2
   exit 1

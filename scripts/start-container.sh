@@ -19,7 +19,7 @@ start_child() {
 trap stop_children EXIT INT TERM
 
 npm run db:deploy
-start_child npm run start --workspace=@tinypersonal/personal-app -- --hostname 0.0.0.0 --port 3000
+start_child npm run start --workspace=@tinypersonal/personal-app -- --port 3000
 
 if [[ -n "${CRON_SECRET:-}" ]]; then
   start_child node scripts/codex/run-jobs.mjs
