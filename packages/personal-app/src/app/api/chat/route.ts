@@ -1,5 +1,5 @@
 import { google } from "@ai-sdk/google";
-import { classifyCodingInstructionReadOnly, createNote, createPendingAction, deleteChatSession, deleteMediaAsset, deleteNote, deleteVaultSecret, enqueueChatGenerationJob, enqueueCodingJob, ensureDailyGeneralChat, executeLatestPendingAction, generateAndUpdateSessionTitle, getLatestCodingJob, getOrCreateChatSession, getScheduleByRange, listActiveRoutines, listChatSessions, listMediaAssets, loadChatMessages, recordAudit, saveAssistantChatMessageIfCurrent, scrapeWebPage, searchNotes, searchVaultMetadata, searchWeb, updateMediaAssetLinks, updateNote, updateVaultMetadata } from "@tinypersonal/backend-api";
+import { createNote, createPendingAction, deleteChatSession, deleteMediaAsset, deleteNote, deleteVaultSecret, enqueueChatGenerationJob, ensureDailyGeneralChat, executeLatestPendingAction, generateAndUpdateSessionTitle, getLatestCodingJob, getOrCreateChatSession, getScheduleByRange, listActiveRoutines, listChatSessions, listMediaAssets, loadChatMessages, recordAudit, saveAssistantChatMessageIfCurrent, scrapeWebPage, searchNotes, searchVaultMetadata, searchWeb, updateMediaAssetLinks, updateNote, updateVaultMetadata } from "@tinypersonal/backend-api";
 import { consumeStream, convertToModelMessages, createUIMessageStream, createUIMessageStreamResponse, isStepCount, streamText, tool, type UIMessage } from "ai";
 import { after } from "next/server";
 import { isCronAuthorizedRequest, isValidSessionToken, SESSION_COOKIE } from "@/lib/serverAuth";
@@ -190,7 +190,7 @@ const webScrapeExecutionTool = tool({
 });
 
 const delegateCodingExecutionTool = (ownerKey: string, sessionId: string) => tool({
-  description: "Prepare a durable local Codex task. Every coding task requires explicit user confirmation before it is queued.",
+  description: "Prepare a durable B1-DevOps Codex task after B1 has decided the current request needs repository execution. Preserve the complete request and all constraints. Every mutating coding task requires explicit user confirmation before it is queued.",
   inputSchema: delegateCodingTaskInputSchema,
   execute: async (input) => {
     const action = await createPendingAction({ ownerKey, sessionId, toolName: "coding.delegateTask", summary: "ส่งงานให้ Codex: " + input.instruction.slice(0, 180), arguments: input });
@@ -469,17 +469,6 @@ function queuedTextResponse(jobId: string) {
   return createUIMessageStreamResponse({ stream });
 }
 
-function directCodexTask(text: string) {
-  const slashCommand = text.match(/^\s*\/codex[ \t]+([\s\S]+)$/i);
-  const directlyAddressed = /(?:ถาม|สั่ง|ให้|ลองให้)\s*codex|codex\s*[:：]/iu.test(text);
-  if (!slashCommand && !directlyAddressed) return null;
-  const instruction = slashCommand?.[1] || text;
-  const readOnly = classifyCodingInstructionReadOnly(instruction);
-  const branchName = readOnly ? undefined : instruction.match(/\bcodex\/[A-Za-z0-9._/-]+/i)?.[0];
-  const autoPush = !readOnly && /(?:push|ขึ้น\s*(?:remote|origin|git))/iu.test(instruction);
-  return { instruction, readOnly, autoPush, ...(branchName ? { branchName } : {}) };
-}
-
 function asksForCodingStatus(text: string) {
   return /^(?:เป็นไง(?:บ้าง|แล้ว)?(?:ได้ไหม)?|ถึงไหนแล้ว|ไหน(?:ล่ะ|อะ|อ่ะ)?|ขอดูผล(?:ลัพธ์)?|ผล(?:ลัพธ์)?(?:เป็นไง)?|สถานะ(?:งาน)?(?:เป็นไง)?|codex\s*(?:เป็นไง|status)|งาน\s*codex\s*(?:เป็นไง|ถึงไหน))\??$/iu.test(text.trim());
 }
@@ -593,18 +582,6 @@ export async function POST(request: Request) {
     }
     return directTextResponse(ownerKey, session.id, triggeringUserMessage.id, codingStatusText(job), responseMessageId);
   }
-  const rawUserText = triggeringUserMessage.parts.filter((part) => part.type === "text").map((part) => part.text).join(" ");
-  const directTask = directCodexTask(rawUserText);
-  if (directTask) {
-    const summary = `ส่งข้อความตรงให้ Codex: ${directTask.instruction.slice(0, 180)}`;
-    if (directTask.readOnly) {
-      await enqueueCodingJob({ ownerKey, sessionId: session.id, userMessageId: triggeringUserMessage.id, task: directTask });
-      return directTextResponse(ownerKey, session.id, triggeringUserMessage.id, `ส่งข้อความต้นฉบับเข้า Codex แบบอ่านอย่างเดียวแล้วครับ\n\n“${directTask.instruction}”\n\nไม่ต้องยืนยันเพิ่มเติม ผลลัพธ์จะปรากฏในบทสนทนานี้เมื่อทำงานเสร็จ`, responseMessageId);
-    }
-    const action = await createPendingAction({ ownerKey, sessionId: session.id, toolName: "coding.delegateTask", summary, arguments: directTask });
-    return directTextResponse(ownerKey, session.id, triggeringUserMessage.id, `เตรียมส่งข้อความต้นฉบับให้ Codex โดยตรงแล้วครับ\n\n“${directTask.instruction}”\n\nโหมด: ${directTask.readOnly ? "อ่านอย่างเดียว" : "แก้ไข repository"}\nรอคำสั่งของท่านครับ — โปรดพิมพ์ ‘ยืนยัน’ เพื่อเริ่มภารกิจ หรือ ‘ยกเลิก’ เพื่อยุติคำสั่งนี้ครับ\n\nรหัสยืนยัน: ${action.id}`, responseMessageId);
-  }
-
   const allowedTools: ToolName[] = [
     "getSchedule", "createScheduleItem", "updateTaskStatus", "updateRoutine", "deleteRoutine",
     "searchWeb", "fetchWebPage", "searchNotes", "createNote", "updateNote", "deleteNote",
