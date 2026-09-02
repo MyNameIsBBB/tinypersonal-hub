@@ -10,6 +10,16 @@ describe("JARVIS tool contracts", () => {
     expect(delegateCodingTaskInputSchema.safeParse({ instruction: "Fix the test", branchName: "feature/x && whoami" }).success).toBe(false);
   });
 
+  it("accepts repository inspection as read-only", () => {
+    const result = delegateCodingTaskInputSchema.safeParse({ instruction: "Inspect repository status", readOnly: true });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.autoPush).toBe(false);
+  });
+
+  it("rejects branch mutations in read-only mode", () => {
+    expect(delegateCodingTaskInputSchema.safeParse({ instruction: "Inspect repository", readOnly: true, branchName: "codex/inspect" }).success).toBe(false);
+  });
+
   it("accepts a climate temperature service", () => {
     expect(controlSmartHomeDeviceInputSchema.safeParse({ domain: "climate", service: "set_temperature", entityId: "climate.living_room", payload: { temperature: 25 } }).success).toBe(true);
   });

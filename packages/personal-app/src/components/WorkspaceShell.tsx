@@ -56,6 +56,13 @@ export function WorkspaceShell({ active, title, subtitle, action, focusMode = fa
     });
   }, []);
 
+  useEffect(() => {
+    if (!open) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = previousOverflow; };
+  }, [open]);
+
   async function toggleNotifications() {
     setNotificationBusy(true); setNotificationMessage("");
     try {
@@ -104,7 +111,9 @@ export function WorkspaceShell({ active, title, subtitle, action, focusMode = fa
             </Link>
           ))}
         </nav>
-        {sidebarExtra && <div className="sidebar-extra">{sidebarExtra}</div>}
+        {sidebarExtra && <div className="sidebar-extra" onClickCapture={(event) => {
+          if (window.matchMedia("(max-width: 760px)").matches && (event.target as HTMLElement).closest(".sidebar-chat-link, .sidebar-new-chat-btn")) setOpen(false);
+        }}>{sidebarExtra}</div>}
         <button className="notification-toggle" onClick={() => setNotificationOpen(true)}>{notificationEnabled ? <Bell size={16} /> : <BellOff size={16} />}<span>{notificationEnabled ? "เปิดการแจ้งเตือนแล้ว" : "ตั้งค่าการแจ้งเตือน"}</span></button>
         <div className="sidebar-version" title="เวอร์ชันของ build ที่กำลังเปิดอยู่">Build {appVersion}</div>
         <div className="sidebar-note"><span><Sparkles size={15} /> Private by design</span><p>ข้อมูลสำคัญอยู่หลังขอบเขตสิทธิ์และการเข้ารหัส</p></div>

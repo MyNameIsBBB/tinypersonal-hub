@@ -224,6 +224,25 @@ model CodingJob {
   @@index([ownerKey, sessionId, createdAt])
 }
 
+model ChatGenerationJob {
+  id            String   @id @default(cuid())
+  ownerKey      String
+  sessionId     String
+  userMessageId String
+  inputJson     String   @default("{}")
+  status        String   @default("QUEUED")
+  attempts      Int      @default(0)
+  leaseUntil    DateTime?
+  error         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  completedAt   DateTime?
+
+  @@unique([sessionId, userMessageId])
+  @@index([status, createdAt])
+  @@index([ownerKey, sessionId, createdAt])
+}
+
 model AuditLog {
   id          String   @id @default(cuid())
   actorId     String

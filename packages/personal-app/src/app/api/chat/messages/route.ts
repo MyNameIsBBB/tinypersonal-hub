@@ -1,4 +1,4 @@
-import { getOrCreateChatSession, saveUserChatMessage } from "@tinypersonal/backend-api";
+import { getOrCreateChatSession, saveUserMessageAndEnqueueChatGeneration } from "@tinypersonal/backend-api";
 import { z } from "zod";
 import { parseJson } from "@/lib/apiValidation";
 import { authorizedOwnerKey } from "@/lib/serverAuth";
@@ -18,6 +18,7 @@ const saveMessageSchema = z.object({
       }).strict(),
     ])).min(1).max(4),
   }).strict(),
+  voiceMode: z.boolean().optional(),
 }).strict().superRefine(({ message }, context) => {
   const fileCount = message.parts.filter(({ type }) => type === "file").length;
   if (fileCount > 3) context.addIssue({ code: "custom", path: ["message", "parts"], message: "Up to 3 images are allowed" });
@@ -34,6 +35,11 @@ export async function POST(request: Request) {
   if (session.id !== parsed.data.sessionId) {
     return Response.json({ error: "Chat session not found" }, { status: 404 });
   }
-  const result = await saveUserChatMessage(ownerKey, session.id, parsed.data.message);
-  return Response.json({ ok: true, ...result }, { headers: { "Cache-Control": "no-store" } });
+  const job = await saveUserMessageAndEnqueueChatGeneration({
+    ownerKey,
+    sessionId: session.id,
+    message: parsed.data.message,
+    request: { voiceMode: parsed.data.voiceMode ?? false },
+  });
+  return Response.json({ ok: true, jobId: job.id }, { headers: { "Cache-Control": "no-store" } });
 }

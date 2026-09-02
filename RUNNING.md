@@ -218,6 +218,16 @@ Tailscale Funnel จะเผยแพร่แอปออกสู่อิน
 
 ## 3. รันด้วย Docker
 
+`start-docker.sh` เป็นคำสั่งเดียวสำหรับเส้นทาง Docker ปกติ โดยสคริปต์จะ:
+
+1. เปิด host-side Codex worker และชี้ไปที่ repository นี้โดยค่าเริ่มต้น
+2. ล้าง Docker build cache ก่อน build
+3. build และเปิด application container
+4. เปิด coding-job runner ภายใน container เมื่อกำหนด `CRON_SECRET`
+5. ตรวจ health และเปิด Tailscale Funnel ตาม configuration
+
+จึงไม่ต้องเปิด Codex worker หรือ coding-job runner แยกอีก หากต้องการให้ coding jobs ทำงาน ต้องกำหนด `CRON_SECRET` ที่ไม่ว่างใน `.env` ก่อนรัน หากต้องการให้ Codex ทำงานกับ repository อื่น ให้กำหนด `HOST_JARVIS_PROJECT_ROOT` เป็น absolute path ของ repository นั้น
+
 สิ่งที่ต้องติดตั้ง:
 
 - Docker

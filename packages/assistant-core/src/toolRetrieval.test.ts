@@ -10,6 +10,12 @@ describe("tool retrieval", () => {
     await expect(retrieveToolNames("ช่วยวิเคราะห์โค้ด TypeScript นี้", ["searchWeb", "fetchWebPage"])).resolves.toEqual([]);
   });
 
+  it("does not keep Codex routing sticky across independent messages", async () => {
+    const allowed = ["delegateCodingTask", "getSchedule"] as const;
+    await expect(retrieveToolNames("ให้ Codex รันเทสต์โปรเจกต์", [...allowed])).resolves.toContain("delegateCodingTask");
+    await expect(retrieveToolNames("พรุ่งนี้ผมมีนัดอะไรบ้าง", [...allowed])).resolves.toEqual(["getSchedule"]);
+  });
+
   it("never widens the allowlist", async () => {
     await expect(retrieveToolNames("ค้นเว็บข่าวล่าสุด", ["getSchedule"])).resolves.toEqual([]);
   });

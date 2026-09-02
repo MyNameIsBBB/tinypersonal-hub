@@ -157,10 +157,13 @@ export async function loadChatMessages(
     if (!session) return [];
     const rows = await prisma.chatMessage.findMany({
         where: { sessionId },
-        orderBy: { createdAt: "asc" },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
         take: 120,
     });
-    return rows.map((row) => JSON.parse(row.payloadJson) as StoredChatMessage);
+    return rows
+        .reverse()
+        .filter((row) => row.role !== "assistant_pending")
+        .map((row) => JSON.parse(row.payloadJson) as StoredChatMessage);
 }
 
 export async function saveChatMessage(
@@ -269,4 +272,33 @@ export async function deleteChatSession(ownerKey: string, sessionId: string) {
     return prisma.chatSession.deleteMany({
         where: { id: sessionId, ownerKey, title: { not: GENERAL_CHAT_TITLE } },
     });
+}
+
+export async function generateAndUpdateSessionTitle(ownerKey: string, sessionId: string): Promise<string | null> {
+    const session = await prisma.chatSession.findFirst({
+        where: { id: sessionId, ownerKey },
+        select: { id: true, title: true },
+    });
+    if (!session || session.title === GENERAL_CHAT_TITLE) return session?.title ?? null;
+    if (session.title && session.title !== "บทสนทนาใหม่") return session.title;
+
+    const messages = await loadChatMessages(ownerKey, sessionId);
+    const firstUserMessage = messages.find((m) => m.role === "user");
+    if (!firstUserMessage) return null;
+
+    const text = firstUserMessage.parts
+        .flatMap((part) => (typeof part === "object" && part && "text" in part ? [String((part as { text: unknown }).text)] : []))
+        .join(" ")
+        .trim();
+    if (!text) return null;
+
+    const generatedTitle = text.slice(0, 45).replace(/[\r\n]+/g, " ").trim();
+    if (generatedTitle) {
+        await prisma.chatSession.update({
+            where: { id: sessionId },
+            data: { title: generatedTitle },
+        });
+        return generatedTitle;
+    }
+    return null;
 }

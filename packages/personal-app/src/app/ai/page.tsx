@@ -1,15 +1,17 @@
 "use client";
 
 import { useChat } from "@ai-sdk/react";
-import { AlertCircle, ArrowUp, Bot, CalendarPlus, CheckCircle2, ChevronDown, FileSearch, KeyRound, LoaderCircle, MessageSquare, Mic, MicOff, Paperclip, Plus, ShieldCheck, Trash2, Volume2, VolumeX, X } from "lucide-react";
+import { AlertCircle, ArrowUp, Bot, CalendarPlus, Check, CheckCircle2, ChevronDown, Copy, FileSearch, KeyRound, LoaderCircle, MessageSquare, Mic, MicOff, Paperclip, Plus, Search, ShieldCheck, Trash2, Volume2, VolumeX, X } from "lucide-react";
 import { getToolName, isToolUIPart, type FileUIPart, type UIMessage, type UIMessagePart } from "ai";
-import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import rehypeKatex from "rehype-katex";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import { WorkspaceShell } from "@/components/WorkspaceShell";
+import { AppModal } from "@/components/AppModal";
 import { markChatSessionActive, registerChatTask } from "@/lib/chat/backgroundTasks";
+import { mergeServerMessages } from "@/lib/chat/ChatStreamHandler";
 
 const suggestions = [
   { icon: CalendarPlus, text: "ตั้ง Routine วิ่งทุกวันจันทร์และพุธ 07:00 ถึงสิ้นเดือน" },
@@ -19,6 +21,7 @@ const suggestions = [
 
 type CodingJobProgressEvent = { at: string; kind: "status" | "command" | "file" | "tool"; message: string };
 type CodingJobProgress = { id: string; status: string; attempts: number; progressJson: string; createdAt: string; updatedAt: string; completedAt: string | null; error: string | null };
+type ChatGenerationJobProgress = { id: string; userMessageId: string; status: string; attempts: number; createdAt: string; updatedAt: string; completedAt: string | null; error: string | null };
 type ChatSessionSummary = { id: string; title: string | null; updatedAt: string; _count: { messages: number } };
 const GENERAL_CHAT_TITLE = "แชททั่วไป";
 
@@ -36,7 +39,36 @@ function normalizeAssistantMath() {
   };
 }
 
-function renderMessageParts(parts: UIMessagePart<any, any>[]) {
+function CodeBlockWrapper({ children }: { children?: ReactNode }) {
+  const [copied, setCopied] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const copyCode = () => {
+    if (!containerRef.current) return;
+    const pre = containerRef.current.querySelector("pre");
+    const text = pre?.textContent ?? "";
+    void navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="code-block-container" ref={containerRef}>
+      <div className="code-block-header">
+        <button type="button" className="code-copy-btn" onClick={copyCode}>
+          {copied ? <Check size={13} /> : <Copy size={13} />}
+          <span>{copied ? "คัดลอกแล้ว" : "คัดลอกโค้ด"}</span>
+        </button>
+      </div>
+      <pre>{children}</pre>
+    </div>
+  );
+}
+
+function renderMessageParts(
+  parts: UIMessagePart<any, any>[],
+  onConfirmAction?: (actionId: string, approved: boolean) => void,
+) {
   const latestToolPartIndexByToolName = new Map<string, number>();
   parts.forEach((part, index) => {
     if (isToolUIPart(part)) {
@@ -53,6 +85,7 @@ function renderMessageParts(parts: UIMessagePart<any, any>[]) {
             rehypePlugins={[rehypeKatex]}
             components={{
               a: ({ children, ...props }) => <a {...props} target="_blank" rel="noreferrer">{children}</a>,
+              pre: ({ children }) => <CodeBlockWrapper>{children}</CodeBlockWrapper>,
             }}
           >
             {part.text}
@@ -82,7 +115,23 @@ function renderMessageParts(parts: UIMessagePart<any, any>[]) {
     if (part.state === "output-available") {
       const output = part.output as { ok?: boolean; error?: { message?: string }; confirmation?: { id?: string; summary?: string }; confirmationRequired?: boolean; status?: string } | undefined;
       if (output?.confirmation?.id && (output.confirmationRequired || output.status === "confirmation-required")) {
-        return <div className="tool-status confirmation" key={index}><span>{output.confirmation.summary ?? toolName} — รอคำสั่งของท่านครับ โปรดพิมพ์ “ยืนยัน” เพื่อเริ่ม หรือ “ยกเลิก” เพื่อยุติภารกิจ</span></div>;
+        return (
+          <div className="tool-status confirmation" key={index}>
+            <span>{output.confirmation.summary ?? toolName}</span>
+            <button
+              type="button"
+              onClick={() => onConfirmAction?.(output.confirmation!.id!, false)}
+            >
+              ยกเลิก
+            </button>
+            <button
+              type="button"
+              onClick={() => onConfirmAction?.(output.confirmation!.id!, true)}
+            >
+              ยืนยัน
+            </button>
+          </div>
+        );
       }
       if (output?.ok === false) return <div className="tool-status error" key={index}>เครื่องมือ {toolName} ขัดข้อง: {output.error?.message ?? "ไม่สามารถดึงข้อมูลได้"}</div>;
       return <div className="tool-status done" key={index}>ใช้เครื่องมือ {toolName} สำเร็จ</div>;
@@ -112,11 +161,14 @@ export default function AIPage() {
   const [persistenceError, setPersistenceError] = useState<string | null>(null);
   const [attachments, setAttachments] = useState<FileUIPart[]>([]);
   const { messages, sendMessage, setMessages, status, error, clearError, stop } = useChat({ id: "tinypersonal-b1" });
+  const messagesRef = useRef(messages);
   const initialPromptSent = useRef(false);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const voiceRequestPending = useRef(false);
   const lastSpokenMessageId = useRef<string | null>(null);
-  const lastPersistedAssistantMessageId = useRef<string | null>(null);
+  const checkpointedAssistantId = useRef<string | null>(null);
+  const reloadedCodingJobId = useRef<string | null>(null);
+  const reloadedChatGenerationJobId = useRef<string | null>(null);
   const threadRef = useRef<HTMLDivElement | null>(null);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
   const generalCycleRef = useRef(new Date(Date.now() - 3_600_000).toISOString().slice(0, 10));
@@ -124,7 +176,9 @@ export default function AIPage() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [sessions, setSessions] = useState<ChatSessionSummary[]>([]);
   const [codingJob, setCodingJob] = useState<CodingJobProgress | null>(null);
+  const [chatGenerationJob, setChatGenerationJob] = useState<ChatGenerationJobProgress | null>(null);
   const [showCodexProgress, setShowCodexProgress] = useState(false);
+  const [deleteSessionTarget, setDeleteSessionTarget] = useState<ChatSessionSummary | null>(null);
   const [deleteBusySessionId, setDeleteBusySessionId] = useState<string | null>(null);
 
   const codingJobEvents = useMemo(() => {
@@ -134,6 +188,27 @@ export default function AIPage() {
   }, [codingJob?.progressJson]);
 
   const latestProgressEvent = codingJobEvents.at(-1);
+
+  useEffect(() => { messagesRef.current = messages; }, [messages]);
+
+  async function handleConfirmAction(actionId: string, approved: boolean) {
+    if (status === "submitted" || status === "streaming") return;
+    try {
+      const response = await fetch(`/api/confirm/${encodeURIComponent(actionId)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ approved }),
+      });
+      const data = await response.json().catch(() => ({})) as { ok?: boolean; error?: string };
+      if (!response.ok) {
+        setPersistenceError(data.error ?? "ยืนยันรายการไม่สำเร็จ");
+        return;
+      }
+      void send(approved ? "ยืนยัน" : "ยกเลิก");
+    } catch {
+      setPersistenceError("เกิดข้อผิดพลาดในการส่งคำสั่งยืนยัน");
+    }
+  }
 
   async function send(text: string, fromVoice = false) {
     const clean = text.trim();
@@ -151,7 +226,7 @@ export default function AIPage() {
     const checkpoint = await fetch("/api/chat/messages", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sessionId, message }),
+      body: JSON.stringify({ sessionId, message, voiceMode: fromVoice }),
     });
     if (!checkpoint.ok) {
       setInput(clean);
@@ -159,9 +234,25 @@ export default function AIPage() {
       setPersistenceError("บันทึกข้อความไม่สำเร็จ กรุณาลองส่งอีกครั้ง");
       return;
     }
+    const checkpointResult = await checkpoint.json() as { jobId: string };
+    const queuedAt = new Date().toISOString();
+    setChatGenerationJob({
+      id: checkpointResult.jobId,
+      userMessageId: message.id,
+      status: "QUEUED",
+      attempts: 0,
+      createdAt: queuedAt,
+      updatedAt: queuedAt,
+      completedAt: null,
+      error: null,
+    });
     setAttachments([]);
     if (imageInputRef.current) imageInputRef.current.value = "";
     registerChatTask(sessionId, message.id);
+    setSessions((current) => {
+      const nowStr = new Date().toISOString();
+      return current.map((s) => (s.id === sessionId ? { ...s, updatedAt: nowStr } : s));
+    });
     await sendMessage(message, { body: { voiceMode: fromVoice, sessionId } });
   }
 
@@ -254,7 +345,7 @@ export default function AIPage() {
   useEffect(() => {
     if (status !== "ready" || !voiceRequestPending.current) return;
     const latest = [...messages].reverse().find((message) => message.role === "assistant");
-    if (!latest || latest.id === lastSpokenMessageId.current) return;
+    if (!latest || latest.id.startsWith("chat-queued-") || latest.id === lastSpokenMessageId.current) return;
     const text = latest.parts.filter((part) => part.type === "text").map((part) => part.text).join(" ").trim();
     if (!text) return;
     lastSpokenMessageId.current = latest.id;
@@ -264,17 +355,18 @@ export default function AIPage() {
 
   useEffect(() => {
     if (!historyReady || !sessionId || status !== "ready") return;
-    const latest = [...messages].reverse().find((message) => message.role === "assistant");
-    if (!latest || latest.id === lastPersistedAssistantMessageId.current) return;
-    const hasText = latest.parts.some((part) => part.type === "text" && part.text.trim().length > 0);
-    if (!hasText) return;
-    lastPersistedAssistantMessageId.current = latest.id;
+    const latestAssistant = [...messages].reverse().find((message) => message.role === "assistant");
+    const hasContent = latestAssistant?.parts.some((part) => part.type !== "text" || part.text.trim().length > 0);
+    if (!latestAssistant || latestAssistant.id.startsWith("chat-queued-") || !hasContent || checkpointedAssistantId.current === latestAssistant.id) return;
+    checkpointedAssistantId.current = latestAssistant.id;
     void fetch("/api/chat/messages/assistant", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sessionId, message: latest }),
+      body: JSON.stringify({ sessionId, message: latestAssistant }),
+    }).then((response) => {
+      if (!response.ok && checkpointedAssistantId.current === latestAssistant.id) checkpointedAssistantId.current = null;
     }).catch(() => {
-      lastPersistedAssistantMessageId.current = null;
+      if (checkpointedAssistantId.current === latestAssistant.id) checkpointedAssistantId.current = null;
     });
   }, [historyReady, messages, sessionId, status]);
 
@@ -368,8 +460,6 @@ export default function AIPage() {
   async function removeSession(targetSessionId: string) {
     const target = sessions.find((session) => session.id === targetSessionId);
     if (!target || deleteBusySessionId) return;
-    const approved = window.confirm(`ลบบทสนทนา “${target.title || "บทสนทนาใหม่"}” ใช่ไหม?`);
-    if (!approved) return;
     setDeleteBusySessionId(targetSessionId);
     try {
       const response = await fetch(`/api/chat?sessionId=${encodeURIComponent(targetSessionId)}`, { method: "DELETE" });
@@ -385,7 +475,6 @@ export default function AIPage() {
     } finally { setDeleteBusySessionId(null); }
   }
 
-
   useEffect(() => {
     if (!historyReady || !sessionId) return;
     let cancelled = false;
@@ -393,19 +482,109 @@ export default function AIPage() {
       const response = await fetch(`/api/jobs/coding?sessionId=${encodeURIComponent(sessionId)}`, { cache: "no-store" });
       if (!response.ok || cancelled) return;
       const data = await response.json() as { job: CodingJobProgress | null };
-      if (!cancelled) setCodingJob(data.job);
+      if (cancelled) return;
+      setCodingJob((current) => current && current.id === data.job?.id && current.updatedAt === data.job?.updatedAt ? current : data.job);
+      const terminal = data.job?.status === "SUCCEEDED" || data.job?.status === "FAILED";
+      if (terminal && data.job && reloadedCodingJobId.current !== data.job.id && status === "ready") {
+        const chatResponse = await fetch(`/api/chat?sessionId=${encodeURIComponent(sessionId)}`, { cache: "no-store" });
+        if (!chatResponse.ok || cancelled) return;
+        const chatData = await chatResponse.json() as { messages?: Parameters<typeof setMessages>[0] };
+        if (Array.isArray(chatData.messages)) {
+          reloadedCodingJobId.current = data.job.id;
+          const merged = mergeServerMessages(messagesRef.current, chatData.messages);
+          messagesRef.current = merged;
+          setMessages(merged);
+        }
+      }
     };
     void poll();
-    const interval = codingJob?.status === "RUNNING" || codingJob?.status === "QUEUED" ? 1500 : 4000;
+    const interval = codingJob?.status === "RUNNING" ? 1500 : codingJob?.status === "QUEUED" ? 4000 : 30_000;
     const timer = window.setInterval(() => void poll(), interval);
     return () => { cancelled = true; window.clearInterval(timer); };
-  }, [historyReady, sessionId, codingJob?.status]);
+  }, [historyReady, sessionId, codingJob?.status, setMessages, status]);
 
   useEffect(() => {
-    if (codingJob?.status === "RUNNING" || codingJob?.status === "QUEUED") {
-      threadRef.current?.scrollTo({ top: threadRef.current.scrollHeight, behavior: "smooth" });
+    if (!historyReady || !sessionId) return;
+    let cancelled = false;
+    const poll = async () => {
+      const response = await fetch(`/api/jobs/chat?sessionId=${encodeURIComponent(sessionId)}`, { cache: "no-store" });
+      if (!response.ok || cancelled) return;
+      const data = await response.json() as { job: ChatGenerationJobProgress | null };
+      if (cancelled) return;
+      setChatGenerationJob((current) => current && current.id === data.job?.id && current.updatedAt === data.job?.updatedAt ? current : data.job);
+      const terminal = data.job?.status === "SUCCEEDED" || data.job?.status === "FAILED";
+      if (terminal && data.job && reloadedChatGenerationJobId.current !== data.job.id && status === "ready") {
+        const chatResponse = await fetch(`/api/chat?sessionId=${encodeURIComponent(sessionId)}`, { cache: "no-store" });
+        if (!chatResponse.ok || cancelled) return;
+        const chatData = await chatResponse.json() as { messages?: Parameters<typeof setMessages>[0] };
+        if (Array.isArray(chatData.messages)) {
+          const merged = mergeServerMessages(messagesRef.current, chatData.messages);
+          messagesRef.current = merged;
+          reloadedChatGenerationJobId.current = data.job.id;
+          setMessages(merged);
+        }
+      }
+    };
+    void poll();
+    const interval = chatGenerationJob?.status === "RUNNING" ? 1_500 : chatGenerationJob?.status === "QUEUED" ? 2_500 : 30_000;
+    const timer = window.setInterval(() => void poll(), interval);
+    return () => { cancelled = true; window.clearInterval(timer); };
+  }, [chatGenerationJob?.status, historyReady, sessionId, setMessages, status]);
+
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const orderedSessions = useMemo(() => {
+    return [...sessions].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+  }, [sessions]);
+
+  const filteredSessions = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return orderedSessions;
+    return orderedSessions.filter((s) => (s.title || "บทสนทนาใหม่").toLowerCase().includes(q));
+  }, [orderedSessions, searchQuery]);
+
+  const groupedSessions = useMemo(() => {
+    const todayStart = new Date().setHours(0, 0, 0, 0);
+    const yesterdayStart = todayStart - 86_400_000;
+    const weekStart = todayStart - 6 * 86_400_000;
+
+    const groups: { today: ChatSessionSummary[]; yesterday: ChatSessionSummary[]; week: ChatSessionSummary[]; older: ChatSessionSummary[] } = {
+      today: [], yesterday: [], week: [], older: [],
+    };
+
+    for (const session of filteredSessions) {
+      const time = new Date(session.updatedAt).getTime();
+      if (time >= todayStart) groups.today.push(session);
+      else if (time >= yesterdayStart) groups.yesterday.push(session);
+      else if (time >= weekStart) groups.week.push(session);
+      else groups.older.push(session);
     }
-  }, [codingJob?.status, codingJobEvents.length]);
+    return groups;
+  }, [filteredSessions]);
+
+  const renderSessionItem = (session: ChatSessionSummary) => (
+    <div className={`sidebar-chat-item ${session.id === sessionId ? "active" : ""}`} key={session.id}>
+      <button type="button" className="sidebar-chat-link" onClick={() => void openSession(session.id)}>
+        <MessageSquare size={14} />
+        <span>{session.title || "บทสนทนาใหม่"}</span>
+      </button>
+      {session.title !== GENERAL_CHAT_TITLE && (
+        <button
+          type="button"
+          className="sidebar-chat-delete"
+          aria-label="ลบบทสนทนา"
+          disabled={deleteBusySessionId === session.id}
+          onClick={(e) => {
+            e.stopPropagation();
+            setDeleteSessionTarget(session);
+          }}
+          title="ลบบทสนทนา"
+        >
+          <Trash2 size={13} />
+        </button>
+      )}
+    </div>
+  );
 
   const sidebarExtraContent = (
     <div className="sidebar-chat-section">
@@ -415,33 +594,54 @@ export default function AIPage() {
           <Plus size={14} /> <span>แชตใหม่</span>
         </button>
       </div>
+      <div className="sidebar-search-wrap">
+        <Search size={13} />
+        <input
+          type="text"
+          placeholder="ค้นหาบทสนทนา..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="sidebar-search-input"
+        />
+        {searchQuery && (
+          <button type="button" className="sidebar-search-clear" onClick={() => setSearchQuery("")} title="ล้างการค้นหา">
+            <X size={12} />
+          </button>
+        )}
+      </div>
       <div className="sidebar-chat-list">
-        {sessions.map((session) => (
-          <div className={`sidebar-chat-item ${session.id === sessionId ? "active" : ""}`} key={session.id}>
-            <button type="button" className="sidebar-chat-link" onClick={() => void openSession(session.id)}>
-              <MessageSquare size={14} />
-              <span>{session.title || "บทสนทนาใหม่"}</span>
-            </button>
-            {session.title !== GENERAL_CHAT_TITLE && (
-              <button
-                type="button"
-                className="sidebar-chat-delete"
-                aria-label="ลบบทสนทนา"
-                disabled={deleteBusySessionId === session.id}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  void removeSession(session.id);
-                }}
-                title="ลบบทสนทนา"
-              >
-                <Trash2 size={13} />
-              </button>
+        {filteredSessions.length === 0 ? (
+          <div className="sidebar-group-title">ไม่พบบทสนทนา</div>
+        ) : (
+          <>
+            {groupedSessions.today.length > 0 && (
+              <div className="sidebar-group">
+                <span className="sidebar-group-title">วันนี้</span>
+                {groupedSessions.today.map(renderSessionItem)}
+              </div>
             )}
-          </div>
-        ))}
+            {groupedSessions.yesterday.length > 0 && (
+              <div className="sidebar-group">
+                <span className="sidebar-group-title">เมื่อวานนี้</span>
+                {groupedSessions.yesterday.map(renderSessionItem)}
+              </div>
+            )}
+            {groupedSessions.week.length > 0 && (
+              <div className="sidebar-group">
+                <span className="sidebar-group-title">7 วันที่ผ่านมา</span>
+                {groupedSessions.week.map(renderSessionItem)}
+              </div>
+            )}
+            {groupedSessions.older.length > 0 && (
+              <div className="sidebar-group">
+                <span className="sidebar-group-title">เก่ากว่านั้น</span>
+                {groupedSessions.older.map(renderSessionItem)}
+              </div>
+            )}
+          </>
+        )}
       </div>
     </div>
-
   );
   return (
     <WorkspaceShell active="AI Assistant" title="B1" subtitle="ผู้ช่วยส่วนตัวของคุณ" focusMode immersive sidebarExtra={sidebarExtraContent}>
@@ -462,10 +662,14 @@ export default function AIPage() {
               {messages.map((message) => (
                 <article className={`chat-message ${message.role}`} key={message.id}>
                   <div className="message-avatar">{message.role === "assistant" ? <Bot size={17} /> : "P"}</div>
-                  <div>{renderMessageParts(message.parts)}</div>
+                  <div>{renderMessageParts(message.parts, (actionId, approved) => void handleConfirmAction(actionId, approved))}</div>
                 </article>
               ))}
               </>
+            )}
+
+            {(chatGenerationJob?.status === "QUEUED" || chatGenerationJob?.status === "RUNNING") && (
+              <div className="thinking" role="status"><LoaderCircle size={15} /> {chatGenerationJob.status === "QUEUED" ? "คำตอบอยู่ในคิวของเซิร์ฟเวอร์…" : "AI กำลังสร้างคำตอบที่เซิร์ฟเวอร์…"}</div>
             )}
 
             {codingJob && (
@@ -543,10 +747,28 @@ export default function AIPage() {
               <button type="button" className="voice-button voice-reply-button" onClick={() => { window.speechSynthesis?.cancel(); setVoiceReply((enabled) => !enabled); }} aria-label={voiceReply ? "ปิดเสียงตอบกลับ" : "เปิดเสียงตอบกลับ"}>{voiceReply ? <Volume2 size={18} /> : <VolumeX size={18} />}</button>
               <button type="submit" disabled={!historyReady || (!input.trim() && attachments.length === 0) || status === "submitted" || status === "streaming"} aria-label="ส่งข้อความ"><ArrowUp size={19} /></button>
             </form>
-            <p><ShieldCheck size={12} /> เสียงจะถูกพิมพ์ลงแชต • B1 เข้าถึง Vault ได้เฉพาะ metadata</p>
           </div>
         </section>
       </div>
+      <AppModal
+        open={Boolean(deleteSessionTarget)}
+        title="ลบบทสนทนานี้?"
+        description={`บทสนทนา “${deleteSessionTarget?.title || "บทสนทนาใหม่"}” จะถูกลบถาวร`}
+        tone="danger"
+        confirmLabel="ลบบทสนทนา"
+        cancelLabel="ยกเลิก"
+        busy={Boolean(deleteBusySessionId)}
+        onConfirm={async () => {
+          if (deleteSessionTarget) {
+            const id = deleteSessionTarget.id;
+            setDeleteSessionTarget(null);
+            await removeSession(id);
+          }
+        }}
+        onClose={() => {
+          if (!deleteBusySessionId) setDeleteSessionTarget(null);
+        }}
+      />
     </WorkspaceShell>
   );
 }

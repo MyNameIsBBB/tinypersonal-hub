@@ -2,11 +2,13 @@ import { tool } from "ai";
 import { z } from "zod";
 
 export const delegateCodingTaskInputSchema = z.object({
-  instruction: z.string().trim().min(3).max(20_000),
+  instruction: z.string().max(20_000).refine((value) => value.trim().length >= 3, "Instruction must contain at least 3 non-whitespace characters"),
+  readOnly: z.boolean().default(false).describe("Set true for inspection, status, review, listing, or summarization tasks that must not change the repository."),
   branchName: z.string().trim().regex(/^[A-Za-z0-9][A-Za-z0-9._\/-]{0,119}$/).optional(),
   autoPush: z.boolean().default(false),
-}).strict().superRefine(({ autoPush, branchName }, context) => {
+}).strict().superRefine(({ readOnly, autoPush, branchName }, context) => {
   if (autoPush && !branchName) context.addIssue({ code: z.ZodIssueCode.custom, path: ["branchName"], message: "branchName is required when autoPush is enabled" });
+  if (readOnly && (autoPush || branchName)) context.addIssue({ code: z.ZodIssueCode.custom, path: ["readOnly"], message: "readOnly tasks cannot create a branch or push" });
 });
 
 const servicePayloadSchema = z.record(z.union([z.string(), z.number(), z.boolean(), z.null()])).default({});
@@ -24,7 +26,7 @@ export type DelegateCodingTaskInput = z.infer<typeof delegateCodingTaskInputSche
 export type ControlSmartHomeDeviceInput = z.infer<typeof controlSmartHomeDeviceInputSchema>;
 
 export const delegateCodingTaskTool = tool({
-  description: "Delegate an end-to-end repository task to Codex. Codex pulls, creates a branch, implements, tests, builds, and optionally commits and pushes after the application's confirmation.",
+  description: "Delegate the current repository/code/build/test/Git/DevOps request to B1-DevOps (Codex) after B1 decides delegation is necessary. Preserve the user's complete current request and constraints in instruction instead of summarizing it. Set readOnly=true for inspection/status/summary tasks; mutating tasks use a new branch and can optionally commit and push after confirmation.",
   inputSchema: delegateCodingTaskInputSchema,
   execute: async (input) => ({ ok: true as const, command: "coding.delegate" as const, input }),
 });

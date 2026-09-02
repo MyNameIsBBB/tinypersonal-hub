@@ -75,18 +75,62 @@ function htmlToText(html: string): { title: string | null; text: string } {
   return { title: titleMatch ? decodeHtml(titleMatch.replace(/<[^>]+>/g, " ").trim()) : null, text: decodeHtml(clean) };
 }
 
+async function searchWebFallback(query: string, count = 5): Promise<WebSearchResult[]> {
+  try {
+    const targetUrl = "https://html.duckduckgo.com/html/?q=" + encodeURIComponent(query);
+    const response = await fetch(targetUrl, {
+      headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" },
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!response.ok) return [];
+    const html = await response.text();
+    const snippets = [...html.matchAll(/<a class="result__snippet"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi)];
+    const results: WebSearchResult[] = [];
+    for (const match of snippets) {
+      if (results.length >= count) break;
+      let rawUrl = match[1];
+      if (rawUrl.includes("uddg=")) {
+        const urlMatch = rawUrl.match(/uddg=([^&]+)/);
+        if (urlMatch) rawUrl = decodeURIComponent(urlMatch[1]);
+      }
+      if (!rawUrl.startsWith("http://") && !rawUrl.startsWith("https://")) {
+        rawUrl = "https:" + (rawUrl.startsWith("//") ? rawUrl : "//" + rawUrl);
+      }
+      const desc = decodeHtml(match[2].replace(/<[^>]+>/g, "").trim());
+      let title = "";
+      try { title = new URL(rawUrl).hostname; } catch { title = rawUrl; }
+      if (rawUrl && desc) {
+        results.push({ title, url: rawUrl, description: desc });
+      }
+    }
+    return results;
+  } catch {
+    return [];
+  }
+}
+
 export async function searchWeb(query: string, count = 5): Promise<WebSearchResult[]> {
-  const baseUrl = process.env.SEARXNG_BASE_URL ?? "http://127.0.0.1:8080";
-  const url = new URL("/search", baseUrl);
-  url.searchParams.set("q", query);
-  url.searchParams.set("format", "json");
-  url.searchParams.set("language", "th-TH");
-  url.searchParams.set("safesearch", "1");
-  const response = await fetch(url, { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(12_000) });
-  if (!response.ok) throw new Error(`SearXNG returned ${response.status}`);
-  const payload = await response.json() as { results?: Array<{ title?: string; url?: string; content?: string }> };
-  return (payload.results ?? []).slice(0, Math.max(1, Math.min(count, 10))).flatMap((item) => item.title && item.url
-    ? [{ title: item.title, url: item.url, description: item.content ?? "" }] : []);
+  try {
+    const baseUrl = process.env.SEARXNG_BASE_URL ?? "http://127.0.0.1:8080";
+    const url = new URL("/search", baseUrl);
+    url.searchParams.set("q", query);
+    url.searchParams.set("format", "json");
+    url.searchParams.set("language", "auto");
+    url.searchParams.set("safesearch", "1");
+    const response = await fetch(url, {
+      headers: { Accept: "application/json", "User-Agent": "TinyPersonal-Hub/1.0" },
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (response.ok) {
+      const payload = await response.json() as { results?: Array<{ title?: string; url?: string; content?: string }> };
+      const items = (payload.results ?? []).slice(0, Math.max(1, Math.min(count, 10))).flatMap((item) => item.title && item.url
+        ? [{ title: item.title, url: item.url, description: item.content ?? "" }] : []);
+      if (items.length > 0) return items;
+    }
+  } catch (error) {
+    console.warn("Primary SearXNG search unavailable, falling back:", error instanceof Error ? error.message : String(error));
+  }
+  return searchWebFallback(query, count);
 }
 
 export async function scrapeWebPage(rawUrl: string, maxCharacters = 12_000): Promise<ScrapedPage> {

@@ -3,6 +3,14 @@
 set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+if [[ -f "$SCRIPT_DIR/.env" ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  source "$SCRIPT_DIR/.env"
+  set +a
+fi
+
 APP_NAME="tinypersonal-hub"
 IMAGE_NAME="${APP_NAME}:local"
 CONTAINER_NAME="${APP_NAME}"
@@ -22,9 +30,15 @@ done
 
 cd "$SCRIPT_DIR"
 
-if ! HOST_JARVIS_PROJECT_ROOT="${HOST_JARVIS_PROJECT_ROOT:-$HOME/codex-playground}" "$SCRIPT_DIR/scripts/start-codex-worker.sh"; then
-  echo "Warning: Codex worker failed to start; continuing without coding worker." >&2
+if [[ -z "${CRON_SECRET:-}" ]]; then
+  echo "Error: CRON_SECRET is required so the coding-job runner can process queued tasks." >&2
+  exit 1
 fi
+
+HOST_JARVIS_PROJECT_ROOT="${HOST_JARVIS_PROJECT_ROOT:-/home/best/codex-playground}" "$SCRIPT_DIR/scripts/codex/start-worker.sh"
+
+echo "Clearing Docker build cache before build..."
+docker builder prune --all --force
 
 echo "Building all workspaces in Docker..."
 docker build --file "$DOCKERFILE" --tag "$IMAGE_NAME" .
@@ -72,7 +86,15 @@ for attempt in {1..30}; do
   sleep 2
 done
 
-echo "Clearing Docker build cache..."
-docker builder prune --all --force
+if ! docker top "$CONTAINER_NAME" -eo args | grep -q "scripts/codex/run-jobs.mjs"; then
+  echo "Error: coding-job runner is not running inside $CONTAINER_NAME." >&2
+  docker logs --tail 100 "$CONTAINER_NAME" >&2
+  exit 1
+fi
+if ! docker top "$CONTAINER_NAME" -eo args | grep -q "scripts/chat/run-jobs.mjs"; then
+  echo "Error: chat generation runner is not running inside $CONTAINER_NAME." >&2
+  docker logs --tail 100 "$CONTAINER_NAME" >&2
+  exit 1
+fi
 
 ENABLE_TAILSCALE_FUNNEL="$ENABLE_TAILSCALE_FUNNEL" "$SCRIPT_DIR/scripts/open-funnel.sh" "$PORT" || true

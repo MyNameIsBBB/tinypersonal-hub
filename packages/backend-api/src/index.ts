@@ -1,6 +1,7 @@
 export { prisma } from "./db/client";
 export { claimCodingJob, completeCodingJob, enqueueCodingJob, getLatestCodingJob, updateCodingJobProgress } from "./services/codingJobService";
-export { createChatSession, deleteChatSession, ensureDailyGeneralChat, GENERAL_CHAT_TITLE, getOrCreateChatSession, listChatSessions, loadChatMessages, replaceChatMessages, resetAllGeneralChats, saveAssistantChatMessageIfCurrent, saveChatMessage, saveUserChatMessage } from "./services/chatService";
+export { claimChatGenerationJob, completeChatGenerationJob, enqueueChatGenerationJob, getLatestChatGenerationJob, saveUserMessageAndEnqueueChatGeneration } from "./services/chatGenerationJobService";
+export { createChatSession, deleteChatSession, ensureDailyGeneralChat, generateAndUpdateSessionTitle, GENERAL_CHAT_TITLE, getOrCreateChatSession, listChatSessions, loadChatMessages, replaceChatMessages, resetAllGeneralChats, saveAssistantChatMessageIfCurrent, saveChatMessage, saveUserChatMessage } from "./services/chatService";
 export type { StoredChatMessage } from "./services/chatService";
 export { createPendingAction, executeAllPendingActions, executeLatestPendingAction, executePendingAction, recordAudit, resolvePendingAction } from "./services/auditService";
 export { getMarketQuotes, integrationHealth } from "./services/integrations";
@@ -13,7 +14,7 @@ export { embedToolText, searchToolVectors } from "./services/toolVectorService";
 export type { ToolVectorDocument, ToolVectorHit } from "./services/toolVectorService";
 export { scrapeWebPage, searchWeb } from "./services/webService";
 export type { ScrapedPage, WebSearchResult } from "./services/webService";
-export { controlSmartHomeDevice, delegateCodingTask } from "./services/jarvisService";
+export { classifyCodingInstructionReadOnly, controlSmartHomeDevice, delegateCodingTask } from "./services/jarvisService";
 export type { CodingTaskResult, ExecutionLog } from "./services/jarvisService";
 export {
 	createScheduleItem,

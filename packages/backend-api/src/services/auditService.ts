@@ -110,7 +110,10 @@ export async function executeAllPendingActions(ownerKey: string, sessionId: stri
 }
 
 export async function executeLatestPendingAction(ownerKey: string, sessionId: string, approved: boolean) {
-  const results = await executeAllPendingActions(ownerKey, sessionId, approved);
-  return results.length > 0 ? results[results.length - 1] : null;
+  const action = await prisma.pendingAction.findFirst({
+    where: { ownerKey, sessionId, status: "PENDING", expiresAt: { gt: new Date() } },
+    orderBy: { createdAt: "desc" },
+    select: { id: true },
+  });
+  return action ? executePendingAction(ownerKey, action.id, approved) : null;
 }
-

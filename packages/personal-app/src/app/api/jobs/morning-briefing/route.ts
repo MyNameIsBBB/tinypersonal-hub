@@ -1,7 +1,7 @@
 import { google } from "@ai-sdk/google";
 import { getMorningBriefingContext, resetAllGeneralChats, sendMorningNotification } from "@tinypersonal/backend-api";
 import { generateText } from "ai";
-import { timingSafeEqual } from "node:crypto";
+import { isCronAuthorizedRequest } from "@/lib/serverAuth";
 
 export const maxDuration = 30;
 
@@ -23,16 +23,8 @@ function thaiFallback(context: Awaited<ReturnType<typeof getMorningBriefingConte
   return `สวัสดีตอนเช้าครับ วันนี้${date}\n\nตารางวันนี้:\n${schedule}${news}${markets}`;
 }
 
-function authorized(request: Request): boolean {
-  const expected = process.env.CRON_SECRET;
-  const supplied = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
-  if (!expected || !supplied) return false;
-  const a = Buffer.from(expected); const b = Buffer.from(supplied);
-  return a.length === b.length && timingSafeEqual(a, b);
-}
-
 export async function POST(request: Request) {
-  if (!authorized(request)) return Response.json({ error: "Unauthorized" }, { status: 401 });
+  if (!isCronAuthorizedRequest(request)) return Response.json({ error: "Unauthorized" }, { status: 401 });
   const context = await getMorningBriefingContext();
   const schedule = context.schedule.map((item) => ({ title: item.title, type: item.type, startTime: item.startTime?.toISOString() ?? null }));
   const { text } = await generateText({

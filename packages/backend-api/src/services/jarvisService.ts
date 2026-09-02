@@ -10,11 +10,13 @@ const MAX_OUTPUT = 2_000_000;
 const COMMAND_TIMEOUT_MS = 30 * 60_000;
 
 const delegateCodingTaskSchema = z.object({
-  instruction: z.string().trim().min(3).max(20_000),
+  instruction: z.string().max(20_000).refine((value) => value.trim().length >= 3, "Instruction must contain at least 3 non-whitespace characters"),
+  readOnly: z.boolean().default(false),
   branchName: z.string().trim().regex(/^[A-Za-z0-9][A-Za-z0-9._\/-]{0,119}$/).optional(),
   autoPush: z.boolean().default(false),
-}).strict().superRefine(({ autoPush, branchName }, context) => {
+}).strict().superRefine(({ readOnly, autoPush, branchName }, context) => {
   if (autoPush && !branchName) context.addIssue({ code: z.ZodIssueCode.custom, path: ["branchName"], message: "branchName is required when autoPush is enabled" });
+  if (readOnly && (autoPush || branchName)) context.addIssue({ code: z.ZodIssueCode.custom, path: ["readOnly"], message: "readOnly tasks cannot create a branch or push" });
 });
 const controlSmartHomeDeviceSchema = z.object({
   domain: z.enum(["climate", "switch", "light"]), service: z.enum(["turn_on", "turn_off", "set_temperature"]),
@@ -31,6 +33,24 @@ export type CodingTaskResult =
   | { ok: false; error: { code: "CODING_TASK_FAILED" | "INVALID_PROJECT_ROOT" | "INVALID_INPUT"; message: string }; data: { branch: string | null; logs: ExecutionLog[] } };
 
 export type ProgressCallback = (progress: { kind: "status" | "command" | "file" | "tool"; message: string }) => void;
+
+function finalCodexAgentMessage(stdout: string) {
+  let message = "";
+  for (const line of stdout.split(/\r?\n/)) {
+    try {
+      const event = JSON.parse(line) as { type?: string; item?: { type?: string; text?: string } };
+      if (event.type === "item.completed" && event.item?.type === "agent_message" && event.item.text) message = event.item.text.trim();
+    } catch {}
+  }
+  return message;
+}
+
+export function classifyCodingInstructionReadOnly(instruction: string) {
+  const explicitlyReadOnly = /(ห้าม(?:ทำการ)?(?:แก้ไข|เปลี่ยน|เขียน|ลบ)|ไม่(?:ต้อง|ให้)?(?:แก้ไข|เปลี่ยน|เขียน|ลบ)|อ่านอย่างเดียว|ดูอย่างเดียว|read[ -]?only|do not (?:modify|edit|write|change|delete)|without (?:modifying|editing|changing))/iu.test(instruction);
+  const mutation = /(สร้าง|เขียน|เพิ่ม|แก้|เปลี่ยน|ลบ|ย้าย|commit|push|create|write|add|implement|fix|update|delete|remove|refactor)/iu.test(instruction);
+  const inspection = /(ตรวจ|ดู|เห็นอะไร|สถานะ|สรุป|รายการ|โครงสร้าง|inspect|status|list|review|summari[sz]e|what.*visible)/iu.test(instruction);
+  return explicitlyReadOnly || (inspection && !mutation);
+}
 
 function delegateToHostWorker(
   input: z.infer<typeof delegateCodingTaskSchema>,
@@ -111,7 +131,10 @@ async function run(executable: string, args: string[], cwd: string): Promise<Exe
 export async function delegateCodingTask(untrustedInput: unknown, onProgress?: ProgressCallback): Promise<CodingTaskResult> {
   const parsed = delegateCodingTaskSchema.safeParse(untrustedInput);
   if (!parsed.success) return { ok: false, error: { code: "INVALID_INPUT", message: parsed.error.issues[0]?.message ?? "Invalid coding task" }, data: { branch: null, logs: [] } };
-  const input = parsed.data;
+  const input = {
+    ...parsed.data,
+    readOnly: parsed.data.readOnly || (!parsed.data.branchName && !parsed.data.autoPush && classifyCodingInstructionReadOnly(parsed.data.instruction)),
+  };
   if (process.env.CODEX_WORKER_SOCKET) {
     return delegateToHostWorker(input, process.env.CODEX_WORKER_SOCKET, onProgress);
   }
@@ -131,10 +154,18 @@ export async function delegateCodingTask(untrustedInput: unknown, onProgress?: P
   };
 
   try {
-    const requestedBranch = input.branchName ?? "Choose a concise codex/* branch name based on the task";
-    const delivery = input.autoPush
-      ? "After validation succeeds, stage only task-related files, commit with a concise conventional message, and push the branch to origin with upstream tracking."
-      : "Do not commit and do not push. Leave the validated task changes in the working tree for review.";
+    const requestedBranch = input.readOnly ? null : input.branchName ?? `codex/task-${Date.now()}`;
+    if (input.readOnly) {
+      branch = (await execute("git", ["branch", "--show-current"])).stdout.trim() || "HEAD";
+    } else {
+      const statusBefore = (await execute("git", ["status", "--porcelain"])).stdout.trim();
+      if (statusBefore) throw new Error("Repository has uncommitted changes; refusing to mix them with a delegated task");
+      await execute("git", ["switch", "-c", requestedBranch!]);
+      branch = requestedBranch;
+    }
+    const workflow = input.readOnly
+      ? "Inspect the current workspace exactly as it is. Do not pull, switch or create branches, edit files, commit, or push. Run only read-only commands and summarize the evidence you observe."
+      : `The worker has already pulled and switched to branch ${requestedBranch}; do not create, switch, commit, or push Git branches. Implement the requested change, run relevant tests/builds, and leave changes in the working tree for worker verification.`;
     const agentInstruction = `Own this coding task end-to-end inside the current repository.
 
 User task:
@@ -142,22 +173,26 @@ ${input.instruction}
 
 Required workflow:
 1. Read AGENTS.md and inspect the repository status. Preserve unrelated changes and never use destructive Git commands.
-2. Run git pull --ff-only. If it cannot run safely, stop and report the exact blocker.
-3. Create and switch to this branch: ${requestedBranch}.
-4. Implement the requested change following the repository architecture and conventions.
-5. Run the relevant tests and the repository build. Fix failures caused by the task and repeat validation until it passes or a concrete blocker remains.
-6. ${delivery}
-7. Finish with a concise summary containing the branch, changed files, tests/build results, commit, and push status.
+2. ${workflow}
+3. Finish with a concise evidence-based summary.
 
 Stay within this repository. Never expose secrets or modify unrelated files.`;
     const codexExecutable = process.platform === "win32" ? "codex.cmd" : "codex";
-    await execute(codexExecutable, [
-      "--ask-for-approval", "never",
-      "--sandbox", "workspace-write",
+    const codexLog = await execute(codexExecutable, [
+      "--dangerously-bypass-approvals-and-sandbox",
       "--cd", projectRoot,
       "exec", "--json", agentInstruction,
     ]);
-    branch = (await execute("git", ["branch", "--show-current"])).stdout.trim() || input.branchName || "HEAD";
+    if (!finalCodexAgentMessage(codexLog.stdout)) throw new Error("Codex exited without a final agent message");
+    branch = (await execute("git", ["branch", "--show-current"])).stdout.trim() || "HEAD";
+    if (!input.readOnly && branch !== requestedBranch) throw new Error(`Expected branch ${requestedBranch}, but current branch is ${branch}`);
+    const statusAfter = (await execute("git", ["status", "--porcelain"])).stdout.trim();
+    if (!input.readOnly && !statusAfter) throw new Error("Codex exited successfully but produced no file changes");
+    if (!input.readOnly && input.autoPush) {
+      await execute("git", ["add", "--all"]);
+      await execute("git", ["commit", "-m", "chore(codex): complete delegated task"]);
+      await execute("git", ["push", "--set-upstream", "origin", requestedBranch!]);
+    }
     return { ok: true, data: { branch, logs } };
   } catch (error) {
     return { ok: false, error: { code: "CODING_TASK_FAILED", message: error instanceof Error ? error.message : "Coding task failed" }, data: { branch, logs } };

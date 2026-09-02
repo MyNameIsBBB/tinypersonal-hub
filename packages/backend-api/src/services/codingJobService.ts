@@ -1,7 +1,14 @@
 import { prisma } from "../db/client";
 
 export async function enqueueCodingJob(input: { ownerKey: string; sessionId: string; userMessageId: string; task: unknown }) {
-  return prisma.codingJob.create({ data: { ownerKey: input.ownerKey, sessionId: input.sessionId, userMessageId: input.userMessageId, inputJson: JSON.stringify(input.task) } });
+  const inputJson = JSON.stringify(input.task);
+  return prisma.$transaction(async (tx) => {
+    const existing = await tx.codingJob.findFirst({
+      where: { ownerKey: input.ownerKey, sessionId: input.sessionId, inputJson, status: { in: ["QUEUED", "RUNNING"] } },
+      orderBy: { createdAt: "desc" },
+    });
+    return existing ?? tx.codingJob.create({ data: { ownerKey: input.ownerKey, sessionId: input.sessionId, userMessageId: input.userMessageId, inputJson } });
+  });
 }
 
 export async function claimCodingJob(leaseMinutes = 35) {
