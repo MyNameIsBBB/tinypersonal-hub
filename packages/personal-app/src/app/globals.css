@@ -417,6 +417,13 @@ button { color: inherit; }
 .note-editor > h2 { margin: 26px 0 22px; outline: 0; font-family: Georgia, serif; font-size: clamp(25px, 3vw, 36px); font-weight: 500; }
 .markdown-body { min-height: 290px; outline: 0; color: #544d44; font-family: Georgia, serif; font-size: 14px; line-height: 1.8; }
 .markdown-body h3 { margin-top: 23px; color: var(--ink); font-size: 17px; }.markdown-body li { margin: 5px 0; }
+.markdown-mode-switch { display: flex; width: fit-content; gap: 4px; margin-top: 12px; border: 1px solid var(--line); border-radius: 9px; background: #f5f0e7; padding: 3px; }
+.markdown-mode-switch button { display: inline-flex; align-items: center; gap: 5px; border: 0; border-radius: 6px; background: transparent; padding: 7px 10px; color: var(--muted); cursor: pointer; font-size: 10px; }
+.markdown-mode-switch button.active { background: white; color: var(--ink); box-shadow: 0 1px 4px rgba(48,43,36,.1); }
+.markdown-preview { min-height: 365px; margin-top: 10px; overflow-wrap: anywhere; }
+.markdown-preview pre { overflow-x: auto; border-radius: 9px; background: #29251f; padding: 13px; color: #fffaf0; }
+.markdown-preview code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.markdown-preview :not(pre) > code { border-radius: 4px; background: #f0e9dd; padding: 2px 5px; }
 .linked-record { display: flex; align-items: center; gap: 10px; border: 1px solid #dfd0b5; border-radius: 10px; background: #fbf4e7; padding: 11px; color: #805f2d; }
 .linked-record strong, .linked-record span { display: block; font-size: 10px; }.linked-record span { margin-top: 2px; color: #9b8b70; font-size: 8px; }
 
@@ -583,15 +590,16 @@ button { color: inherit; }
   .vault-banner { align-items: flex-start; flex-wrap: wrap; }.vault-banner > span { margin-left: 56px; }
   .vault-row { align-items: flex-start; flex-wrap: wrap; }.password-mask { width: 100%; margin-left: 52px; }.password-mask code { flex: 1; min-width: 0; }
   .vault-form { grid-template-columns: 1fr 1fr; }.real-editor { min-height: 500px; }.editor-fields > div { grid-template-columns: 1fr; }
-  .app-shell.immersive .workspace-main { height: 100dvh; padding: 0; }
+  .app-shell.immersive { min-height: 100dvh; }
+  .app-shell.immersive .workspace-main { height: auto; min-height: 100dvh; overflow: visible; padding: 0; }
   .app-shell.immersive .topbar { min-height: 54px; align-items: center; border-bottom: 1px solid var(--line); background: #fffdf9; padding: 7px 12px; }
   .app-shell.immersive .topbar > div { min-width: 0; text-align: center; }
   .app-shell.immersive .topbar p { display: none; }
   .app-shell.immersive .topbar h1 { overflow: hidden; font-family: inherit; font-size: 17px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
   .app-shell.immersive .mobile-menu { width: 38px; height: 38px; margin: 0; place-items: center; }
-  .ai-chat-layout { height: calc(100dvh - 54px); margin-top: 0; }
-  .ai-workspace { grid-template-rows: minmax(0, 1fr) auto; border: 0; border-radius: 0; }
-  .chat-thread { min-height: 0; padding: 18px 14px 22px; }
+  .ai-chat-layout { display: block; height: auto; min-height: calc(100dvh - 54px); margin-top: 0; overflow: visible; }
+  .ai-workspace { display: block; min-height: calc(100dvh - 54px); overflow: visible; border: 0; border-radius: 0; }
+  .chat-thread { min-height: calc(100dvh - 142px); overflow: visible; padding: 18px 14px 22px; }
   .chat-message { display: block; width: 100%; max-width: 100%; margin-bottom: 22px; }
   .chat-message .message-avatar { display: none; }
   .chat-message > div:last-child { max-width: 100%; border-radius: 0; background: transparent; padding: 0 2px; }
@@ -600,7 +608,7 @@ button { color: inherit; }
   .chat-markdown h1 { font-size: 21px; }.chat-markdown h2 { font-size: 19px; }.chat-markdown h3 { font-size: 17px; }
   .ai-suggestions { grid-template-columns: 1fr; gap: 8px; margin: 12px auto; }.ai-suggestions button { min-height: 64px; flex-direction: row; align-items: center; justify-content: flex-start; gap: 12px; border-radius: 10px; }
   .thinking { margin-left: 0; }
-  .ai-composer-wrap { border-top: 0; padding: 8px 10px max(10px, env(safe-area-inset-bottom)); }
+  .ai-composer-wrap { position: sticky; bottom: 0; z-index: 10; border-top: 0; background: linear-gradient(transparent, #fffdf9 20%); padding: 18px 10px max(10px, env(safe-area-inset-bottom)); }
   .ai-composer { gap: 7px; border-radius: 24px; padding: 7px; box-shadow: 0 2px 14px rgba(48, 43, 36, .1); }
   .ai-composer textarea { max-height: 120px; padding: 5px 2px; }
   .ai-composer button { width: 38px; height: 38px; border-radius: 50%; }

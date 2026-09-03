@@ -1,7 +1,9 @@
 "use client";
 
-import { Folder, Plus, Save, Search, Tag, Trash2 } from "lucide-react";
+import { Eye, Folder, Pencil, Plus, Save, Search, Tag, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { WorkspaceShell } from "@/components/WorkspaceShell";
 import { AppModal } from "@/components/AppModal";
 
@@ -16,6 +18,7 @@ export default function NotesPage() {
   const [message, setMessage] = useState("");
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [preview, setPreview] = useState(false);
 
   const load = useCallback(async (search = "") => {
     const response = await fetch(`/api/notes?q=${encodeURIComponent(search)}`, { cache: "no-store" });
@@ -24,8 +27,8 @@ export default function NotesPage() {
   }, []);
   useEffect(() => { void load(); }, [load]);
 
-  function select(note: Note) { setSelectedId(note.id); setDraft({ title: note.title, content: note.content, tags: note.tags, folder: note.folder ?? "", scheduleItemId: note.scheduleItemId ?? null }); }
-  function fresh() { setSelectedId(null); setDraft(emptyDraft); setMessage(""); }
+  function select(note: Note) { setSelectedId(note.id); setDraft({ title: note.title, content: note.content, tags: note.tags, folder: note.folder ?? "", scheduleItemId: note.scheduleItemId ?? null }); setPreview(false); }
+  function fresh() { setSelectedId(null); setDraft(emptyDraft); setMessage(""); setPreview(false); }
   async function save() {
     if (!draft.title.trim()) { setMessage("กรุณาใส่ชื่อโน้ต"); return; }
     const response = await fetch(selectedId ? `/api/notes/${selectedId}` : "/api/notes", { method: selectedId ? "PATCH" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(draft) });
@@ -53,7 +56,13 @@ export default function NotesPage() {
       </section>
       <article className="note-editor real-editor">
         <div className="editor-fields"><input aria-label="ชื่อโน้ต" value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} placeholder="ชื่อโน้ต" /><div><input aria-label="โฟลเดอร์" value={draft.folder} onChange={(event) => setDraft({ ...draft, folder: event.target.value })} placeholder="Folder" /><input aria-label="แท็ก" value={draft.tags.join(", ")} onChange={(event) => setDraft({ ...draft, tags: event.target.value.split(",").map((tag) => tag.trim()).filter(Boolean) })} placeholder="tags, comma, separated" /></div></div>
-        <textarea className="markdown-textarea" aria-label="เนื้อหา Markdown" value={draft.content} onChange={(event) => setDraft({ ...draft, content: event.target.value })} placeholder="เขียน Markdown ที่นี่…" />
+        <div className="markdown-mode-switch" role="group" aria-label="โหมด Markdown">
+          <button className={!preview ? "active" : ""} type="button" onClick={() => setPreview(false)}><Pencil size={14} /> เขียน</button>
+          <button className={preview ? "active" : ""} type="button" onClick={() => setPreview(true)}><Eye size={14} /> ดูตัวอย่าง</button>
+        </div>
+        {preview
+          ? <div className="markdown-preview markdown-body"><ReactMarkdown remarkPlugins={[remarkGfm]}>{draft.content || "_ยังไม่มีเนื้อหา_"}</ReactMarkdown></div>
+          : <textarea className="markdown-textarea" aria-label="เนื้อหา Markdown" value={draft.content} onChange={(event) => setDraft({ ...draft, content: event.target.value })} placeholder={"เขียน Markdown ที่นี่…\n\n# หัวข้อ\n- รายการ\n- [ ] งานที่ต้องทำ\n\n**ตัวหนา** และ `code`"} />}
         <footer className="editor-actions"><span>{message}</span>{selectedId && <button className="danger-button" onClick={() => setDeleteOpen(true)}><Trash2 size={15} /> ลบ</button>}<button className="primary-button" onClick={() => void save()}><Save size={15} /> บันทึก</button></footer>
       </article>
     </div>

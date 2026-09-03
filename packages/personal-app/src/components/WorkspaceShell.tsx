@@ -3,7 +3,7 @@
 import { Bell, BellOff, Bot, CalendarDays, KeyRound, LogOut, Menu, NotebookPen, PanelLeftClose, PanelLeftOpen, Sparkles, X } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode, type TouchEvent } from "react";
 import { AppModal } from "./AppModal";
 import { BackgroundChatMonitor } from "./BackgroundChatMonitor";
 
@@ -46,6 +46,24 @@ export function WorkspaceShell({ active, title, subtitle, action, focusMode = fa
   const [notificationEnabled, setNotificationEnabled] = useState(false);
   const [notificationConfigured, setNotificationConfigured] = useState(true);
   const [notificationMessage, setNotificationMessage] = useState("");
+  const touchStart = useRef<{ x: number; y: number } | null>(null);
+
+  function beginNavigationSwipe(event: TouchEvent<HTMLDivElement>) {
+    const touch = event.touches[0];
+    touchStart.current = { x: touch.clientX, y: touch.clientY };
+  }
+
+  function finishNavigationSwipe(event: TouchEvent<HTMLDivElement>) {
+    const start = touchStart.current;
+    touchStart.current = null;
+    if (!start || !window.matchMedia("(max-width: 760px)").matches) return;
+    const touch = event.changedTouches[0];
+    const deltaX = touch.clientX - start.x;
+    const deltaY = touch.clientY - start.y;
+    if (Math.abs(deltaX) < 70 || Math.abs(deltaX) < Math.abs(deltaY) * 1.25) return;
+    if (deltaX > 0 && start.x < 48) setOpen(true);
+    if (deltaX < 0 && open) setOpen(false);
+  }
 
   useEffect(() => {
     if (!("serviceWorker" in navigator) || !("Notification" in globalThis)) return;
@@ -95,7 +113,7 @@ export function WorkspaceShell({ active, title, subtitle, action, focusMode = fa
   }
 
   return (
-    <div className={`app-shell ${collapsed ? "sidebar-collapsed" : ""} ${immersive ? "immersive" : ""}`}>
+    <div className={`app-shell ${collapsed ? "sidebar-collapsed" : ""} ${immersive ? "immersive" : ""}`} onTouchStart={beginNavigationSwipe} onTouchEnd={finishNavigationSwipe}>
       <aside className={`sidebar ${open ? "open" : ""}`}>
         <div className="brand-row">
           <Image className="brand-logo" src="/tinypersonal-logo-192.png" alt="TinyPersonal tiger logo" width={42} height={42} priority />
