@@ -65,6 +65,15 @@ export async function retrieveToolNames(
   const minimumScore = options.minimumScore ?? 1;
   let selected = hits.filter((hit) => allowed.has(hit.name) && hit.score >= minimumScore).map((hit) => hit.name);
 
+  // Notes belong to B1 Workspace. Words such as "แก้" or "Markdown" alone must
+  // never route a data-editing request to Codex unless coding intent is explicit.
+  const normalizedQuery = normalize(query);
+  const noteIntent = /\bnotes?\b|โน[้๊]ต/u.test(normalizedQuery);
+  const codingIntent = /\b(code|coding|codex|repo(?:sitory)?|git|build|tests?|deploy|devops)\b|โค้ด|ซอร์ส|โปรเจ(?:กต์|ค)/u.test(normalizedQuery);
+  if (noteIntent && !codingIntent) {
+    selected = selected.filter((name) => name !== "delegateCodingTask");
+  }
+
   // Routine mutations need a lookup tool to resolve the stable routine root ID.
   // Avoid exposing both destructive and editing operations for an ambiguous shared word.
   if (selected.includes("updateRoutine") && selected.includes("deleteRoutine")) {

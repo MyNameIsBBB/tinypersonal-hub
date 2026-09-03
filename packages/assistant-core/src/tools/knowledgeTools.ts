@@ -2,10 +2,10 @@ import { tool } from "ai";
 import { z } from "zod";
 
 export const searchNotesTool = tool({
-  description: "Search the user's note knowledge base by words, tags, or folder. Returns note content only through the authorized worker.",
+  description: "List or search the user's notes. Use an empty query to list all notes before a bulk note operation.",
   inputSchema: z.object({
-    query: z.string().trim().min(1).max(300),
-    limit: z.number().int().min(1).max(20).default(10),
+    query: z.string().trim().max(300).default(""),
+    limit: z.number().int().min(1).max(100).default(100),
   }).strict(),
   execute: async (input) => ({ ok: true as const, command: "notes.search" as const, input }),
 });

@@ -240,8 +240,8 @@ function vaultRecordForModel(record: Awaited<ReturnType<typeof searchVaultMetada
 }
 
 const noteSearchExecutionTool = tool({
-  description: "Search the user's notes by words, tags, or folder.",
-  inputSchema: z.object({ query: z.string().trim().min(1).max(300), limit: z.number().int().min(1).max(20).default(10) }).strict(),
+  description: "List or search the user's notes. Use an empty query to list all notes.",
+  inputSchema: z.object({ query: z.string().trim().max(300).default(""), limit: z.number().int().min(1).max(100).default(100) }).strict(),
   execute: async ({ query, limit }) => {
     const notes = await searchNotes(query, limit);
     return { ok: true as const, notes: notes.map(noteItemForModel) };
