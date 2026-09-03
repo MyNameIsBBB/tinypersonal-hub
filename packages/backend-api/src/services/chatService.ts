@@ -109,6 +109,7 @@ export async function listChatSessions(ownerKey: string, limit = 30) {
         select: {
             id: true,
             title: true,
+            customSystemPrompt: true,
             createdAt: true,
             updatedAt: true,
             _count: { select: { messages: true } },
@@ -124,7 +125,21 @@ export async function listChatSessions(ownerKey: string, limit = 30) {
 export async function createChatSession(ownerKey: string) {
     return prisma.chatSession.create({
         data: { ownerKey },
-        select: { id: true, title: true, createdAt: true, updatedAt: true },
+        select: { id: true, title: true, customSystemPrompt: true, createdAt: true, updatedAt: true },
+    });
+}
+
+export async function updateChatSessionSystemPrompt(
+    ownerKey: string,
+    sessionId: string,
+    customSystemPrompt: string | null,
+) {
+    const existing = await prisma.chatSession.findFirst({ where: { id: sessionId, ownerKey }, select: { id: true } });
+    if (!existing) return null;
+    return prisma.chatSession.update({
+        where: { id: sessionId },
+        data: { customSystemPrompt },
+        select: { id: true, title: true, customSystemPrompt: true, createdAt: true, updatedAt: true },
     });
 }
 

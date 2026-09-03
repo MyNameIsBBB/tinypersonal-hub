@@ -1,7 +1,7 @@
 "use client";
 
 import { useChat } from "@ai-sdk/react";
-import { ArrowUp, Bot, CalendarPlus, Check, ChevronDown, Copy, FileSearch, KeyRound, LoaderCircle, MessageSquare, Mic, MicOff, Paperclip, Plus, Search, ShieldCheck, Trash2, Volume2, VolumeX, X } from "lucide-react";
+import { ArrowUp, Bot, CalendarPlus, Check, ChevronDown, CircleCheck, Clock3, Copy, Cpu, Database, FileSearch, HardDrive, KeyRound, LoaderCircle, MessageSquare, Mic, MicOff, Paperclip, Plus, Search, Server, ShieldCheck, Sparkles, Trash2, Volume2, VolumeX, X } from "lucide-react";
 import { getToolName, isToolUIPart, type FileUIPart, type UIMessage, type UIMessagePart } from "ai";
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
@@ -22,7 +22,7 @@ const suggestions = [
 type CodingJobProgressEvent = { at: string; kind: "status" | "command" | "file" | "tool"; message: string };
 type CodingJobProgress = { id: string; status: string; attempts: number; progressJson: string; createdAt: string; updatedAt: string; completedAt: string | null; error: string | null };
 type ChatGenerationJobProgress = { id: string; userMessageId: string; status: string; attempts: number; createdAt: string; updatedAt: string; completedAt: string | null; error: string | null };
-type ChatSessionSummary = { id: string; title: string | null; updatedAt: string; _count: { messages: number } };
+type ChatSessionSummary = { id: string; title: string | null; customSystemPrompt: string | null; updatedAt: string; _count: { messages: number } };
 const GENERAL_CHAT_TITLE = "แชททั่วไป";
 
 type MarkdownNode = { type?: string; value?: unknown; children?: MarkdownNode[] };
@@ -180,6 +180,43 @@ export default function AIPage() {
   const [showCodexProgress, setShowCodexProgress] = useState(false);
   const [deleteSessionTarget, setDeleteSessionTarget] = useState<ChatSessionSummary | null>(null);
   const [deleteBusySessionId, setDeleteBusySessionId] = useState<string | null>(null);
+  const [now, setNow] = useState<Date | null>(null);
+  const [customSystemPrompt, setCustomSystemPrompt] = useState("");
+  const [promptSaved, setPromptSaved] = useState(true);
+  const [promptBusy, setPromptBusy] = useState(false);
+
+  useEffect(() => {
+    setNow(new Date());
+    const timer = window.setInterval(() => setNow(new Date()), 1_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    const activeSession = sessions.find((item) => item.id === sessionId);
+    setCustomSystemPrompt(activeSession?.customSystemPrompt ?? "");
+    setPromptSaved(true);
+  }, [sessionId, sessions]);
+
+  async function saveCustomSystemPrompt() {
+    if (!sessionId || promptBusy) return;
+    setPromptBusy(true);
+    setPersistenceError(null);
+    try {
+      const response = await fetch("/api/chat/sessions", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId, customSystemPrompt: customSystemPrompt.trim() || null }),
+      });
+      const data = await response.json() as { session?: ChatSessionSummary; error?: string };
+      if (!response.ok || !data.session) throw new Error(data.error ?? "บันทึก System prompt ไม่สำเร็จ");
+      setSessions((current) => current.map((item) => item.id === sessionId ? { ...item, customSystemPrompt: data.session!.customSystemPrompt } : item));
+      setPromptSaved(true);
+    } catch (saveError) {
+      setPersistenceError(saveError instanceof Error ? saveError.message : "บันทึก System prompt ไม่สำเร็จ");
+    } finally {
+      setPromptBusy(false);
+    }
+  }
 
   const codingJobEvents = useMemo(() => {
     if (!codingJob?.progressJson) return [];
@@ -645,10 +682,112 @@ export default function AIPage() {
     </div>
   );
   return (
-    <WorkspaceShell active="AI Assistant" title="B1" subtitle="ผู้ช่วยส่วนตัวของคุณ" focusMode immersive sidebarExtra={sidebarExtraContent}>
-      <div className="ai-chat-layout">
-        <section className="ai-workspace">
-          <div className="chat-thread" aria-live="polite" ref={threadRef}>
+    <WorkspaceShell active="AI Assistant" title="B1 Voice OS" subtitle="ผู้ช่วยส่วนตัวของคุณ" focusMode immersive sidebarExtra={sidebarExtraContent}>
+      <div className="voice-os">
+        <header className="voice-os-topbar">
+          <div className="voice-os-clock">
+            <Clock3 size={14} />
+            <strong>{now?.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" }) ?? "--:--"}</strong>
+            <span>•</span>
+            <span>{now?.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" }) ?? "Loading"}</span>
+          </div>
+          <div className="voice-session-picker">
+            <MessageSquare size={13} />
+            <select aria-label="เลือกแชท" value={sessionId ?? ""} onChange={(event) => void openSession(event.target.value)} disabled={!historyReady || status !== "ready"}>
+              {orderedSessions.map((item) => <option value={item.id} key={item.id}>{item.title || "บทสนทนาใหม่"}</option>)}
+            </select>
+            <button type="button" onClick={() => void createSession()} aria-label="สร้างแชทใหม่"><Plus size={14} /></button>
+          </div>
+          <div className="voice-os-metrics"><span>CPU <b>14%</b></span><span>DISK <b>38%</b></span></div>
+        </header>
+
+        <div className="voice-os-grid">
+          <aside className="voice-os-panel voice-os-telemetry">
+            <div className="voice-os-panel-title"><span>SYS TELEMETRY</span><small>LIVE</small></div>
+            <section>
+              <h2><Database size={15} /> VM &amp; STORAGE</h2>
+              <div className="telemetry-row"><span>RAM</span><strong>1.2 / 2.0 GB</strong></div>
+              <div className="meter"><i style={{ width: "60%" }} /></div>
+              <div className="telemetry-row"><span>DISK</span><strong>30 GB FREE</strong></div>
+              <div className="meter"><i style={{ width: "38%" }} /></div>
+            </section>
+            <section>
+              <h2><Server size={15} /> DOCKER CONTAINERS</h2>
+              <div className="service-row"><i /><span><b>hub-backend</b><small>Healthy</small></span><em>UP</em></div>
+              <div className="service-row"><i /><span><b>postgres</b><small>Connected</small></span><em>UP</em></div>
+            </section>
+            <section>
+              <h2><Cpu size={15} /> CODEX WORKER</h2>
+              <div className="worker-status"><span className={activeCodingJob ? "working" : ""}><i /></span><div><b>{activeCodingJob ? "Working" : "Idle"}</b><small>{activeCodingJob ? latestProgressEvent?.message ?? "กำลังประมวลผล" : "พร้อมรับคำสั่ง"}</small></div></div>
+            </section>
+            <footer><ShieldCheck size={14} /> PRIVATE • LOCAL-FIRST</footer>
+          </aside>
+
+          <main className="voice-os-center">
+            <div className="voice-presence">
+              <div className={`b1-avatar${listening ? " listening" : ""}${status !== "ready" ? " thinking" : ""}`} aria-label={listening ? "B1 กำลังฟัง" : "B1 พร้อมทำงาน"}>
+                <span className="avatar-halo halo-one" /><span className="avatar-halo halo-two" />
+                <div className="b1-face"><span className="b1-eye left" /><span className="b1-eye right" /><span className="b1-mouth" /></div>
+              </div>
+              <div className="mood-pill"><i /> {listening ? "LISTENING" : status === "ready" ? "MOOD: FOCUSED" : "PROCESSING"}</div>
+            </div>
+
+            <div className="voice-wave" aria-hidden="true">{Array.from({ length: 18 }, (_, index) => <i key={index} style={{ animationDelay: `${index * -0.07}s` }} />)}</div>
+
+            <div className="voice-dialog" aria-live="polite">
+              <small>B1 / VOICE RESPONSE</small>
+              <p>{messages.length === 0 ? "ระบบพร้อมทำงานครับ มีอะไรให้ผมรับใช้ไหมครับ" : [...messages].reverse().find((message) => message.role === "assistant")?.parts.filter((part) => part.type === "text").map((part) => part.text).join(" ") || (status === "ready" ? "พร้อมรับคำสั่งถัดไปครับ" : "กำลังประมวลผลคำสั่งของคุณครับ…")}</p>
+            </div>
+
+            <div className="voice-primary-actions">
+              <button type="button" className={`speak-main${listening ? " listening" : ""}`} onClick={toggleListening} disabled={!historyReady || !voiceAvailable || status !== "ready"}>
+                {listening ? <MicOff size={22} /> : <Mic size={22} />}<span>{listening ? "หยุดฟัง" : "พูดกับ B1"}<small>{voiceAvailable ? "THAI SPEECH INPUT" : "ไม่รองรับบนเบราว์เซอร์นี้"}</small></span>
+              </button>
+              <button type="button" className={`mute-main${!voiceReply ? " muted" : ""}`} onClick={() => { window.speechSynthesis?.cancel(); setVoiceReply((enabled) => !enabled); }} aria-pressed={!voiceReply}>
+                {voiceReply ? <Volume2 size={20} /> : <VolumeX size={20} />}<span>{voiceReply ? "เสียงเปิด" : "ปิดเสียง"}</span>
+              </button>
+            </div>
+
+            <div className="voice-chat-dock">
+              <div className="voice-transcript" ref={threadRef}>
+                {messages.slice(-4).map((message) => <div className={message.role} key={message.id}><b>{message.role === "assistant" ? "B1" : "YOU"}</b><span>{message.parts.filter((part) => part.type === "text").map((part) => part.text).join(" ")}</span></div>)}
+                {(status === "submitted" || status === "streaming") && <div className="assistant"><b>B1</b><span>กำลังคิด…</span></div>}
+                {(error || persistenceError) && <div className="voice-os-error">{persistenceError ?? `เชื่อมต่อ AI ไม่สำเร็จ: ${error!.message}`}</div>}
+              </div>
+              <form onSubmit={submit} className="voice-text-input">
+                <input value={input} onChange={(event) => setInput(event.target.value)} placeholder={listening ? "กำลังฟังเสียงภาษาไทย…" : "พิมพ์คำสั่ง หรือกดไมค์เพื่อพูด…"} disabled={!historyReady} />
+                <button type="submit" disabled={!historyReady || !input.trim() || status !== "ready"} aria-label="ส่งข้อความ"><ArrowUp size={18} /></button>
+              </form>
+            </div>
+          </main>
+
+          <aside className="voice-os-panel voice-os-workspace">
+            <div className="voice-os-panel-title"><span>WORKSPACE</span><small>4 SEP</small></div>
+            <section>
+              <h2><Bot size={15} /> CUSTOM SYSTEM PROMPT</h2>
+              <textarea className="system-prompt-input" value={customSystemPrompt} maxLength={8000} onChange={(event) => { setCustomSystemPrompt(event.target.value); setPromptSaved(false); }} placeholder="เช่น ตอบสั้น กระชับ และเรียกผมว่า Boss" />
+              <div className="system-prompt-actions"><small>{customSystemPrompt.length.toLocaleString()}/8,000</small><button type="button" disabled={promptSaved || promptBusy || !sessionId} onClick={() => void saveCustomSystemPrompt()}>{promptBusy ? "กำลังบันทึก…" : promptSaved ? "บันทึกแล้ว" : "บันทึก Prompt"}</button></div>
+            </section>
+            <section>
+              <h2><CircleCheck size={15} /> TODAY&apos;S FOCUS</h2>
+              <label><input type="checkbox" /><span>Check Git status<small>tinypersonal-hub</small></span></label>
+              <label><input type="checkbox" /><span>Review open PR<small>Before standup</small></span></label>
+            </section>
+            <section>
+              <h2><Clock3 size={15} /> NEXT SCHEDULE</h2>
+              <div className="schedule-block"><b>10:00</b><span>Team Standup<small>อีก 1 ชั่วโมง 29 นาที</small></span></div>
+            </section>
+            <section>
+              <h2><Sparkles size={15} /> QUICK SCRATCH</h2>
+              <div className="scratch-note"><p>“ไอเดีย B1 Voice UI”</p><small>บันทึกเมื่อสักครู่</small></div>
+              <button className="add-note" type="button"><Plus size={14} /> เพิ่มโน้ต</button>
+            </section>
+            <div className="voice-tip"><Mic size={15} /><p><b>VOICE TIP</b><span>พูดว่า “B1” แล้วตามด้วยคำสั่งที่ต้องการ</span></p></div>
+          </aside>
+        </div>
+      </div>
+      <div className="voice-os-hidden-chat" aria-hidden="true">
+        <section className="ai-workspace"><div className="chat-thread">
             {messages.length === 0 ? (
               <div className="ai-suggestions">
                 {suggestions.map(({ icon: Icon, text }) => (
@@ -744,8 +883,7 @@ export default function AIPage() {
               <button type="button" className="voice-button voice-reply-button" onClick={() => { window.speechSynthesis?.cancel(); setVoiceReply((enabled) => !enabled); }} aria-label={voiceReply ? "ปิดเสียงตอบกลับ" : "เปิดเสียงตอบกลับ"}>{voiceReply ? <Volume2 size={18} /> : <VolumeX size={18} />}</button>
               <button type="submit" disabled={!historyReady || (!input.trim() && attachments.length === 0) || status === "submitted" || status === "streaming"} aria-label="ส่งข้อความ"><ArrowUp size={19} /></button>
             </form>
-          </div>
-        </section>
+          </div></section>
       </div>
       <AppModal
         open={Boolean(deleteSessionTarget)}
