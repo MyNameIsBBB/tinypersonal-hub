@@ -417,7 +417,7 @@ function queuedTextResponse(jobId: string) {
 }
 
 function asksForCodingStatus(text: string) {
-  return /^(?:เป็นไง(?:บ้าง|แล้ว)?(?:ได้ไหม)?|ถึงไหนแล้ว|ไหน(?:ล่ะ|อะ|อ่ะ)?|ขอดูผล(?:ลัพธ์)?|ผล(?:ลัพธ์)?(?:เป็นไง)?|สถานะ(?:งาน)?(?:เป็นไง)?|codex\s*(?:เป็นไง|status)|งาน\s*codex\s*(?:เป็นไง|ถึงไหน))\??$/iu.test(text.trim());
+  return /^(?:(?:codex|งาน\s*(?:codex|โค้ด))\s*(?:เป็นไง(?:บ้าง|แล้ว)?|ถึงไหนแล้ว|status|เสร็จหรือยัง)|(?:ขอดู|ดู|เช็ก)\s*(?:ผล|สถานะ)\s*(?:codex|งานโค้ด))\??$/iu.test(text.trim());
 }
 
 function codingStatusText(job: Awaited<ReturnType<typeof getLatestCodingJob>>) {

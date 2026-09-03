@@ -1,7 +1,7 @@
 "use client";
 
 import { useChat } from "@ai-sdk/react";
-import { AlertCircle, ArrowUp, Bot, CalendarPlus, Check, CheckCircle2, ChevronDown, Copy, FileSearch, KeyRound, LoaderCircle, MessageSquare, Mic, MicOff, Paperclip, Plus, Search, ShieldCheck, Trash2, Volume2, VolumeX, X } from "lucide-react";
+import { ArrowUp, Bot, CalendarPlus, Check, ChevronDown, Copy, FileSearch, KeyRound, LoaderCircle, MessageSquare, Mic, MicOff, Paperclip, Plus, Search, ShieldCheck, Trash2, Volume2, VolumeX, X } from "lucide-react";
 import { getToolName, isToolUIPart, type FileUIPart, type UIMessage, type UIMessagePart } from "ai";
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
@@ -188,6 +188,7 @@ export default function AIPage() {
   }, [codingJob?.progressJson]);
 
   const latestProgressEvent = codingJobEvents.at(-1);
+  const activeCodingJob = codingJob?.status === "QUEUED" || codingJob?.status === "RUNNING" ? codingJob : null;
 
   useEffect(() => { messagesRef.current = messages; }, [messages]);
 
@@ -672,22 +673,18 @@ export default function AIPage() {
               <div className="thinking" role="status"><LoaderCircle size={15} /> {chatGenerationJob.status === "QUEUED" ? "คำตอบอยู่ในคิวของเซิร์ฟเวอร์…" : "AI กำลังสร้างคำตอบที่เซิร์ฟเวอร์…"}</div>
             )}
 
-            {codingJob && (
-              <div className={`codex-status-card ${codingJob.status.toLowerCase()}`}>
+            {activeCodingJob && (
+              <div className={`codex-status-card ${activeCodingJob.status.toLowerCase()}`}>
                 <div className="codex-status-header">
                   <div className="codex-status-main">
-                    {codingJob.status === "QUEUED" || codingJob.status === "RUNNING" ? (
+                    {activeCodingJob.status === "QUEUED" || activeCodingJob.status === "RUNNING" ? (
                       <LoaderCircle size={15} className="spin" />
-                    ) : codingJob.status === "SUCCEEDED" ? (
-                      <CheckCircle2 size={15} className="icon-success" />
-                    ) : (
-                      <AlertCircle size={15} className="icon-error" />
-                    )}
+                    ) : null}
                     <div className="codex-status-info">
                       <span className="codex-title">
-                        Codex: {codingJob.status === "QUEUED" ? "กำลังจัดคิว" : codingJob.status === "RUNNING" ? (latestProgressEvent?.message ?? `กำลังทำงาน (รอบที่ ${codingJob.attempts})`) : codingJob.status === "SUCCEEDED" ? "ทำงานเสร็จสิ้นแล้ว" : "ล้มเหลว — ตรวจสอบรายละเอียดในข้อความ"}
+                        Codex: {activeCodingJob.status === "QUEUED" ? "กำลังจัดคิว" : (latestProgressEvent?.message ?? `กำลังทำงาน (รอบที่ ${activeCodingJob.attempts})`)}
                       </span>
-                      {codingJob.status === "RUNNING" && latestProgressEvent && (
+                      {activeCodingJob.status === "RUNNING" && latestProgressEvent && (
                         <span className="codex-timestamp">
                           {new Date(latestProgressEvent.at).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
                         </span>
