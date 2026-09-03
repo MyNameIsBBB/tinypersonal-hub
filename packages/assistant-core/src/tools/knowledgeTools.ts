@@ -43,28 +43,6 @@ export const deleteNoteTool = tool({
   execute: async (input) => ({ ok: true as const, command: "notes.delete" as const, input }),
 });
 
-export const listMediaAssetsTool = tool({
-  description: "List existing media asset metadata. This tool cannot upload file bytes.",
-  inputSchema: z.object({ limit: z.number().int().min(1).max(100).default(30) }).strict(),
-  execute: async (input) => ({ ok: true as const, command: "media.list" as const, input }),
-});
-
-export const updateMediaAssetLinksTool = tool({
-  description: "Link or unlink an existing media asset to a note or schedule item. This never exposes file storage paths.",
-  inputSchema: z.object({
-    id: z.string().min(1),
-    noteId: z.string().min(1).nullable().optional(),
-    scheduleItemId: z.string().min(1).nullable().optional(),
-  }).strict(),
-  execute: async (input) => ({ ok: true as const, command: "media.updateLinks" as const, input }),
-});
-
-export const deleteMediaAssetTool = tool({
-  description: "Permanently delete an uploaded media asset and its stored file. Ask the user for explicit confirmation first.",
-  inputSchema: z.object({ id: z.string().min(1), confirmed: z.literal(true) }).strict(),
-  execute: async (input) => ({ ok: true as const, command: "media.delete" as const, input }),
-});
-
 export const searchVaultMetadataTool = tool({
   description: "Search vault metadata such as service name, account identifier, category, and login URL. Never returns passwords, OTP seeds, ciphertext, IVs, or authentication tags.",
   inputSchema: z.object({ query: z.string().trim().min(1).max(200) }).strict(),

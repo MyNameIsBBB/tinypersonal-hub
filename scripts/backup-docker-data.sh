@@ -23,7 +23,7 @@ done
 
 mkdir -p "$BACKUP_DIR"
 
-for volume_name in tinypersonal-hub-data minio-data; do
+for volume_name in tinypersonal-hub-data; do
   echo "Exporting volume: ${volume_name}"
   docker run --rm -v "${volume_name}:/source:ro" -v "$TMP_DIR:/backup" alpine sh -c "cd /source && tar -czf /backup/${volume_name}.tar.gz ."
 done

@@ -1,5 +1,5 @@
 import { google } from "@ai-sdk/google";
-import { createNote, createPendingAction, deleteChatSession, deleteMediaAsset, deleteNote, deleteVaultSecret, enqueueChatGenerationJob, ensureDailyGeneralChat, executeLatestPendingAction, generateAndUpdateSessionTitle, getLatestCodingJob, getOrCreateChatSession, getScheduleByRange, listActiveRoutines, listChatSessions, listMediaAssets, loadChatMessages, recordAudit, saveAssistantChatMessageIfCurrent, scrapeWebPage, searchNotes, searchVaultMetadata, searchWeb, updateMediaAssetLinks, updateNote, updateVaultMetadata } from "@tinypersonal/backend-api";
+import { createNote, createPendingAction, deleteChatSession, deleteNote, deleteVaultSecret, enqueueChatGenerationJob, ensureDailyGeneralChat, executeLatestPendingAction, generateAndUpdateSessionTitle, getLatestCodingJob, getOrCreateChatSession, getScheduleByRange, listActiveRoutines, listChatSessions, loadChatMessages, recordAudit, saveAssistantChatMessageIfCurrent, scrapeWebPage, searchNotes, searchVaultMetadata, searchWeb, updateNote, updateVaultMetadata } from "@tinypersonal/backend-api";
 import { consumeStream, convertToModelMessages, createUIMessageStream, createUIMessageStreamResponse, isStepCount, streamText, tool, type UIMessage } from "ai";
 import { after } from "next/server";
 import { isCronAuthorizedRequest, isValidSessionToken, SESSION_COOKIE } from "@/lib/serverAuth";
@@ -226,18 +226,6 @@ function noteItemForModel(note: Awaited<ReturnType<typeof searchNotes>>[number])
   };
 }
 
-function mediaAssetForModel(asset: Awaited<ReturnType<typeof listMediaAssets>>[number]) {
-  return {
-    id: asset.id,
-    fileName: asset.fileName,
-    mimeType: asset.mimeType,
-    fileSize: asset.fileSize,
-    noteId: asset.noteId,
-    scheduleItemId: asset.scheduleItemId,
-    createdAt: asset.createdAt.toISOString(),
-  };
-}
-
 function vaultRecordForModel(record: Awaited<ReturnType<typeof searchVaultMetadata>>[number]) {
   return {
     id: record.id,
@@ -310,48 +298,6 @@ const deleteNoteMutationTool = (ownerKey: string, sessionId: string) => tool({
       return { ok: true as const, deletedId: id };
     } catch (error) {
       return { ok: false as const, error: { code: "NOTE_MUTATION_FAILED", message: error instanceof Error ? error.message : "Note mutation failed" } };
-    }
-  },
-});
-
-const mediaListExecutionTool = tool({
-  description: "List media metadata without exposing storage paths or file bytes.",
-  inputSchema: z.object({ limit: z.number().int().min(1).max(100).default(30) }).strict(),
-  execute: async ({ limit }) => {
-    const assets = await listMediaAssets(limit);
-    return { ok: true as const, assets: assets.map(mediaAssetForModel) };
-  },
-});
-
-const mediaMutationTool = (ownerKey: string, sessionId: string, operation: "updateLinks" | "delete") => tool({
-  description: `${operation === "delete" ? "Delete" : "Link or unlink"} an existing media asset directly.`,
-  inputSchema: z.object({ id: z.string().min(1), noteId: z.string().min(1).nullable().optional(), scheduleItemId: z.string().min(1).nullable().optional() }).strict(),
-  execute: async (input) => {
-    void ownerKey;
-    void sessionId;
-    try {
-      const updated = await updateMediaAssetLinks(input.id, {
-        noteId: input.noteId,
-        scheduleItemId: input.scheduleItemId,
-      });
-      return { ok: true as const, asset: mediaAssetForModel(updated) };
-    } catch (error) {
-      return { ok: false as const, error: { code: "MEDIA_MUTATION_FAILED", message: error instanceof Error ? error.message : "Media mutation failed" } };
-    }
-  },
-});
-
-const deleteMediaMutationTool = (ownerKey: string, sessionId: string) => tool({
-  description: "Delete an existing media asset directly.",
-  inputSchema: deleteByIdSchema,
-  execute: async ({ id }) => {
-    void ownerKey;
-    void sessionId;
-    try {
-      await deleteMediaAsset(id);
-      return { ok: true as const, deletedId: id };
-    } catch (error) {
-      return { ok: false as const, error: { code: "MEDIA_MUTATION_FAILED", message: error instanceof Error ? error.message : "Media mutation failed" } };
     }
   },
 });
@@ -585,7 +531,6 @@ export async function POST(request: Request) {
   const allowedTools: ToolName[] = [
     "getSchedule", "createScheduleItem", "updateTaskStatus", "updateRoutine", "deleteRoutine",
     "searchWeb", "fetchWebPage", "searchNotes", "createNote", "updateNote", "deleteNote",
-    "listMediaAssets", "updateMediaAssetLinks", "deleteMediaAsset",
     "searchVaultMetadata", "updateVaultMetadata", "deleteVaultSecret",
   ];
   allowedTools.push("delegateCodingTask");
@@ -622,9 +567,6 @@ export async function POST(request: Request) {
       ...(agent.selectedToolNames.includes("createNote") && { createNote: noteMutationTool(ownerKey, session.id, "create") }),
       ...(agent.selectedToolNames.includes("updateNote") && { updateNote: updateNoteMutationTool(ownerKey, session.id) }),
       ...(agent.selectedToolNames.includes("deleteNote") && { deleteNote: deleteNoteMutationTool(ownerKey, session.id) }),
-      ...(agent.selectedToolNames.includes("listMediaAssets") && { listMediaAssets: mediaListExecutionTool }),
-      ...(agent.selectedToolNames.includes("updateMediaAssetLinks") && { updateMediaAssetLinks: mediaMutationTool(ownerKey, session.id, "updateLinks") }),
-      ...(agent.selectedToolNames.includes("deleteMediaAsset") && { deleteMediaAsset: deleteMediaMutationTool(ownerKey, session.id) }),
       ...(agent.selectedToolNames.includes("searchVaultMetadata") && { searchVaultMetadata: vaultSearchExecutionTool }),
       ...(agent.selectedToolNames.includes("updateVaultMetadata") && { updateVaultMetadata: vaultMutationTool(ownerKey, session.id, "updateMetadata") }),
       ...(agent.selectedToolNames.includes("deleteVaultSecret") && { deleteVaultSecret: deleteVaultMutationTool(ownerKey, session.id) }),

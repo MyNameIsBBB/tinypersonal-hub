@@ -2,9 +2,8 @@ import { createScheduleItemTool, deleteOrCancelRoutineTool, getScheduleByRangeTo
 import { webScrapeTool, webSearchTool } from "./web";
 import { controlSmartHomeDeviceTool, delegateCodingTaskTool } from "./jarvis";
 import {
-  createNoteTool, deleteMediaAssetTool, deleteNoteTool, deleteVaultSecretTool,
-  listMediaAssetsTool, searchNotesTool, searchVaultMetadataTool,
-  updateMediaAssetLinksTool, updateNoteTool, updateVaultMetadataTool,
+  createNoteTool, deleteNoteTool, deleteVaultSecretTool,
+  searchNotesTool, searchVaultMetadataTool, updateNoteTool, updateVaultMetadataTool,
 } from "./knowledgeTools";
 
 /** The complete set of tools that may be exposed to the chat model. */
@@ -22,9 +21,6 @@ export const toolRegistry = {
   createNote: createNoteTool,
   updateNote: updateNoteTool,
   deleteNote: deleteNoteTool,
-  listMediaAssets: listMediaAssetsTool,
-  updateMediaAssetLinks: updateMediaAssetLinksTool,
-  deleteMediaAsset: deleteMediaAssetTool,
   searchVaultMetadata: searchVaultMetadataTool,
   updateVaultMetadata: updateVaultMetadataTool,
   deleteVaultSecret: deleteVaultSecretTool,
@@ -47,9 +43,6 @@ export const toolCatalog: Record<ToolName, { description: string; keywords: stri
   createNote: { description: "Create a new Markdown note.", keywords: ["create note", "add note", "บันทึกโน้ต", "สร้างโน้ต"] },
   updateNote: { description: "Update an existing note.", keywords: ["update note", "edit note", "แก้โน้ต"] },
   deleteNote: { description: "Delete an existing note after confirmation.", keywords: ["delete note", "remove note", "ลบโน้ต"] },
-  listMediaAssets: { description: "List uploaded media metadata.", keywords: ["media", "files", "images", "รูป", "ไฟล์", "มีเดีย"] },
-  updateMediaAssetLinks: { description: "Link media to a note or schedule item.", keywords: ["link media", "attach file", "ผูกไฟล์", "แนบมีเดีย"] },
-  deleteMediaAsset: { description: "Delete a media asset after confirmation.", keywords: ["delete media", "delete file", "ลบไฟล์", "ลบรูป"] },
   searchVaultMetadata: { description: "Search safe Vault metadata without revealing secrets.", keywords: ["vault", "account", "login", "คลังรหัส", "บัญชี"] },
   updateVaultMetadata: { description: "Update safe Vault metadata without reading secrets.", keywords: ["update vault", "edit account", "แก้ vault", "แก้บัญชี"] },
   deleteVaultSecret: { description: "Delete a Vault record after confirmation without revealing it.", keywords: ["delete vault", "remove account", "ลบ vault", "ลบบัญชี"] },

@@ -4,7 +4,7 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "TinyPersonal Hub",
     short_name: "TinyPersonal",
-    description: "พื้นที่ส่วนตัวสำหรับ Schedule, Notes, Media, Vault และ Gemini AI",
+    description: "พื้นที่ส่วนตัวสำหรับ Schedule, Notes, Vault และ Gemini AI",
     start_url: "/",
     scope: "/",
     display: "standalone",

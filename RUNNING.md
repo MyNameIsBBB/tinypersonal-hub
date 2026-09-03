@@ -55,7 +55,6 @@ GOOGLE_GENERATIVE_AI_API_KEY=your_gemini_api_key
 GEMINI_MODEL=gemini-3.5-flash-lite
 DATABASE_URL="file:./dev.db"
 VAULT_MASTER_KEY=base64_encoded_32_byte_key
-MEDIA_SIGNING_KEY=random_string_at_least_32_characters
 PERSONAL_API_TOKEN=random_private_api_token
 APP_AUTH_USERNAME=your_workspace_username
 APP_AUTH_PASSWORD=your_workspace_login_password
@@ -112,7 +111,6 @@ GOOGLE_GENERATIVE_AI_API_KEY=your_gemini_api_key
 GEMINI_MODEL=gemini-3.5-flash-lite
 DATABASE_URL="file:./dev.db"
 VAULT_MASTER_KEY=base64_encoded_32_byte_key
-MEDIA_SIGNING_KEY=random_string_at_least_32_characters
 PERSONAL_API_TOKEN=random_private_api_token
 APP_AUTH_USERNAME=your_workspace_username
 APP_AUTH_PASSWORD=your_workspace_login_password
@@ -176,7 +174,6 @@ GOOGLE_GENERATIVE_AI_API_KEY=your_gemini_api_key
 GEMINI_MODEL=gemini-3.5-flash-lite
 DATABASE_URL="file:./dev.db"
 VAULT_MASTER_KEY=base64_encoded_32_byte_key
-MEDIA_SIGNING_KEY=random_string_at_least_32_characters
 PERSONAL_API_TOKEN=random_private_api_token
 APP_AUTH_USERNAME=your_workspace_username
 APP_AUTH_PASSWORD=your_workspace_login_password
@@ -259,7 +256,6 @@ npm run docker:up
 ```bash
 docker compose ps
 docker compose logs -f app
-docker compose logs -f minio
 ```
 
 สคริปต์จะดำเนินการดังนี้:
@@ -364,7 +360,7 @@ PORT=4000 ./start-compose.sh
 
 ## 6. สำรองและกู้คืนข้อมูล Docker
 
-สำรองข้อมูล volume ทั้ง `tinypersonal-hub-data` และ `minio-data` พร้อมไฟล์ `.env`:
+สำรองข้อมูล volume `tinypersonal-hub-data` พร้อมไฟล์ `.env`:
 
 ```bash
 ./scripts/backup-docker-data.sh
@@ -507,10 +503,7 @@ APP_AUTH_PASSWORD=your_workspace_login_password
 SESSION_SIGNING_KEY=random_string_at_least_32_characters
 VAULT_MASTER_KEY=base64_encoded_32_byte_key
 VAULT_REVEAL_PASSWORD=separate_step_up_password
-MEDIA_SIGNING_KEY=random_string_at_least_32_characters
 PERSONAL_API_TOKEN=random_private_api_token_at_least_32_characters
-MEDIA_STORAGE_DRIVER=local
-MEDIA_LOCAL_ROOT=/data/media
 ```
 
 สร้าง random secret ได้ด้วย `openssl rand -base64 48` และเก็บค่าจริงไว้นอก repository

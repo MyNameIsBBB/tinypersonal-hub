@@ -35,7 +35,7 @@ docker compose down || true
 
 tar -C "$TMP_DIR" -xzf "$ARCHIVE_PATH"
 
-for volume_name in tinypersonal-hub-data minio-data; do
+for volume_name in tinypersonal-hub-data; do
   if [[ ! -f "$TMP_DIR/${volume_name}.tar.gz" ]]; then
     echo "Error: ${volume_name}.tar.gz is missing from backup archive"
     exit 1

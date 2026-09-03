@@ -52,7 +52,6 @@ model ScheduleItem {
   parentRoutine   ScheduleItem?    @relation("RoutineToInstances", fields: [parentRoutineId], references: [id], onDelete: Cascade)
   routineChildren ScheduleItem[]   @relation("RoutineToInstances")
   notes           Note[]
-  mediaAssets     MediaAsset[]
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
 
@@ -82,30 +81,10 @@ model Note {
   embeddingJson  String?
   scheduleItemId String?
   scheduleItem   ScheduleItem? @relation(fields: [scheduleItemId], references: [id], onDelete: SetNull)
-  mediaAssets    MediaAsset[]
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 
   @@index([folder])
-  @@index([scheduleItemId])
-}
-
-model MediaAsset {
-  id             String        @id @default(cuid())
-  fileName       String
-  mimeType       String
-  fileSize       Int
-  storageDriver  String        @default("local")
-  storagePath    String
-  publicUrl      String?
-  checksumSha256 String
-  noteId         String?
-  note           Note?         @relation(fields: [noteId], references: [id], onDelete: Cascade)
-  scheduleItemId String?
-  scheduleItem   ScheduleItem? @relation(fields: [scheduleItemId], references: [id], onDelete: Cascade)
-  createdAt      DateTime      @default(now())
-
-  @@index([noteId])
   @@index([scheduleItemId])
 }
 

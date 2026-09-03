@@ -20,7 +20,6 @@ export const scheduleUpdateSchema = scheduleCreateSchema.partial().extend({ stat
 export const scheduleDeleteSchema = z.object({ mode: z.enum(["DELETE", "CANCEL"]).default("CANCEL"), scope: z.enum(["ALL", "INSTANCE"]).default("ALL"), instanceStartTime: dateTimeSchema.optional() }).strict();
 export const noteCreateSchema = z.object({ title: z.string().trim().min(1).max(200), content: z.string().max(100_000), tags: z.array(z.string().trim().min(1).max(60)).max(30).optional(), folder: nullableText(160).optional(), scheduleItemId: idSchema.nullable().optional() }).strict();
 export const noteUpdateSchema = noteCreateSchema.partial().strict();
-export const mediaLinksSchema = z.object({ noteId: idSchema.nullable().optional(), scheduleItemId: idSchema.nullable().optional() }).strict();
 export const vaultCreateSchema = z.object({ serviceName: z.string().trim().min(1).max(160), category: z.string().trim().min(1).max(100), accountIdentifier: z.string().trim().min(1).max(320), password: z.string().min(1).max(10_000), url: z.string().url().max(2_000).optional().or(z.literal("")), notes: z.string().max(5_000).optional(), totpSeed: z.string().max(2_000).optional() }).strict();
 export const vaultMetadataUpdateSchema = vaultCreateSchema.omit({ password: true, totpSeed: true }).partial().extend({ url: z.string().url().max(2_000).nullable().optional(), notes: z.string().max(5_000).nullable().optional() }).strict();
 export const vaultRevealSchema = z.object({ password: z.string().min(1).max(10_000), reason: z.string().trim().min(3).max(500) }).strict();

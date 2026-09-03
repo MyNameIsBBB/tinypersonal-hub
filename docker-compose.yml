@@ -13,37 +13,6 @@ services:
     networks:
       - tinypersonal-network
 
-  minio:
-    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
-    container_name: minio
-    restart: unless-stopped
-    command: server /data --console-address ":9001"
-    ports:
-      - "9000:9000"
-      - "9001:9001"
-    environment:
-      MINIO_ROOT_USER: ${S3_ACCESS_KEY_ID}
-      MINIO_ROOT_PASSWORD: ${S3_SECRET_ACCESS_KEY}
-    volumes:
-      - minio-data:/data
-    networks:
-      - tinypersonal-network
-
-  minio-init:
-    image: minio/mc:RELEASE.2025-03-12T17-29-24Z
-    depends_on:
-      - minio
-    restart: "no"
-    environment:
-      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID}
-      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY}
-      S3_BUCKET: ${S3_BUCKET}
-    entrypoint: ["/bin/sh", "-ec"]
-    command:
-      - 'until mc alias set local http://minio:9000 "$S3_ACCESS_KEY_ID" "$S3_SECRET_ACCESS_KEY"; do sleep 2; done; mc mb --ignore-existing "local/$S3_BUCKET"'
-    networks:
-      - tinypersonal-network
-
   app:
     build:
       context: .
@@ -54,13 +23,10 @@ services:
     depends_on:
       searxng:
         condition: service_started
-      minio-init:
-        condition: service_completed_successfully
     env_file:
       - .env
     environment:
       DATABASE_URL: file:/data/dev.db
-      MEDIA_LOCAL_ROOT: /data/media
       CODEX_WORKER_SOCKET: /run/codex-worker/worker.sock
       PORT: "3000"
       HOSTNAME: 0.0.0.0
@@ -82,9 +48,6 @@ services:
 volumes:
   tinypersonal-hub-data:
     name: tinypersonal-hub-data
-    external: true
-  minio-data:
-    name: minio-data
     external: true
 
 networks:

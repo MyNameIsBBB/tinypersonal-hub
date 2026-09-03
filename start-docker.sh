@@ -67,7 +67,6 @@ if [[ -f "$SCRIPT_DIR/.env" ]]; then
 fi
 
 docker_args+=(--env "DATABASE_URL=file:/data/dev.db")
-docker_args+=(--env "MEDIA_LOCAL_ROOT=/data/media")
 docker_args+=(--env "CODEX_WORKER_SOCKET=/run/codex-worker/worker.sock")
 docker_args+=("$IMAGE_NAME")
 docker "${docker_args[@]}" >/dev/null

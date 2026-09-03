@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, BellOff, Bot, CalendarDays, FileImage, KeyRound, LogOut, Menu, NotebookPen, PanelLeftClose, PanelLeftOpen, Sparkles, X } from "lucide-react";
+import { Bell, BellOff, Bot, CalendarDays, KeyRound, LogOut, Menu, NotebookPen, PanelLeftClose, PanelLeftOpen, Sparkles, X } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 import { useEffect, useState, type ReactNode } from "react";
@@ -11,7 +11,6 @@ const modules = [
   { href: "/ai", label: "AI Assistant", icon: Bot },
   { href: "/schedule", label: "Schedule", icon: CalendarDays },
   { href: "/notes", label: "Notes", icon: NotebookPen },
-  { href: "/media", label: "Media", icon: FileImage },
   { href: "/vault", label: "Vault", icon: KeyRound },
 ] as const;
 

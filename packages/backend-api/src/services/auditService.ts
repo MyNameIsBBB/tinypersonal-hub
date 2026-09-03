@@ -1,6 +1,5 @@
 import { prisma } from "../db/client";
 import { createNote, deleteNote, updateNote } from "./noteService";
-import { deleteMediaAsset, updateMediaAssetLinks } from "./mediaService";
 import { createScheduleItem, deleteOrCancelRoutine, updateScheduleItem, updateScheduleStatus } from "./scheduleService";
 import { deleteVaultSecret, updateVaultMetadata } from "./vaultService";
 import { controlSmartHomeDevice } from "./jarvisService";
@@ -73,8 +72,6 @@ export async function executePendingAction(ownerKey: string, id: string, approve
     else if (action.toolName === "notes.create") result = await createNote(args as Parameters<typeof createNote>[0]);
     else if (action.toolName === "notes.update") { const { id: targetId, ...input } = args; result = await updateNote(String(targetId), input); }
     else if (action.toolName === "notes.delete") { await deleteNote(String(args.id)); result = { id: String(args.id), deleted: true }; }
-    else if (action.toolName === "media.updateLinks") { const { id: targetId, ...input } = args; result = await updateMediaAssetLinks(String(targetId), input); }
-    else if (action.toolName === "media.delete") { await deleteMediaAsset(String(args.id)); result = { id: String(args.id), deleted: true }; }
     else if (action.toolName === "vault.updateMetadata") { const { id: targetId, ...input } = args; result = await updateVaultMetadata(String(targetId), input); }
     else if (action.toolName === "vault.delete") { await deleteVaultSecret(String(args.id)); result = { id: String(args.id), deleted: true }; }
     else if (action.toolName === "coding.delegateTask") {

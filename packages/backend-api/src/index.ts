@@ -32,15 +32,6 @@ export {
 	updateNote,
 } from "./services/noteService";
 export {
-	createMediaAccessToken,
-	deleteMediaAsset,
-	listMediaAssets,
-	readMediaAsset,
-	registerMediaAsset,
-	updateMediaAssetLinks,
-	verifyMediaAccessToken,
-} from "./services/mediaService";
-export {
 	createVaultSecret,
 	deleteVaultSecret,
 	revealVaultSecret,
