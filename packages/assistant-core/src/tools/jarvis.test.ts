@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { controlSmartHomeDeviceInputSchema, delegateCodingTaskInputSchema } from "./jarvis";
+import { delegateCodingTaskInputSchema } from "./jarvis";
 
 describe("JARVIS tool contracts", () => {
   it("requires a branch before automatic push", () => {
@@ -20,11 +20,4 @@ describe("JARVIS tool contracts", () => {
     expect(delegateCodingTaskInputSchema.safeParse({ instruction: "Inspect repository", readOnly: true, branchName: "codex/inspect" }).success).toBe(false);
   });
 
-  it("accepts a climate temperature service", () => {
-    expect(controlSmartHomeDeviceInputSchema.safeParse({ domain: "climate", service: "set_temperature", entityId: "climate.living_room", payload: { temperature: 25 } }).success).toBe(true);
-  });
-
-  it("rejects incompatible domains and services", () => {
-    expect(controlSmartHomeDeviceInputSchema.safeParse({ domain: "light", service: "set_temperature", entityId: "light.desk" }).success).toBe(false);
-  });
 });

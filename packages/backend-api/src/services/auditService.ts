@@ -2,7 +2,6 @@ import { prisma } from "../db/client";
 import { createNote, deleteNote, updateNote } from "./noteService";
 import { createScheduleItem, deleteOrCancelRoutine, updateScheduleItem, updateScheduleStatus } from "./scheduleService";
 import { deleteVaultSecret, updateVaultMetadata } from "./vaultService";
-import { controlSmartHomeDevice } from "./jarvisService";
 import { enqueueCodingJob } from "./codingJobService";
 
 function safeMetadata(metadata: Record<string, unknown>): string {
@@ -80,7 +79,6 @@ export async function executePendingAction(ownerKey: string, id: string, approve
       if (!latestUser) throw new Error("Coding task is missing its user message");
       result = await enqueueCodingJob({ ownerKey, sessionId: action.sessionId, userMessageId: latestUser.messageId, task: args });
     }
-    else if (action.toolName === "homeAssistant.callService") result = await controlSmartHomeDevice(args);
     else throw new Error("Unsupported pending action");
     assertSuccessfulToolResult(result);
     await recordAudit({ actorId: ownerKey, action: action.toolName, targetId: id, status: "SUCCEEDED" });

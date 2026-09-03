@@ -14,8 +14,8 @@ describe("audit service", () => {
 
 describe("tool execution results", () => {
   it("does not report a failed worker result as successful", () => {
-    expect(() => assertSuccessfulToolResult({ ok: false, error: { code: "HA_NOT_CONFIGURED", message: "HA_URL and HA_TOKEN are required" } }))
-      .toThrow("HA_URL and HA_TOKEN are required");
+    expect(() => assertSuccessfulToolResult({ ok: false, error: { code: "WORKER_FAILED", message: "Worker operation failed" } }))
+      .toThrow("Worker operation failed");
   });
 
   it("accepts successful and non-discriminated service results", () => {

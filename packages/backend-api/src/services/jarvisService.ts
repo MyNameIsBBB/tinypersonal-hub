@@ -18,15 +18,6 @@ const delegateCodingTaskSchema = z.object({
   if (autoPush && !branchName) context.addIssue({ code: z.ZodIssueCode.custom, path: ["branchName"], message: "branchName is required when autoPush is enabled" });
   if (readOnly && (autoPush || branchName)) context.addIssue({ code: z.ZodIssueCode.custom, path: ["readOnly"], message: "readOnly tasks cannot create a branch or push" });
 });
-const controlSmartHomeDeviceSchema = z.object({
-  domain: z.enum(["climate", "switch", "light"]), service: z.enum(["turn_on", "turn_off", "set_temperature"]),
-  entityId: z.string().trim().regex(/^(climate|switch|light)\.[a-z0-9_]+$/),
-  payload: z.record(z.union([z.string(), z.number(), z.boolean(), z.null()])).optional(),
-}).strict().superRefine(({ domain, service, entityId }, context) => {
-  if (!entityId.startsWith(`${domain}.`)) context.addIssue({ code: z.ZodIssueCode.custom, path: ["entityId"], message: "entityId must belong to the selected domain" });
-  if (service === "set_temperature" && domain !== "climate") context.addIssue({ code: z.ZodIssueCode.custom, path: ["service"], message: "set_temperature is only valid for climate entities" });
-});
-
 export type ExecutionLog = { command: string; stdout: string; stderr: string; exitCode: number };
 export type CodingTaskResult =
   | { ok: true; data: { branch: string; logs: ExecutionLog[] } }
@@ -182,27 +173,5 @@ export async function delegateCodingTask(untrustedInput: unknown, onProgress?: P
     return { ok: true, data: { branch, logs } };
   } catch (error) {
     return { ok: false, error: { code: "CODING_TASK_FAILED", message: error instanceof Error ? error.message : "Coding task failed" }, data: { branch, logs } };
-  }
-}
-
-export async function controlSmartHomeDevice(untrustedInput: unknown) {
-  const parsed = controlSmartHomeDeviceSchema.safeParse(untrustedInput);
-  if (!parsed.success) return { ok: false as const, error: { code: "INVALID_INPUT", message: parsed.error.issues[0]?.message ?? "Invalid Home Assistant command" } };
-  const input = parsed.data;
-  const baseUrl = process.env.HA_URL?.replace(/\/$/, "");
-  const token = process.env.HA_TOKEN;
-  if (!baseUrl || !token) return { ok: false as const, error: { code: "HA_NOT_CONFIGURED", message: "HA_URL and HA_TOKEN are required" } };
-  try {
-    const response = await fetch(`${baseUrl}/api/services/${input.domain}/${input.service}`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ ...(input.payload ?? {}), entity_id: input.entityId }),
-      signal: AbortSignal.timeout(15_000),
-    });
-    const responseBody: unknown = await response.json().catch(() => null);
-    if (!response.ok) return { ok: false as const, error: { code: "HA_REQUEST_FAILED", message: `Home Assistant returned HTTP ${response.status}` }, data: responseBody };
-    return { ok: true as const, data: responseBody };
-  } catch (error) {
-    return { ok: false as const, error: { code: "HA_REQUEST_FAILED", message: error instanceof Error ? error.message : "Home Assistant request failed" } };
   }
 }

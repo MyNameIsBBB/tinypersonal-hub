@@ -11,28 +11,10 @@ export const delegateCodingTaskInputSchema = z.object({
   if (readOnly && (autoPush || branchName)) context.addIssue({ code: z.ZodIssueCode.custom, path: ["readOnly"], message: "readOnly tasks cannot create a branch or push" });
 });
 
-const servicePayloadSchema = z.record(z.union([z.string(), z.number(), z.boolean(), z.null()])).default({});
-export const controlSmartHomeDeviceInputSchema = z.object({
-  domain: z.enum(["climate", "switch", "light"]),
-  service: z.enum(["turn_on", "turn_off", "set_temperature"]),
-  entityId: z.string().trim().regex(/^(climate|switch|light)\.[a-z0-9_]+$/),
-  payload: servicePayloadSchema.optional(),
-}).strict().superRefine(({ domain, service, entityId }, context) => {
-  if (!entityId.startsWith(`${domain}.`)) context.addIssue({ code: z.ZodIssueCode.custom, path: ["entityId"], message: "entityId must belong to the selected domain" });
-  if (service === "set_temperature" && domain !== "climate") context.addIssue({ code: z.ZodIssueCode.custom, path: ["service"], message: "set_temperature is only valid for climate entities" });
-});
-
 export type DelegateCodingTaskInput = z.infer<typeof delegateCodingTaskInputSchema>;
-export type ControlSmartHomeDeviceInput = z.infer<typeof controlSmartHomeDeviceInputSchema>;
 
 export const delegateCodingTaskTool = tool({
   description: "Forward the user's current repository/code/build/test/Git/DevOps message directly to Codex. Copy the current user message verbatim into instruction; do not summarize or add instructions. Set readOnly=true only for inspection/status/summary tasks.",
   inputSchema: delegateCodingTaskInputSchema,
   execute: async (input) => ({ ok: true as const, command: "coding.delegate" as const, input }),
-});
-
-export const controlSmartHomeDeviceTool = tool({
-  description: "Control a Home Assistant climate, switch, or light entity. Use set_temperature only for a climate entity.",
-  inputSchema: controlSmartHomeDeviceInputSchema,
-  execute: async (input) => ({ ok: true as const, command: "homeAssistant.callService" as const, input }),
 });
