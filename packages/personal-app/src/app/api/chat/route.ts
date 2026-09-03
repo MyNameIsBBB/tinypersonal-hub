@@ -189,11 +189,12 @@ const webScrapeExecutionTool = tool({
   },
 });
 
-const delegateCodingExecutionTool = (ownerKey: string, sessionId: string) => tool({
-  description: "Prepare a durable B1-DevOps Codex task after B1 has decided the current request needs repository execution. Preserve the complete request and all constraints. Every mutating coding task requires explicit user confirmation before it is queued.",
+const delegateCodingExecutionTool = (ownerKey: string, sessionId: string, originalUserMessage: string) => tool({
+  description: "Send the current user message directly to Codex. Every mutating coding task requires explicit confirmation before it is queued.",
   inputSchema: delegateCodingTaskInputSchema,
   execute: async (input) => {
-    const action = await createPendingAction({ ownerKey, sessionId, toolName: "coding.delegateTask", summary: "ส่งงานให้ Codex: " + input.instruction.slice(0, 180), arguments: input });
+    const directInput = { ...input, instruction: originalUserMessage };
+    const action = await createPendingAction({ ownerKey, sessionId, toolName: "coding.delegateTask", summary: "ส่งงานให้ Codex: " + originalUserMessage.slice(0, 180), arguments: directInput });
     return { ok: true as const, confirmationRequired: true, confirmation: { id: action.id, summary: action.summary, expiresAt: action.expiresAt.toISOString() } };
   },
 });
@@ -561,7 +562,7 @@ export async function POST(request: Request) {
       ...(agent.selectedToolNames.includes("deleteRoutine") && { deleteRoutine: routineDeleteTool(ownerKey, session.id) }),
       ...(agent.selectedToolNames.includes("searchWeb") && { searchWeb: webSearchExecutionTool }),
       ...(agent.selectedToolNames.includes("fetchWebPage") && { fetchWebPage: webScrapeExecutionTool }),
-      ...(agent.selectedToolNames.includes("delegateCodingTask") && { delegateCodingTask: delegateCodingExecutionTool(ownerKey, session.id) }),
+      ...(agent.selectedToolNames.includes("delegateCodingTask") && { delegateCodingTask: delegateCodingExecutionTool(ownerKey, session.id, userText) }),
       ...(agent.selectedToolNames.includes("controlSmartHomeDevice") && { controlSmartHomeDevice: smartHomeExecutionTool(ownerKey, session.id) }),
       ...(agent.selectedToolNames.includes("searchNotes") && { searchNotes: noteSearchExecutionTool }),
       ...(agent.selectedToolNames.includes("createNote") && { createNote: noteMutationTool(ownerKey, session.id, "create") }),

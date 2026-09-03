@@ -125,23 +125,9 @@ async function executeTask(input, emit = () => {}) {
       await execute("git", ["switch", "-c", requestedBranch]);
       branch = requestedBranch;
     }
-    const workflow = input.readOnly
-      ? `Inspect the current workspace exactly as it is. Do not pull, switch or create branches, edit files, commit, or push. Run only read-only commands and summarize the evidence you observe.`
-      : `The worker has already pulled and switched to branch ${requestedBranch}; do not create, switch, commit, or push Git branches. Implement the requested change, run relevant tests/builds, and leave changes in the working tree for worker verification.`;
-    const instruction = `Own this coding task end-to-end inside the current repository.
-
-User task:
-${input.instruction}
-
-Required workflow:
-1. Read AGENTS.md and inspect repository status. Preserve unrelated changes and never use destructive Git commands.
-2. ${workflow}
-3. Summarize the observed result clearly.
-
-Stay within this repository. Never expose secrets or modify unrelated files.`;
     emit({ kind: "status", message: "เริ่ม Codex CLI และตรวจสอบ repository" });
     lifecycle("codex.started", { mode: input.readOnly ? "read-only" : "workspace-write", branch });
-    const codexLog = await runCodex(["--dangerously-bypass-approvals-and-sandbox", "--cd", projectRoot, "exec", "--json", instruction], emit);
+    const codexLog = await runCodex(["--dangerously-bypass-approvals-and-sandbox", "--cd", projectRoot, "exec", "--json", input.instruction], emit);
     logs.push(codexLog);
     if (!codexLog.finalMessage) throw new Error("Codex exited without a final agent message");
     branch = (await execute("git", ["branch", "--show-current"])).stdout.trim() || "HEAD";

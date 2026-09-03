@@ -163,25 +163,11 @@ export async function delegateCodingTask(untrustedInput: unknown, onProgress?: P
       await execute("git", ["switch", "-c", requestedBranch!]);
       branch = requestedBranch;
     }
-    const workflow = input.readOnly
-      ? "Inspect the current workspace exactly as it is. Do not pull, switch or create branches, edit files, commit, or push. Run only read-only commands and summarize the evidence you observe."
-      : `The worker has already pulled and switched to branch ${requestedBranch}; do not create, switch, commit, or push Git branches. Implement the requested change, run relevant tests/builds, and leave changes in the working tree for worker verification.`;
-    const agentInstruction = `Own this coding task end-to-end inside the current repository.
-
-User task:
-${input.instruction}
-
-Required workflow:
-1. Read AGENTS.md and inspect the repository status. Preserve unrelated changes and never use destructive Git commands.
-2. ${workflow}
-3. Finish with a concise evidence-based summary.
-
-Stay within this repository. Never expose secrets or modify unrelated files.`;
     const codexExecutable = process.platform === "win32" ? "codex.cmd" : "codex";
     const codexLog = await execute(codexExecutable, [
       "--dangerously-bypass-approvals-and-sandbox",
       "--cd", projectRoot,
-      "exec", "--json", agentInstruction,
+      "exec", "--json", input.instruction,
     ]);
     if (!finalCodexAgentMessage(codexLog.stdout)) throw new Error("Codex exited without a final agent message");
     branch = (await execute("git", ["branch", "--show-current"])).stdout.trim() || "HEAD";
