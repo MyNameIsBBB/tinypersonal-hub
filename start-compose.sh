@@ -16,7 +16,8 @@ cd "$SCRIPT_DIR"
 
 docker network inspect tinypersonal-network >/dev/null 2>&1 || docker network create tinypersonal-network >/dev/null
 
-for container_name in tinypersonal-hub tinypersonal-searxng; do
+# Include the legacy MinIO container so deployments of this release remove it.
+for container_name in tinypersonal-hub minio tinypersonal-searxng; do
   if docker container inspect "$container_name" >/dev/null 2>&1; then
     docker rm --force "$container_name" >/dev/null
   fi

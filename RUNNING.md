@@ -239,7 +239,7 @@ Tailscale Funnel จะเผยแพร่แอปออกสู่อิน
 
 ## 3.1 รันด้วย Docker Compose (แนะนำ)
 
-คำสั่งเดียวสำหรับ TinyPersonal + MinIO + bucket initialization:
+คำสั่งเดียวสำหรับ TinyPersonal และบริการประกอบ:
 
 ```bash
 ./start-compose.sh
