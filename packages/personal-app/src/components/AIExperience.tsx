@@ -275,23 +275,11 @@ export function AIExperience({ mode = "chat" }: { mode?: "chat" | "os" }) {
 
   useEffect(() => { messagesRef.current = messages; }, [messages]);
 
-  async function handleConfirmAction(actionId: string, approved: boolean) {
+  async function handleConfirmAction(_actionId: string, approved: boolean) {
     if (status === "submitted" || status === "streaming") return;
-    try {
-      const response = await fetch(`/api/confirm/${encodeURIComponent(actionId)}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ approved }),
-      });
-      const data = await response.json().catch(() => ({})) as { ok?: boolean; error?: string };
-      if (!response.ok) {
-        setPersistenceError(data.error ?? "ยืนยันรายการไม่สำเร็จ");
-        return;
-      }
-      void send(approved ? "ยืนยัน" : "ยกเลิก");
-    } catch {
-      setPersistenceError("เกิดข้อผิดพลาดในการส่งคำสั่งยืนยัน");
-    }
+    // Route button confirmations through the same chat path as typed confirmations.
+    // The server resolves every pending action from the current proposal as one batch.
+    void send(approved ? "ยืนยัน" : "ยกเลิก");
   }
 
   async function send(text: string, fromVoice = false) {
