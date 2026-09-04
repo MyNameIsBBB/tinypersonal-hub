@@ -525,7 +525,7 @@ export async function POST(request: Request) {
       deleteVaultSecret: deleteVaultMutationTool(ownerKey, session.id),
     },
     // Allow follow-up model steps after tool output so responses do not stop at finishReason=tool-calls.
-    stopWhen: isStepCount(5),
+    stopWhen: isStepCount(3),
   });
 
   const onPersistenceEnd = async ({ messages }: { messages: UIMessage[] }) => {
