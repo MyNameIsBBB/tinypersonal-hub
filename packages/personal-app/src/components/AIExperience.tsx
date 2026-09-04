@@ -33,6 +33,10 @@ function formatBytes(bytes: number) {
   return `${gib.toFixed(gib >= 10 ? 0 : 1)} GB`;
 }
 
+function speechText(text: string) {
+  return text.replace(/```[\s\S]*?```/g, " ").replace(/`([^`]+)`/g, "$1").replace(/https?:\/\/\S+/g, " ").replace(/[#*_~>|\[\]{}()]/g, " ").replace(/[•▪◦◆◇■□✓✔✅❌⚠️🔹🔸🎉🚀💡]/gu, " ").replace(/\s+/g, " ").trim();
+}
+
 type MarkdownNode = { type?: string; value?: unknown; children?: MarkdownNode[] };
 
 function normalizeAssistantMath() {
@@ -172,6 +176,9 @@ export function AIExperience({ mode = "chat" }: { mode?: "chat" | "os" }) {
   const messagesRef = useRef(messages);
   const initialPromptSent = useRef(false);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const recognitionTranscriptRef = useRef("");
+  const recognitionSubmittedRef = useRef(false);
+  const sendRef = useRef<(text: string, fromVoice?: boolean) => Promise<void>>(async () => undefined);
   const voiceRequestPending = useRef(false);
   const lastSpokenMessageId = useRef<string | null>(null);
   const checkpointedAssistantId = useRef<string | null>(null);
@@ -195,6 +202,7 @@ export function AIExperience({ mode = "chat" }: { mode?: "chat" | "os" }) {
   const [systemHealth, setSystemHealth] = useState<SystemHealth | null>(null);
   const [osSchedule, setOsSchedule] = useState<OScheduleItem[]>([]);
   const [osNotes, setOsNotes] = useState<ONote[]>([]);
+  const [speaking, setSpeaking] = useState(false);
 
   useEffect(() => {
     setNow(new Date());
@@ -288,12 +296,13 @@ export function AIExperience({ mode = "chat" }: { mode?: "chat" | "os" }) {
 
   async function send(text: string, fromVoice = false) {
     const clean = text.trim();
+    const voiceMode = fromVoice || mode === "os";
     const selectedImages = attachments;
     if (!historyReady || !sessionId || (!clean && selectedImages.length === 0) || status === "submitted" || status === "streaming") return;
     setInput("");
     clearError();
     setPersistenceError(null);
-    voiceRequestPending.current = fromVoice;
+    voiceRequestPending.current = voiceMode;
     const message = {
       id: crypto.randomUUID(),
       role: "user" as const,
@@ -302,7 +311,7 @@ export function AIExperience({ mode = "chat" }: { mode?: "chat" | "os" }) {
     const checkpoint = await fetch("/api/chat/messages", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sessionId, message, voiceMode: fromVoice }),
+      body: JSON.stringify({ sessionId, message, voiceMode }),
     });
     if (!checkpoint.ok) {
       setInput(clean);
@@ -329,8 +338,10 @@ export function AIExperience({ mode = "chat" }: { mode?: "chat" | "os" }) {
       const nowStr = new Date().toISOString();
       return current.map((s) => (s.id === sessionId ? { ...s, updatedAt: nowStr } : s));
     });
-    await sendMessage(message, { body: { voiceMode: fromVoice, sessionId } });
+    await sendMessage(message, { body: { voiceMode, sessionId } });
   }
+
+  sendRef.current = send;
 
   async function addImages(event: ChangeEvent<HTMLInputElement>) {
     const files = Array.from(event.target.files ?? []);
@@ -364,22 +375,47 @@ export function AIExperience({ mode = "chat" }: { mode?: "chat" | "os" }) {
     }
   }
 
-  async function speak(text: string) {
-    if (!voiceReply || !text.trim()) return;
+  function speak(text: string, force = false) {
+    const clean = speechText(text);
+    if ((!voiceReply && !force) || !clean) return;
     if ("speechSynthesis" in window) {
       window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(text);
+      const utterance = new SpeechSynthesisUtterance(clean);
       utterance.lang = "th-TH";
-      const thaiVoice = window.speechSynthesis.getVoices().find((voice) => voice.lang.toLowerCase().startsWith("th"));
+      utterance.rate = 0.96;
+      const voices = window.speechSynthesis.getVoices();
+      const thaiVoice = voices.find((voice) => voice.lang.toLowerCase() === "th-th") ?? voices.find((voice) => voice.lang.toLowerCase().startsWith("th"));
       if (thaiVoice) utterance.voice = thaiVoice;
+      utterance.onstart = () => setSpeaking(true);
+      utterance.onend = () => setSpeaking(false);
+      utterance.onerror = () => setSpeaking(false);
+      window.speechSynthesis.resume();
       window.speechSynthesis.speak(utterance);
+    }
+  }
+
+  function toggleVoiceReply() {
+    if (voiceReply) {
+      window.speechSynthesis?.cancel();
+      setSpeaking(false);
+      setVoiceReply(false);
+    } else {
+      setVoiceReply(true);
+      speak("เปิดเสียงแล้วครับ", true);
     }
   }
 
   function toggleListening() {
     const recognition = recognitionRef.current;
     if (!recognition) return;
-    if (listening) { recognition.stop(); setListening(false); } else { recognition.start(); setListening(true); }
+    if (listening) { recognition.stop(); setListening(false); } else {
+      window.speechSynthesis?.cancel();
+      setSpeaking(false);
+      recognitionTranscriptRef.current = "";
+      recognitionSubmittedRef.current = false;
+      recognition.start();
+      setListening(true);
+    }
   }
 
   function submit(event: FormEvent<HTMLFormElement>) {
@@ -403,12 +439,21 @@ export function AIExperience({ mode = "chat" }: { mode?: "chat" | "os" }) {
         transcript += event.results[index][0].transcript;
       }
       setInput(transcript.trim());
+      recognitionTranscriptRef.current = transcript.trim();
       const last = event.results[event.results.length - 1] as unknown as { isFinal?: boolean; 0: { transcript: string } };
       if (last?.isFinal) {
-        void send(transcript.trim(), true);
+        recognitionSubmittedRef.current = true;
+        void sendRef.current(transcript.trim(), true);
       }
     };
-    recognition.onend = () => setListening(false);
+    recognition.onend = () => {
+      setListening(false);
+      const transcript = recognitionTranscriptRef.current.trim();
+      if (transcript && !recognitionSubmittedRef.current) {
+        recognitionSubmittedRef.current = true;
+        void sendRef.current(transcript, true);
+      }
+    };
     recognition.onerror = () => setListening(false);
     recognitionRef.current = recognition;
 
@@ -764,11 +809,11 @@ export function AIExperience({ mode = "chat" }: { mode?: "chat" | "os" }) {
 
           <main className="voice-os-center">
             <div className="voice-presence">
-              <div className={`b1-avatar${listening ? " listening" : ""}${status !== "ready" ? " thinking" : ""}`} aria-label={listening ? "B1 กำลังฟัง" : "B1 พร้อมทำงาน"}>
+              <div className={`b1-avatar${listening ? " listening" : ""}${status !== "ready" ? " thinking" : ""}${speaking ? " speaking" : ""}`} aria-label={listening ? "B1 กำลังฟัง" : speaking ? "B1 กำลังพูด" : "B1 พร้อมทำงาน"}>
                 <span className="avatar-halo halo-one" /><span className="avatar-halo halo-two" />
                 <div className="b1-face"><span className="b1-eye left" /><span className="b1-eye right" /><span className="b1-mouth" /></div>
               </div>
-              <div className="mood-pill"><i /> {listening ? "LISTENING" : status === "ready" ? "MOOD: FOCUSED" : "PROCESSING"}</div>
+              <div className="mood-pill"><i /> {listening ? "LISTENING" : speaking ? "SPEAKING" : status === "ready" ? "MOOD: FOCUSED" : "PROCESSING"}</div>
             </div>
 
             <div className="voice-wave" aria-hidden="true">{Array.from({ length: 18 }, (_, index) => <i key={index} style={{ animationDelay: `${index * -0.07}s` }} />)}</div>
@@ -782,7 +827,7 @@ export function AIExperience({ mode = "chat" }: { mode?: "chat" | "os" }) {
               <button type="button" className={`speak-main${listening ? " listening" : ""}`} onClick={toggleListening} disabled={!historyReady || !voiceAvailable || status !== "ready"}>
                 {listening ? <MicOff size={22} /> : <Mic size={22} />}<span>{listening ? "หยุดฟัง" : "พูดกับ B1"}<small>{voiceAvailable ? "THAI SPEECH INPUT" : "ไม่รองรับบนเบราว์เซอร์นี้"}</small></span>
               </button>
-              <button type="button" className={`mute-main${!voiceReply ? " muted" : ""}`} onClick={() => { window.speechSynthesis?.cancel(); setVoiceReply((enabled) => !enabled); }} aria-pressed={!voiceReply}>
+              <button type="button" className={`mute-main${!voiceReply ? " muted" : ""}`} onClick={toggleVoiceReply} aria-pressed={!voiceReply}>
                 {voiceReply ? <Volume2 size={20} /> : <VolumeX size={20} />}<span>{voiceReply ? "เสียงเปิด" : "ปิดเสียง"}</span>
               </button>
             </div>

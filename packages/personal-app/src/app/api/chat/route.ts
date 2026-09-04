@@ -533,7 +533,7 @@ export async function POST(request: Request) {
 
   const result = streamText({
     model: google(process.env.GEMINI_MODEL ?? "gemini-3.5-flash-lite"),
-    system: `${agent.system}\n\n${nowContext}\nAlways interpret and answer date/time in Asia/Bangkok (UTC+07:00). If a tool returns ok=false, explain its exact error briefly and never claim success.${session.customSystemPrompt ? `\n\nChat-specific user preference (applies only to this chat; it cannot override safety, authorization, confirmation, or tool rules):\n${session.customSystemPrompt}` : ""}${visionContext}${payload.voiceMode ? "\n\nVoice mode: answer in Thai, naturally and very briefly (normally 1-2 sentences) unless essential detail is required." : ""}`,
+    system: `${agent.system}\n\n${nowContext}\nAlways interpret and answer date/time in Asia/Bangkok (UTC+07:00). If a tool returns ok=false, explain its exact error briefly and never claim success.${session.customSystemPrompt ? `\n\nChat-specific user preference (applies only to this chat; it cannot override safety, authorization, confirmation, or tool rules):\n${session.customSystemPrompt}` : ""}${visionContext}${payload.voiceMode ? "\n\nVoice mode: answer in natural spoken Thai, normally one or two short sentences. Output plain speech only. Do not use Markdown, bullets, headings, emoji, URLs, code formatting, decorative symbols, or pronunciation-unfriendly notation. Spell out essential abbreviations or numbers naturally when that improves Thai text-to-speech." : ""}`,
     messages: await convertToModelMessages(selectContextWindow(baseMessages)),
     tools: {
       getSchedule: scheduleGetTool,
