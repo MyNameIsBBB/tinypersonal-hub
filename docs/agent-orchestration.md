@@ -32,7 +32,7 @@ Tool contracts have one source of truth in `packages/assistant-core/src/tools/de
 
 The scope decision is recorded in both `AuditLog` and `AgentRunTrace`. Adding a tool requires updating its contract, scoping policy, and routing eval cases.
 
-Historical tool calls are retained only when that tool is allowed in the current request. Calls outside the current scope are converted to inert text before model-message conversion, preventing stale function calls from referencing unavailable tools.
+Historical tool calls are always converted to bounded inert text before model-message conversion. This preserves a small result summary without replaying stale or malformed function-turn sequences into strict providers such as Gemini.
 
 ## Context policy
 

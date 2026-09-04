@@ -43,7 +43,7 @@ describe("chat context window", () => {
     expect(JSON.stringify(context)).toContain("raw historical payload omitted");
   });
 
-  it("converts windowed messages with tool outputs to model messages", async () => {
+  it("converts historical tool outputs to inert model context", async () => {
     const { convertToModelMessages } = await import("ai");
     const testMessages = [
       { id: "1", role: "user", parts: [{ type: "text", text: "ค้นหาโน้ต test" }] },
@@ -54,9 +54,11 @@ describe("chat context window", () => {
     const converted = await convertToModelMessages(windowed);
     expect(converted).toBeDefined();
     expect(converted.length).toBeGreaterThan(0);
+    expect(JSON.stringify(converted)).not.toContain("tool-call");
+    expect(JSON.stringify(converted)).toContain("Historical tool searchNotes");
   });
 
-  it("removes historical function calls that are unavailable in the current scope", async () => {
+  it("removes malformed historical function calls even when the same tool may be used again", async () => {
     const { convertToModelMessages } = await import("ai");
     const testMessages = [
       { id: "1", role: "user", parts: [{ type: "text", text: "พรุ่งนี้มีอะไร" }] },
@@ -64,9 +66,9 @@ describe("chat context window", () => {
       { id: "3", role: "user", parts: [{ type: "text", text: "ขอบคุณ" }] },
     ] as UIMessage[];
 
-    const converted = await convertToModelMessages(selectContextWindow(testMessages, []));
+    const converted = await convertToModelMessages(selectContextWindow(testMessages));
     expect(JSON.stringify(converted)).not.toContain("tool-call");
-    expect(JSON.stringify(converted)).toContain("Historical tool result omitted");
+    expect(JSON.stringify(converted)).toContain("Historical tool getSchedule");
   });
 });
 

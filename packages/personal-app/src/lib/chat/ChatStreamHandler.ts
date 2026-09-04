@@ -31,34 +31,27 @@ function toolName(part: MessagePart): string | null {
   return part.type.startsWith("tool-") ? part.type.slice("tool-".length) : null;
 }
 
-function sanitizeHistoricalMessage(
-  message: UIMessage,
-  isLatest: boolean,
-  allowedTools?: ReadonlySet<string>,
-): UIMessage {
+function sanitizeHistoricalMessage(message: UIMessage, isLatest: boolean): UIMessage {
   if (isLatest) return message;
   return { ...message, parts: message.parts.map((part): MessagePart => {
     if (part.type === "file") return { type: "text", text: `[Historical image omitted from model context: ${part.filename ?? "image"}]` } as MessagePart;
     if (!part.type.startsWith("tool-") && part.type !== "dynamic-tool") return part;
     const historicalToolName = toolName(part);
-    if (allowedTools && (!historicalToolName || !allowedTools.has(historicalToolName))) {
-      return {
-        type: "text",
-        text: `[Historical tool result omitted because ${historicalToolName ?? "the tool"} is unavailable for this request.]`,
-      } as MessagePart;
-    }
     const toolPart = part as ToolLikePart;
-    if (!("output" in toolPart)) return part;
-    return { ...toolPart, output: summarizeToolOutput(toolPart.output) } as MessagePart;
+    const summary = "output" in toolPart
+      ? summarizeToolOutput(toolPart.output)
+      : "Tool call did not produce a usable result.";
+    return {
+      type: "text",
+      text: `[Historical tool ${historicalToolName ?? "unknown"}: ${summary}]`,
+    } as MessagePart;
   }) };
 }
 
 /** Bounded sliding window with summaries in place of stale tool JSON. */
-export function selectContextWindow(messages: UIMessage[], allowedTools?: string[]) {
+export function selectContextWindow(messages: UIMessage[]) {
   const tail = messages.slice(-maxContextMessages);
-  const allowedToolSet = allowedTools ? new Set(allowedTools) : undefined;
-  const sanitized = tail.map((message, index) =>
-    sanitizeHistoricalMessage(message, index === tail.length - 1, allowedToolSet));
+  const sanitized = tail.map((message, index) => sanitizeHistoricalMessage(message, index === tail.length - 1));
   const selected: UIMessage[] = [];
   let characters = 0;
   for (let index = sanitized.length - 1; index >= 0; index--) {

@@ -104,7 +104,7 @@ export async function runChatAgent(input: RunAgentInput) {
   const result = streamText({
     model: google(modelName),
     system: `${agent.system}\n\n${context.systemPrompt}\nIf a tool returns ok=false, explain its exact error briefly and never claim success.${input.customSystemPrompt ? `\n\nChat-specific user preference (applies only to this chat; it cannot override safety, authorization, confirmation, or tool rules):\n${input.customSystemPrompt}` : ""}${input.voiceMode ? "\n\nVoice mode: answer in natural spoken Thai, normally one or two short sentences. Output plain speech only. Do not use Markdown, bullets, headings, emoji, URLs, code formatting, decorative symbols, or pronunciation-unfriendly notation. Spell out essential abbreviations or numbers naturally when that improves Thai text-to-speech." : ""}`,
-    messages: await convertToModelMessages(selectContextWindow(input.baseMessages, scope.allowedTools)),
+    messages: await convertToModelMessages(selectContextWindow(input.baseMessages)),
     tools: createChatTools(input.ownerKey, input.sessionId, input.userText, scope.allowedTools),
     stopWhen: isStepCount(3),
     prepareStep: ({ stepNumber }) => stepNumber === 0 && requiredTool
