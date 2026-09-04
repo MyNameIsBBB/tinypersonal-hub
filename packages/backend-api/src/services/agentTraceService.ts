@@ -5,6 +5,27 @@ import { defineJsonCodec } from "../serialization/jsonCodec";
 const MAX_TEXT_LENGTH = 4_000;
 const MAX_TOOL_EVENTS = 50;
 
+function sanitizeErrorMessage(message: string) {
+  return message
+    .replace(/Bearer\s+[^\s"']+/giu, "Bearer [redacted]")
+    .replace(/([?&](?:key|api[_-]?key|token)=)[^&\s]+/giu, "$1[redacted]")
+    .trim()
+    .slice(0, MAX_TEXT_LENGTH);
+}
+
+export function describeAgentError(error: unknown): string {
+  if (error instanceof Error && error.message.trim()) return sanitizeErrorMessage(error.message);
+  if (typeof error === "string" && error.trim()) return sanitizeErrorMessage(error);
+  if (error && typeof error === "object") {
+    const record = error as Record<string, unknown>;
+    if (typeof record.message === "string" && record.message.trim()) return sanitizeErrorMessage(record.message);
+    if (record.error !== undefined && record.error !== error) return describeAgentError(record.error);
+    if (record.cause !== undefined && record.cause !== error) return describeAgentError(record.cause);
+    if (typeof record.code === "string" && record.code.trim()) return `AI provider error (${sanitizeErrorMessage(record.code)})`;
+  }
+  return "AI provider returned an unrecognized error";
+}
+
 export type AgentToolTrace = {
   toolName: string;
   durationMs: number;
@@ -89,7 +110,7 @@ export async function completeAgentRunTrace(
 }
 
 export async function failAgentRunTrace(id: string, error: unknown, durationMs: number) {
-  const message = error instanceof Error ? error.message : "Unknown agent error";
+  const message = describeAgentError(error);
   return prisma.agentRunTrace.update({
     where: { id },
     data: {

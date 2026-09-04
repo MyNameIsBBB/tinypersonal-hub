@@ -2,6 +2,7 @@ import { google } from "@ai-sdk/google";
 import {
   appendAgentToolTraces,
   createAgentRunTrace,
+  describeAgentError,
   failAgentRunTrace,
   recordAudit,
 } from "@tinypersonal/backend-api";
@@ -92,6 +93,11 @@ export async function runChatAgent(input: RunAgentInput) {
     messages: await convertToModelMessages(selectContextWindow(input.baseMessages)),
     tools: createChatTools(input.ownerKey, input.sessionId, input.userText, scope.allowedTools),
     stopWhen: isStepCount(3),
+    onError: async ({ error }) => {
+      traceFailed = true;
+      await failAgentRunTrace(trace.id, error, Date.now() - startedAt);
+      console.error("Agent stream failed", describeAgentError(error));
+    },
     onToolExecutionEnd: async ({ toolCall, toolExecutionMs, toolOutput }) => {
       const isError = toolOutput.type === "tool-error";
       await appendAgentToolTraces(trace.id, [{
@@ -108,11 +114,7 @@ export async function runChatAgent(input: RunAgentInput) {
     originalMessages: input.baseMessages,
     generateMessageId: () => input.responseMessageId,
     onError: (error) => {
-      traceFailed = true;
-      void failAgentRunTrace(trace.id, error, Date.now() - startedAt);
-      return error instanceof Error
-        ? `AI execution failed: ${error.message}`
-        : "AI execution failed unexpectedly";
+      return `AI execution failed: ${describeAgentError(error)}`;
     },
     onEnd: createPersistenceEndHandler({
       ownerKey: input.ownerKey,

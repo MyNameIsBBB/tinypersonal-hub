@@ -51,6 +51,8 @@ Each Gemini run creates an `AgentRunTrace` containing:
 
 Raw tool arguments, tool output payloads, prompts, passwords, tokens, Vault data, and private display values must not be stored in traces. Traces are exposed through owner-scoped `GET /api/chat/traces` and the authenticated Agent Trace UI at `/traces`.
 
+Provider stream errors are captured at the `streamText` boundary before conversion to UI chunks. Nested SDK error events are unwrapped into a bounded, credential-redacted message so a timeout, rate limit, or transport failure does not degrade into an unhelpful generic trace error.
+
 ## Evaluation
 
 The routing suite contains 50 Thai/English prompts and reports intent plus exact tool-selection accuracy. A separate eight-case capability suite records expected tool arguments, confirmation behavior, and execution outcomes. Arguments are validated against the central Zod tool contracts and compared with the expected semantic fields; confirmation defaults to each contract's mutation policy. Live/model runners can provide the same observation shape without changing the scoring framework.

@@ -12,7 +12,7 @@
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "vitest run",
     "test:integration": "vitest run packages/personal-app/src/app/api/api.integration.test.ts",
-    "test:eval": "vitest run packages/assistant-core/src/evals",
+    "test:eval": "vitest run packages/assistant-core/src/evals/routingEval.test.ts packages/assistant-core/src/evals/capabilityEval.test.ts",
     "db:generate": "npm run db:generate --workspace=@tinypersonal/backend-api",
     "db:migrate": "npm run db:migrate --workspace=@tinypersonal/backend-api",
     "db:deploy": "npm run db:deploy --workspace=@tinypersonal/backend-api",
