@@ -28,6 +28,7 @@ Tool contracts have one source of truth in `packages/assistant-core/src/tools/de
 - Explicit multi-domain requests receive the union of those scoped tools.
 - Coding requests receive only Codex delegation; coding status remains a controller fast path.
 - Short explicit retry/follow-up messages may inherit the most recent recognized domain; unrelated general replies do not inherit tools.
+- Read intents for schedules, notes, Vault metadata, and web data force their scoped read tool in the first model step. Later steps return to automatic selection so the model can summarize the fresh result.
 
 The scope decision is recorded in both `AuditLog` and `AgentRunTrace`. Adding a tool requires updating its contract, scoping policy, and routing eval cases.
 

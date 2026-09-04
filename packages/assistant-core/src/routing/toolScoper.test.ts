@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { scopeToolsForConversation, scopeToolsForMessage } from "./toolScoper";
+import { requiredFirstTool, scopeToolsForConversation, scopeToolsForMessage } from "./toolScoper";
 
 describe("scopeToolsForMessage", () => {
   it.each([
@@ -41,5 +41,11 @@ describe("scopeToolsForMessage", () => {
       "เอ่า หาย",
     ])).toMatchObject({ primaryIntent: "schedule.query", allowedTools: ["getSchedule"], confidence: 0.8 });
     expect(scopeToolsForConversation(["พรุ่งนี้มีอะไร", "ขอบคุณครับ"]).primaryIntent).toBe("general.response");
+  });
+
+  it("requires fresh data for read intents but not general responses", () => {
+    expect(requiredFirstTool(scopeToolsForMessage("สรุป ตอนนี้เราต้องส่งผ้าวันไหนบ้าง"))).toBe("getSchedule");
+    expect(requiredFirstTool(scopeToolsForMessage("หาโน้ต TinyPersonal"))).toBe("searchNotes");
+    expect(requiredFirstTool(scopeToolsForMessage("สวัสดี"))).toBeNull();
   });
 });

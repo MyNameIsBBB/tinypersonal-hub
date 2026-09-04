@@ -6,7 +6,7 @@ import {
   failAgentRunTrace,
   recordAudit,
 } from "@tinypersonal/backend-api";
-import { createAgentConfig, scopeToolsForConversation } from "@tinypersonal/assistant-core";
+import { createAgentConfig, requiredFirstTool, scopeToolsForConversation } from "@tinypersonal/assistant-core";
 import {
   convertToModelMessages,
   createUIMessageStreamResponse,
@@ -48,6 +48,8 @@ export async function runChatAgent(input: RunAgentInput) {
       .join(" ")
       .trim());
   const scope = scopeToolsForConversation(userTurns);
+  const requiredTool = requiredFirstTool(scope);
+  let executedToolCount = 0;
   const agent = createAgentConfig(
     { locale: "th-TH", timezone: "Asia/Bangkok" },
     scope.allowedTools,
@@ -105,11 +107,15 @@ export async function runChatAgent(input: RunAgentInput) {
     messages: await convertToModelMessages(selectContextWindow(input.baseMessages, scope.allowedTools)),
     tools: createChatTools(input.ownerKey, input.sessionId, input.userText, scope.allowedTools),
     stopWhen: isStepCount(3),
+    prepareStep: ({ stepNumber }) => stepNumber === 0 && requiredTool
+      ? { toolChoice: { type: "tool", toolName: requiredTool } }
+      : { toolChoice: "auto" },
     onError: async ({ error }) => {
       await failTraceOnce(error);
       console.error("Agent stream failed", describeAgentError(error));
     },
     onToolExecutionEnd: async ({ toolCall, toolExecutionMs, toolOutput }) => {
+      executedToolCount += 1;
       const outputRecord = toolOutput.type === "tool-result"
         && toolOutput.output
         && typeof toolOutput.output === "object"
@@ -133,6 +139,13 @@ export async function runChatAgent(input: RunAgentInput) {
     },
   });
 
+  const persistOnEnd = createPersistenceEndHandler({
+    ownerKey: input.ownerKey,
+    sessionId: input.sessionId,
+    triggeringUserMessageId: input.triggeringUserMessageId,
+    trace: { id: trace.id, startedAt },
+    shouldCompleteTrace: () => !traceFailed,
+  });
   const completedStream = result.toUIMessageStream<UIMessage>({
     originalMessages: input.baseMessages,
     generateMessageId: () => input.responseMessageId,
@@ -140,13 +153,12 @@ export async function runChatAgent(input: RunAgentInput) {
       void failTraceOnce(error);
       return `AI execution failed: ${describeAgentError(error)}`;
     },
-    onEnd: createPersistenceEndHandler({
-      ownerKey: input.ownerKey,
-      sessionId: input.sessionId,
-      triggeringUserMessageId: input.triggeringUserMessageId,
-      trace: { id: trace.id, startedAt },
-      shouldCompleteTrace: () => !traceFailed,
-    }),
+    onEnd: async (event) => {
+      if (requiredTool && executedToolCount === 0) {
+        await failTraceOnce(new Error(`Required tool ${requiredTool} was not executed`));
+      }
+      await persistOnEnd(event);
+    },
   });
   const [clientStream, persistenceStream] = completedStream.tee();
   const persistenceTask = consumePersistenceStream(persistenceStream);

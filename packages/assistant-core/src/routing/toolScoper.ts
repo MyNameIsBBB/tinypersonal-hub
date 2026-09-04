@@ -125,3 +125,14 @@ export function scopeToolsForConversation(userMessages: string[]): ToolScope {
   }
   return direct;
 }
+
+/** Read intents require fresh backend data before the model may answer. */
+export function requiredFirstTool(scope: ToolScope): ToolName | null {
+  if (scope.primaryIntent === "schedule.query") return "getSchedule";
+  if (scope.primaryIntent === "notes.query") return "searchNotes";
+  if (scope.primaryIntent === "vault.query") return "searchVaultMetadata";
+  if (scope.primaryIntent === "web.query") {
+    return scope.allowedTools.includes("fetchWebPage") ? "fetchWebPage" : "searchWeb";
+  }
+  return null;
+}

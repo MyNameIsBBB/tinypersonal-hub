@@ -5,7 +5,7 @@ export type { ToolContract, ToolName } from "./tools/definitions";
 export * from "./contracts";
 export { delegateCodingTaskInputSchema } from "./tools/definitions";
 export type { DelegateCodingTaskInput } from "./tools/definitions";
-export { scopeToolsForConversation, scopeToolsForMessage } from "./routing/toolScoper";
+export { requiredFirstTool, scopeToolsForConversation, scopeToolsForMessage } from "./routing/toolScoper";
 export type { AgentIntent, ToolScope } from "./routing/toolScoper";
 export { evaluateAgentCases } from "./evals/framework";
 export type { AgentEvalCase, AgentEvalMetrics, AgentEvalObservation, AgentExpectedToolCall, AgentObservedToolCall } from "./evals/framework";
