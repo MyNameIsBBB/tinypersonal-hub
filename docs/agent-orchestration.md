@@ -27,8 +27,11 @@ Tool contracts have one source of truth in `packages/assistant-core/src/tools/de
 - Mutation tools are added only when create/update/delete language is present.
 - Explicit multi-domain requests receive the union of those scoped tools.
 - Coding requests receive only Codex delegation; coding status remains a controller fast path.
+- Short explicit retry/follow-up messages may inherit the most recent recognized domain; unrelated general replies do not inherit tools.
 
 The scope decision is recorded in both `AuditLog` and `AgentRunTrace`. Adding a tool requires updating its contract, scoping policy, and routing eval cases.
+
+Historical tool calls are retained only when that tool is allowed in the current request. Calls outside the current scope are converted to inert text before model-message conversion, preventing stale function calls from referencing unavailable tools.
 
 ## Context policy
 

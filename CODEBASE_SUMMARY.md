@@ -200,7 +200,7 @@ npm run briefing:run
 
 ผลตรวจ ณ วันที่จัดทำเอกสาร:
 
-- `npm test` ผ่านทั้งหมด: 16 test files, 66 tests
+- `npm test` ผ่านทั้งหมด: 16 test files, 70 tests
 - `npm run typecheck` ผ่านครบทั้ง 3 workspaces หลัง regenerate Next route types
 
 ## ข้อสังเกตทางสถาปัตยกรรม

@@ -22,7 +22,7 @@ export type ToolScope = {
 
 const patterns = {
   coding: /(?:\bcodex\b|\brepo(?:sitory)?\b|\bgit\b|\bbranch\b|\bcommit\b|\bcodebase\b|\bdevops\b|\bdeploy\b|\bbuild\b|\bfix\s+(?:the\s+)?tests?\b|ซอร์สโค้ด|โค้ด|แก้\s*test|แก้\s*เทสต์|รัน\s*test)/iu,
-  schedule: /(?:schedule|calendar|event|appointment|routine|task|ตาราง|ปฏิทิน|นัด|รูทีน|กิจวัตร|กำหนดการ|พรุ่งนี้\s*มีอะไร|วันนี้\s*มีอะไร|งานล่าสุด|เพิ่มเรียน)/iu,
+  schedule: /(?:schedule|calendar|event|appointment|routine|task|ตาราง|ปฏิทิน|นัด|รูทีน|กิจวัตร|กำหนดการ|พรุ่งนี้\s*มีอะไร|วันนี้\s*มีอะไร|งานล่าสุด|เพิ่มเรียน|ส่ง\s*ผ้า|(?:ส่ง|รับ|คืน|ต้อง).{0,30}วันไหน|วันไหน.{0,30}(?:ส่ง|รับ|คืน|นัด))/iu,
   notes: /(?:\bnotes?\b|โน้ต|บันทึกข้อความ)/iu,
   vault: /(?:\bvault\b|password|credential|totp|otp|รหัสผ่าน|ข้อมูลล็อกอิน|บัญชีเข้าสู่ระบบ)/iu,
   web: /(?:https?:\/\/|search\s+(?:the\s+)?web|web\s+search|ค้น(?:หา)?\s*(?:เว็บ|อินเทอร์เน็ต)|หา\s*(?:ใน|จาก)\s*(?:เว็บ|อินเทอร์เน็ต)|ข่าวล่าสุด|ราคาล่าสุด)/iu,
@@ -31,6 +31,8 @@ const patterns = {
   update: /(?:\bupdate\b|\bedit\b|\bchange\b|\brename\b|แก้ไข|เปลี่ยน|เลื่อน|อัปเดต|ทำเสร็จ|เสร็จแล้ว)/iu,
   remove: /(?:\bdelete\b|\bremove\b|\bcancel\b|ลบ|ยกเลิก)/iu,
 };
+
+const followUpPattern = /^(?:เอ้า|เอ่า|อ้าว|หาย|ลองใหม่|อีกครั้ง|เมื่อกี้|ต่อ(?:เลย)?|ได้ยัง|แล้วล่ะ|แล้วหรือยัง)/iu;
 
 function addUnique<T>(target: T[], values: T[]) {
   for (const value of values) if (!target.includes(value)) target.push(value);
@@ -106,4 +108,20 @@ export function scopeToolsForMessage(message: string): ToolScope {
     confidence,
     matchedDomains,
   };
+}
+
+/** Inherit a recent domain only for an explicit short retry/follow-up utterance. */
+export function scopeToolsForConversation(userMessages: string[]): ToolScope {
+  const current = userMessages.at(-1)?.trim() ?? "";
+  const direct = scopeToolsForMessage(current);
+  if (direct.primaryIntent !== "general.response" || current.length > 80 || !followUpPattern.test(current)) {
+    return direct;
+  }
+  for (let index = userMessages.length - 2; index >= 0; index -= 1) {
+    const inherited = scopeToolsForMessage(userMessages[index]);
+    if (inherited.primaryIntent !== "general.response") {
+      return { ...inherited, confidence: Math.min(inherited.confidence, 0.8) };
+    }
+  }
+  return direct;
 }

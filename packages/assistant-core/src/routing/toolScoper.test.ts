@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { scopeToolsForMessage } from "./toolScoper";
+import { scopeToolsForConversation, scopeToolsForMessage } from "./toolScoper";
 
 describe("scopeToolsForMessage", () => {
   it.each([
     ["พรุ่งนี้มีอะไรบ้าง", "schedule.query", ["getSchedule"]],
+    ["สรุป ตอนนี้เราต้องส่งผ้าวันไหนบ้าง", "schedule.query", ["getSchedule"]],
+    ["ดูวันหน่อย สรุป เราต้องส่งผ้า วันไหนบ้าง", "schedule.query", ["getSchedule"]],
     ["เพิ่มเรียน ADT พรุ่งนี้ 9 โมง", "schedule.mutate", ["getSchedule", "createScheduleItem"]],
     ["เลื่อนนัดหมอเป็นบ่ายสอง", "schedule.mutate", ["getSchedule", "updateTaskStatus", "updateScheduleItem"]],
     ["ลบ routine ออก", "schedule.mutate", ["getSchedule", "updateTaskStatus", "deleteRoutine"]],
@@ -31,5 +33,13 @@ describe("scopeToolsForMessage", () => {
     const scope = scopeToolsForMessage("แก้โค้ด schedule service ให้หน่อย");
     expect(scope.primaryIntent).toBe("coding.delegate");
     expect(scope.allowedTools).toEqual(["delegateCodingTask"]);
+  });
+
+  it("inherits the previous domain only for an explicit short retry", () => {
+    expect(scopeToolsForConversation([
+      "สรุป ตอนนี้เราต้องส่งผ้าวันไหนบ้าง",
+      "เอ่า หาย",
+    ])).toMatchObject({ primaryIntent: "schedule.query", allowedTools: ["getSchedule"], confidence: 0.8 });
+    expect(scopeToolsForConversation(["พรุ่งนี้มีอะไร", "ขอบคุณครับ"]).primaryIntent).toBe("general.response");
   });
 });

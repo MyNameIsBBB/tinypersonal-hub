@@ -55,6 +55,19 @@ describe("chat context window", () => {
     expect(converted).toBeDefined();
     expect(converted.length).toBeGreaterThan(0);
   });
+
+  it("removes historical function calls that are unavailable in the current scope", async () => {
+    const { convertToModelMessages } = await import("ai");
+    const testMessages = [
+      { id: "1", role: "user", parts: [{ type: "text", text: "พรุ่งนี้มีอะไร" }] },
+      { id: "2", role: "assistant", parts: [{ type: "tool-getSchedule", toolCallId: "call-1", state: "output-error", input: { rangeStart: "2026-09-06", rangeEnd: "2026-09-06" }, errorText: "timeout" }] },
+      { id: "3", role: "user", parts: [{ type: "text", text: "ขอบคุณ" }] },
+    ] as UIMessage[];
+
+    const converted = await convertToModelMessages(selectContextWindow(testMessages, []));
+    expect(JSON.stringify(converted)).not.toContain("tool-call");
+    expect(JSON.stringify(converted)).toContain("Historical tool result omitted");
+  });
 });
 
 describe("confirmationDecision", () => {

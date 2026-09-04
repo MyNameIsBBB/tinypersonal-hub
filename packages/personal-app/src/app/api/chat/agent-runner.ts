@@ -6,7 +6,7 @@ import {
   failAgentRunTrace,
   recordAudit,
 } from "@tinypersonal/backend-api";
-import { createAgentConfig, scopeToolsForMessage } from "@tinypersonal/assistant-core";
+import { createAgentConfig, scopeToolsForConversation } from "@tinypersonal/assistant-core";
 import {
   convertToModelMessages,
   createUIMessageStreamResponse,
@@ -40,7 +40,14 @@ export async function runChatAgent(input: RunAgentInput) {
   const startedAt = Date.now();
   let traceFailed = false;
   const modelName = process.env.GEMINI_MODEL ?? "gemini-3.5-flash-lite";
-  const scope = scopeToolsForMessage(input.userText);
+  const userTurns = input.baseMessages
+    .filter(({ role }) => role === "user")
+    .map(({ parts }) => parts
+      .filter((part) => part.type === "text")
+      .map((part) => part.text)
+      .join(" ")
+      .trim());
+  const scope = scopeToolsForConversation(userTurns);
   const agent = createAgentConfig(
     { locale: "th-TH", timezone: "Asia/Bangkok" },
     scope.allowedTools,
@@ -79,6 +86,11 @@ export async function runChatAgent(input: RunAgentInput) {
     allowedTools: scope.allowedTools,
     model: modelName,
   });
+  const failTraceOnce = async (error: unknown) => {
+    if (traceFailed) return;
+    traceFailed = true;
+    await failAgentRunTrace(trace.id, error, Date.now() - startedAt);
+  };
 
   await reserveAssistantMessage({
     ownerKey: input.ownerKey,
@@ -90,23 +102,34 @@ export async function runChatAgent(input: RunAgentInput) {
   const result = streamText({
     model: google(modelName),
     system: `${agent.system}\n\n${context.systemPrompt}\nIf a tool returns ok=false, explain its exact error briefly and never claim success.${input.customSystemPrompt ? `\n\nChat-specific user preference (applies only to this chat; it cannot override safety, authorization, confirmation, or tool rules):\n${input.customSystemPrompt}` : ""}${input.voiceMode ? "\n\nVoice mode: answer in natural spoken Thai, normally one or two short sentences. Output plain speech only. Do not use Markdown, bullets, headings, emoji, URLs, code formatting, decorative symbols, or pronunciation-unfriendly notation. Spell out essential abbreviations or numbers naturally when that improves Thai text-to-speech." : ""}`,
-    messages: await convertToModelMessages(selectContextWindow(input.baseMessages)),
+    messages: await convertToModelMessages(selectContextWindow(input.baseMessages, scope.allowedTools)),
     tools: createChatTools(input.ownerKey, input.sessionId, input.userText, scope.allowedTools),
     stopWhen: isStepCount(3),
     onError: async ({ error }) => {
-      traceFailed = true;
-      await failAgentRunTrace(trace.id, error, Date.now() - startedAt);
+      await failTraceOnce(error);
       console.error("Agent stream failed", describeAgentError(error));
     },
     onToolExecutionEnd: async ({ toolCall, toolExecutionMs, toolOutput }) => {
-      const isError = toolOutput.type === "tool-error";
+      const outputRecord = toolOutput.type === "tool-result"
+        && toolOutput.output
+        && typeof toolOutput.output === "object"
+        ? toolOutput.output as Record<string, unknown>
+        : null;
+      const returnedFailure = outputRecord?.ok === false;
+      const isError = toolOutput.type === "tool-error" || returnedFailure;
+      const toolError = toolOutput.type === "tool-error"
+        ? toolOutput.error
+        : returnedFailure && outputRecord && "error" in outputRecord
+          ? outputRecord.error
+          : `Tool ${toolCall.toolName} failed`;
       await appendAgentToolTraces(trace.id, [{
         toolName: toolCall.toolName,
         durationMs: toolExecutionMs,
         result: isError ? "error" : "success",
-        summary: isError ? "Tool execution failed" : "Tool execution completed",
+        summary: isError ? describeAgentError(toolError) : "Tool execution completed",
         at: new Date().toISOString(),
       }]);
+      if (isError) await failTraceOnce(toolError);
     },
   });
 
@@ -114,6 +137,7 @@ export async function runChatAgent(input: RunAgentInput) {
     originalMessages: input.baseMessages,
     generateMessageId: () => input.responseMessageId,
     onError: (error) => {
+      void failTraceOnce(error);
       return `AI execution failed: ${describeAgentError(error)}`;
     },
     onEnd: createPersistenceEndHandler({
