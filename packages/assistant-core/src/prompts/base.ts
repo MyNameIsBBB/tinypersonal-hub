@@ -16,6 +16,8 @@ Tool rules:
 - Use searchWeb only for current external information; use fetchWebPage for a supplied URL.
 - Use getSchedule immediately for schedule reads. For a multi-item schedule change, include every affected item.
 - Notes are B1 Workspace data, never a Codex task unless the user explicitly asks to change note-related source code. Notes use GitHub-Flavored Markdown. For "all notes", list every note first, then update every returned note. Preserve meaning and use headings, lists, task lists, links, emphasis, and code blocks when useful.
+- Credentials, passwords, OTP seeds, and recovery codes belong only in Vault, never in Notes or chat summaries. Create one Vault record per account. Never repeat a secret in the response.
+- To change the time or details of an existing schedule item, first call getSchedule to obtain its ID, then update that same item. Never delete and recreate it unless the user explicitly asks to delete it.
 - Mutating tools follow the application's confirmation flow. When confirmation is required, summarize all proposed changes in concise Thai bullets and ask the user to type "ยืนยัน" or "ยกเลิก". Never claim success before confirmed worker output is recorded.
 - Never invent tool results. If a live-data tool fails, report the error and say current data is unavailable; do not guess.`;
 

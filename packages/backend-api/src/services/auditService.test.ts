@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { prisma } from "../db/client";
-import { assertSuccessfulToolResult, recordAudit } from "./auditService";
+import { assertSuccessfulToolResult, createPendingAction, recordAudit, supersedePendingActions } from "./auditService";
 
 describe("audit service", () => {
   it("serializes metadata without passing it as an unknown Prisma field", async () => {
@@ -52,6 +52,41 @@ describe("batch pending actions", () => {
     findFirst.mockRestore();
     update.mockRestore();
     deleteNoteMock.mockRestore();
+  });
+});
+
+describe("pending action safety", () => {
+  it("seals sensitive arguments instead of storing plaintext secrets", async () => {
+    const previousKey = process.env.VAULT_MASTER_KEY;
+    process.env.VAULT_MASTER_KEY = Buffer.alloc(32, 7).toString("base64");
+    const create = vi.spyOn(prisma.pendingAction, "create").mockImplementation((async ({ data }: any) => ({ ...data, createdAt: new Date(), resolvedAt: null })) as any);
+    const auditCreate = vi.spyOn(prisma.auditLog, "create").mockResolvedValue({} as never);
+
+    const action = await createPendingAction({
+      ownerKey: "u1",
+      sessionId: "s1",
+      toolName: "vault.create",
+      summary: "Create credential",
+      arguments: { accountIdentifier: "admin", password: "plaintext-sentinel" },
+      sensitive: true,
+    });
+
+    expect(action.argumentsJson).not.toContain("plaintext-sentinel");
+    expect(JSON.parse(action.argumentsJson)).toHaveProperty("sealed.ciphertext");
+    create.mockRestore();
+    auditCreate.mockRestore();
+    if (previousKey === undefined) delete process.env.VAULT_MASTER_KEY;
+    else process.env.VAULT_MASTER_KEY = previousKey;
+  });
+
+  it("denies stale proposals when a new request replaces them", async () => {
+    const updateMany = vi.spyOn(prisma.pendingAction, "updateMany").mockResolvedValue({ count: 2 });
+    await supersedePendingActions("u1", "s1");
+    expect(updateMany).toHaveBeenCalledWith({
+      where: { ownerKey: "u1", sessionId: "s1", status: "PENDING" },
+      data: { status: "DENIED", resolvedAt: expect.any(Date) },
+    });
+    updateMany.mockRestore();
   });
 });
 

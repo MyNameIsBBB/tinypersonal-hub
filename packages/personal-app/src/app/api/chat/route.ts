@@ -1,5 +1,5 @@
 import { google } from "@ai-sdk/google";
-import { createNote, createPendingAction, deleteChatSession, deleteNote, deleteVaultSecret, enqueueChatGenerationJob, ensureDailyGeneralChat, executeLatestPendingAction, generateAndUpdateSessionTitle, getLatestCodingJob, getOrCreateChatSession, getScheduleByRange, listActiveRoutines, listChatSessions, loadChatMessages, recordAudit, saveAssistantChatMessageIfCurrent, scrapeWebPage, searchNotes, searchVaultMetadata, searchWeb, updateNote, updateVaultMetadata } from "@tinypersonal/backend-api";
+import { createPendingAction, deleteChatSession, enqueueChatGenerationJob, ensureDailyGeneralChat, executeAllPendingActions, generateAndUpdateSessionTitle, getLatestCodingJob, getOrCreateChatSession, getScheduleByRange, listActiveRoutines, listChatSessions, loadChatMessages, recordAudit, saveAssistantChatMessageIfCurrent, scrapeWebPage, searchNotes, searchVaultMetadata, searchWeb, supersedePendingActions } from "@tinypersonal/backend-api";
 import { consumeStream, convertToModelMessages, createUIMessageStream, createUIMessageStreamResponse, isStepCount, streamText, tool, type UIMessage } from "ai";
 import { after } from "next/server";
 import { isCronAuthorizedRequest, isValidSessionToken, SESSION_COOKIE } from "@/lib/serverAuth";
@@ -139,8 +139,8 @@ const scheduleStatusTool = (ownerKey: string, sessionId: string) => tool({
   },
 });
 
-const routineUpdateTool = (ownerKey: string, sessionId: string) => tool({
-  description: "Update an existing routine root. Use the routine ID, not an expanded occurrence ID.",
+const scheduleUpdateTool = (ownerKey: string, sessionId: string) => tool({
+  description: "Update an existing event, task, or routine in place. Use a root routine ID rather than an expanded occurrence ID. Changing only startsAt automatically preserves the existing duration.",
   inputSchema: z.object({
     id: z.string().min(1), title: z.string().trim().min(1).max(300).optional(),
     startsAt: z.string().trim().min(1).optional(), endsAt: z.string().trim().min(1).optional(),
@@ -156,7 +156,7 @@ const routineUpdateTool = (ownerKey: string, sessionId: string) => tool({
       ...(recurrenceRule ? { recurrenceRule } : {}),
       ...(recurrenceEndsAt ? { routineEndDate: parseRoutineEndInput(recurrenceEndsAt).toISOString() } : {}),
     };
-    const action = await createPendingAction({ ownerKey, sessionId, toolName: "schedule.updateRoutine", summary: `แก้ไข Routine ${id}`, arguments: { id, ...input } });
+    const action = await createPendingAction({ ownerKey, sessionId, toolName: "schedule.update", summary: `แก้ไขกำหนดการ ${id}`, arguments: { id, ...input } });
     return { ok: true as const, confirmationRequired: true, confirmation: { id: action.id, summary: action.summary, expiresAt: action.expiresAt.toISOString() } };
   },
 });
@@ -237,53 +237,40 @@ const updateNoteInputSchema = z.object({ id: z.string().min(1), title: z.string(
 const deleteByIdSchema = z.object({ id: z.string().min(1) }).strict();
 
 const noteMutationTool = (ownerKey: string, sessionId: string, operation: "create" | "update" | "delete") => tool({
-  description: `${operation} a note directly.`,
+  description: `${operation} a note after explicit confirmation. Never store credentials, passwords, OTP seeds, or recovery codes in notes.`,
   inputSchema: createNoteInputSchema,
   execute: async (input) => {
-    void ownerKey;
-    void sessionId;
-    try {
-      const created = await createNote(input);
-      return { ok: true as const, note: noteItemForModel(created) };
-    } catch (error) {
-      return { ok: false as const, error: { code: "NOTE_MUTATION_FAILED", message: error instanceof Error ? error.message : "Note mutation failed" } };
-    }
+    const action = await createPendingAction({ ownerKey, sessionId, toolName: "notes.create", summary: `สร้าง Note: ${input.title}`, arguments: input });
+    return { ok: true as const, confirmationRequired: true, confirmation: { id: action.id, summary: action.summary, expiresAt: action.expiresAt.toISOString() } };
   },
 });
 
 const updateNoteMutationTool = (ownerKey: string, sessionId: string) => tool({
-  description: "update a note directly.",
+  description: "Update a note after explicit confirmation. Never store credentials, passwords, OTP seeds, or recovery codes in notes.",
   inputSchema: updateNoteInputSchema,
   execute: async (input) => {
-    void ownerKey;
-    void sessionId;
-    try {
-      const updated = await updateNote(input.id, {
-        title: input.title,
-        content: input.content,
-        tags: input.tags,
-        folder: input.folder,
-        scheduleItemId: input.scheduleItemId,
-      });
-      return { ok: true as const, note: noteItemForModel(updated) };
-    } catch (error) {
-      return { ok: false as const, error: { code: "NOTE_MUTATION_FAILED", message: error instanceof Error ? error.message : "Note mutation failed" } };
-    }
+    const action = await createPendingAction({ ownerKey, sessionId, toolName: "notes.update", summary: `แก้ไข Note ${input.id}`, arguments: input });
+    return { ok: true as const, confirmationRequired: true, confirmation: { id: action.id, summary: action.summary, expiresAt: action.expiresAt.toISOString() } };
   },
 });
 
 const deleteNoteMutationTool = (ownerKey: string, sessionId: string) => tool({
-  description: "delete a note directly.",
+  description: "Delete a note after explicit confirmation.",
   inputSchema: deleteByIdSchema,
   execute: async ({ id }) => {
-    void ownerKey;
-    void sessionId;
-    try {
-      await deleteNote(id);
-      return { ok: true as const, deletedId: id };
-    } catch (error) {
-      return { ok: false as const, error: { code: "NOTE_MUTATION_FAILED", message: error instanceof Error ? error.message : "Note mutation failed" } };
-    }
+    const action = await createPendingAction({ ownerKey, sessionId, toolName: "notes.delete", summary: `ลบ Note ${id}`, arguments: { id } });
+    return { ok: true as const, confirmationRequired: true, confirmation: { id: action.id, summary: action.summary, expiresAt: action.expiresAt.toISOString() } };
+  },
+});
+
+const vaultCreateInputSchema = z.object({ serviceName: z.string().trim().min(1).max(160), category: z.string().trim().min(1).max(100).default("Login"), accountIdentifier: z.string().trim().min(1).max(320), password: z.string().min(1).max(10_000), url: z.string().url().max(2_000).optional(), notes: z.string().max(5_000).optional(), totpSeed: z.string().max(2_000).optional() }).strict();
+
+const vaultCreateTool = (ownerKey: string, sessionId: string) => tool({
+  description: "Create one encrypted Vault record for one account after explicit confirmation. Never repeat the password in the response and never store it in a note.",
+  inputSchema: vaultCreateInputSchema,
+  execute: async (input) => {
+    const action = await createPendingAction({ ownerKey, sessionId, toolName: "vault.create", summary: `บันทึกบัญชี ${input.accountIdentifier} สำหรับ ${input.serviceName} ใน Vault`, arguments: input, sensitive: true });
+    return { ok: true as const, confirmationRequired: true, confirmation: { id: action.id, summary: action.summary, expiresAt: action.expiresAt.toISOString() } };
   },
 });
 
@@ -297,38 +284,20 @@ const vaultSearchExecutionTool = tool({
 });
 
 const vaultMutationTool = (ownerKey: string, sessionId: string, operation: "updateMetadata" | "delete") => tool({
-  description: `${operation === "delete" ? "Delete a Vault record" : "Update Vault metadata"} without reading its secret.`,
+  description: `${operation === "delete" ? "Delete a Vault record" : "Update Vault metadata"} after explicit confirmation, without reading its secret.`,
   inputSchema: z.object({ id: z.string().min(1), serviceName: z.string().trim().min(1).max(160).optional(), category: z.string().trim().min(1).max(100).optional(), accountIdentifier: z.string().trim().min(1).max(320).optional(), url: z.string().url().max(2_000).nullable().optional(), notes: z.string().max(5_000).nullable().optional() }).strict(),
   execute: async (input) => {
-    void ownerKey;
-    void sessionId;
-    try {
-      const updated = await updateVaultMetadata(input.id, {
-        serviceName: input.serviceName,
-        category: input.category,
-        accountIdentifier: input.accountIdentifier,
-        url: input.url,
-        notes: input.notes,
-      });
-      return { ok: true as const, record: vaultRecordForModel(updated) };
-    } catch (error) {
-      return { ok: false as const, error: { code: "VAULT_MUTATION_FAILED", message: error instanceof Error ? error.message : "Vault mutation failed" } };
-    }
+    const action = await createPendingAction({ ownerKey, sessionId, toolName: "vault.updateMetadata", summary: `แก้ไขข้อมูล Vault ${input.id}`, arguments: input });
+    return { ok: true as const, confirmationRequired: true, confirmation: { id: action.id, summary: action.summary, expiresAt: action.expiresAt.toISOString() } };
   },
 });
 
 const deleteVaultMutationTool = (ownerKey: string, sessionId: string) => tool({
-  description: "Delete a Vault record directly without reading its secret.",
+  description: "Delete a Vault record after explicit confirmation without reading its secret.",
   inputSchema: deleteByIdSchema,
   execute: async ({ id }) => {
-    void ownerKey;
-    void sessionId;
-    try {
-      await deleteVaultSecret(id);
-      return { ok: true as const, deletedId: id };
-    } catch (error) {
-      return { ok: false as const, error: { code: "VAULT_MUTATION_FAILED", message: error instanceof Error ? error.message : "Vault mutation failed" } };
-    }
+    const action = await createPendingAction({ ownerKey, sessionId, toolName: "vault.delete", summary: `ลบข้อมูล Vault ${id}`, arguments: { id } });
+    return { ok: true as const, confirmationRequired: true, confirmation: { id: action.id, summary: action.summary, expiresAt: action.expiresAt.toISOString() } };
   },
 });
 
@@ -420,11 +389,13 @@ function codingStatusText(job: Awaited<ReturnType<typeof getLatestCodingJob>>) {
 async function confirmationResponse(ownerKey: string, sessionId: string, userMessageId: string, approved: boolean, responseMessageId?: string) {
   let responseText: string;
   try {
-    const execution = await executeLatestPendingAction(ownerKey, sessionId, approved);
-    if (!execution) return null;
-    if (execution.denied) responseText = `รับทราบครับ ผมยุติคำสั่ง “${execution.action.summary}” แล้ว`;
-    else if (execution.action.toolName === "coding.delegateTask") responseText = `รับคำสั่งแล้วครับ ผมส่ง “${execution.action.summary}” เข้าคิว Codex แล้ว เมื่อ worker ดำเนินการเสร็จ ผลลัพธ์จะปรากฏในบทสนทนานี้ครับ`;
-    else responseText = `รับคำสั่งแล้วครับ ดำเนินการ “${execution.action.summary}” เรียบร้อยแล้วครับ`;
+    const executions = await executeAllPendingActions(ownerKey, sessionId, approved);
+    if (executions.length === 0) responseText = "ไม่มีรายการที่รอการยืนยันครับ กรุณาส่งคำสั่งที่ต้องการอีกครั้ง";
+    else if (!approved) responseText = `ยกเลิกข้อเสนอที่รอยืนยัน ${executions.length} รายการแล้วครับ`;
+    else {
+      const summaries = executions.map(({ action }) => `- ${action.summary}`).join("\n");
+      responseText = `ดำเนินการสำเร็จ ${executions.length} รายการครับ\n${summaries}`;
+    }
   } catch (error) {
     responseText = `ดำเนินการยืนยันไม่สำเร็จครับ: ${error instanceof Error ? error.message : "เกิดข้อผิดพลาดที่ไม่ทราบสาเหตุ"}`;
   }
@@ -503,6 +474,7 @@ export async function POST(request: Request) {
   }
 
   const userText = latestUserText(baseMessages);
+  await supersedePendingActions(ownerKey, session.id);
   if (asksForCodingStatus(userText)) {
     const job = await getLatestCodingJob(ownerKey, session.id);
     if (job?.status === "SUCCEEDED") {
@@ -514,9 +486,9 @@ export async function POST(request: Request) {
     return directTextResponse(ownerKey, session.id, triggeringUserMessage.id, codingStatusText(job), responseMessageId);
   }
   const allowedTools: ToolName[] = [
-    "getSchedule", "createScheduleItem", "updateTaskStatus", "updateRoutine", "deleteRoutine",
+    "getSchedule", "createScheduleItem", "updateTaskStatus", "updateScheduleItem", "deleteRoutine",
     "searchWeb", "fetchWebPage", "searchNotes", "createNote", "updateNote", "deleteNote",
-    "searchVaultMetadata", "updateVaultMetadata", "deleteVaultSecret",
+    "searchVaultMetadata", "createVaultSecret", "updateVaultMetadata", "deleteVaultSecret",
   ];
   allowedTools.push("delegateCodingTask");
   const agent = createAgentConfig({ locale: "th-TH", timezone: "Asia/Bangkok" }, allowedTools);
@@ -539,7 +511,7 @@ export async function POST(request: Request) {
       getSchedule: scheduleGetTool,
       createScheduleItem: scheduleCreateTool(ownerKey, session.id),
       updateTaskStatus: scheduleStatusTool(ownerKey, session.id),
-      updateRoutine: routineUpdateTool(ownerKey, session.id),
+      updateScheduleItem: scheduleUpdateTool(ownerKey, session.id),
       deleteRoutine: routineDeleteTool(ownerKey, session.id),
       searchWeb: webSearchExecutionTool,
       fetchWebPage: webScrapeExecutionTool,
@@ -549,6 +521,7 @@ export async function POST(request: Request) {
       updateNote: updateNoteMutationTool(ownerKey, session.id),
       deleteNote: deleteNoteMutationTool(ownerKey, session.id),
       searchVaultMetadata: vaultSearchExecutionTool,
+      createVaultSecret: vaultCreateTool(ownerKey, session.id),
       updateVaultMetadata: vaultMutationTool(ownerKey, session.id, "updateMetadata"),
       deleteVaultSecret: deleteVaultMutationTool(ownerKey, session.id),
     },

@@ -3,7 +3,7 @@ export { claimCodingJob, completeCodingJob, enqueueCodingJob, getLatestCodingJob
 export { claimChatGenerationJob, completeChatGenerationJob, enqueueChatGenerationJob, getLatestChatGenerationJob, saveUserMessageAndEnqueueChatGeneration } from "./services/chatGenerationJobService";
 export { createChatSession, deleteChatSession, ensureDailyGeneralChat, generateAndUpdateSessionTitle, GENERAL_CHAT_TITLE, getOrCreateChatSession, listChatSessions, loadChatMessages, replaceChatMessages, resetAllGeneralChats, saveAssistantChatMessageIfCurrent, saveChatMessage, saveUserChatMessage } from "./services/chatService";
 export type { StoredChatMessage } from "./services/chatService";
-export { createPendingAction, executeAllPendingActions, executeLatestPendingAction, executePendingAction, recordAudit, resolvePendingAction } from "./services/auditService";
+export { createPendingAction, executeAllPendingActions, executeLatestPendingAction, executePendingAction, recordAudit, resolvePendingAction, supersedePendingActions } from "./services/auditService";
 export { getMarketQuotes, integrationHealth } from "./services/integrations";
 export type { IntegrationName } from "./services/integrations";
 export { getMorningBriefingContext, sendMorningNotification } from "./services/morningBriefingService";

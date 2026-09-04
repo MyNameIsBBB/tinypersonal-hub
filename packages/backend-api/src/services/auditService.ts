@@ -1,7 +1,8 @@
 import { prisma } from "../db/client";
 import { createNote, deleteNote, updateNote } from "./noteService";
 import { createScheduleItem, deleteOrCancelRoutine, updateScheduleItem, updateScheduleStatus } from "./scheduleService";
-import { deleteVaultSecret, updateVaultMetadata } from "./vaultService";
+import { createVaultSecret, deleteVaultSecret, updateVaultMetadata } from "./vaultService";
+import { decryptSecret, encryptSecret } from "../security/vaultCrypto";
 import { enqueueCodingJob } from "./codingJobService";
 
 function safeMetadata(metadata: Record<string, unknown>): string {
@@ -28,11 +29,16 @@ export async function recordAudit(input: {
 }
 
 export async function createPendingAction(input: {
-  ownerKey: string; sessionId?: string; toolName: string; arguments: unknown; summary: string;
+  ownerKey: string; sessionId?: string; toolName: string; arguments: unknown; summary: string; sensitive?: boolean;
 }) {
+  const id = crypto.randomUUID();
+  const argumentsJson = input.sensitive
+    ? JSON.stringify({ sealed: encryptSecret(JSON.stringify(input.arguments), `pending:${id}`) })
+    : JSON.stringify(input.arguments);
   const action = await prisma.pendingAction.create({ data: {
+    id,
     ownerKey: input.ownerKey, sessionId: input.sessionId, toolName: input.toolName,
-    argumentsJson: JSON.stringify(input.arguments), summary: input.summary.slice(0, 500),
+    argumentsJson, summary: input.summary.slice(0, 500),
     expiresAt: new Date(Date.now() + 15 * 60_000),
   } });
   await recordAudit({ actorId: input.ownerKey, action: input.toolName, targetType: "PendingAction", targetId: action.id, status: "REQUESTED", metadata: { summary: input.summary, sessionId: input.sessionId } });
@@ -54,11 +60,15 @@ export async function executePendingAction(ownerKey: string, id: string, approve
   }
 
   try {
-    const args = JSON.parse(action.argumentsJson) as Record<string, unknown>;
+    const storedArgs = JSON.parse(action.argumentsJson) as Record<string, unknown>;
+    const sealed = storedArgs.sealed;
+    const args = sealed && typeof sealed === "object"
+      ? JSON.parse(decryptSecret(sealed as { ciphertext: string; iv: string; authTag: string }, `pending:${action.id}`)) as Record<string, unknown>
+      : storedArgs;
     let result: unknown;
     if (action.toolName === "schedule.create") result = await createScheduleItem(args as Parameters<typeof createScheduleItem>[0]);
     else if (action.toolName === "schedule.updateStatus") result = await updateScheduleStatus(String(args.id), args.status as Parameters<typeof updateScheduleStatus>[1]);
-    else if (action.toolName === "schedule.updateRoutine") {
+    else if (action.toolName === "schedule.update") {
       const { id: routineId, startTime, endTime, routineEndDate, ...input } = args;
       result = await updateScheduleItem(String(routineId), {
         ...input,
@@ -71,6 +81,7 @@ export async function executePendingAction(ownerKey: string, id: string, approve
     else if (action.toolName === "notes.create") result = await createNote(args as Parameters<typeof createNote>[0]);
     else if (action.toolName === "notes.update") { const { id: targetId, ...input } = args; result = await updateNote(String(targetId), input); }
     else if (action.toolName === "notes.delete") { await deleteNote(String(args.id)); result = { id: String(args.id), deleted: true }; }
+    else if (action.toolName === "vault.create") result = await createVaultSecret(args as Parameters<typeof createVaultSecret>[0]);
     else if (action.toolName === "vault.updateMetadata") { const { id: targetId, ...input } = args; result = await updateVaultMetadata(String(targetId), input); }
     else if (action.toolName === "vault.delete") { await deleteVaultSecret(String(args.id)); result = { id: String(args.id), deleted: true }; }
     else if (action.toolName === "coding.delegateTask") {
@@ -102,6 +113,14 @@ export async function executeAllPendingActions(ownerKey: string, sessionId: stri
     if (res) results.push(res);
   }
   return results;
+}
+
+/** A new non-confirmation request replaces proposals left pending in this chat. */
+export async function supersedePendingActions(ownerKey: string, sessionId: string) {
+  return prisma.pendingAction.updateMany({
+    where: { ownerKey, sessionId, status: "PENDING" },
+    data: { status: "DENIED", resolvedAt: new Date() },
+  });
 }
 
 export async function executeLatestPendingAction(ownerKey: string, sessionId: string, approved: boolean) {

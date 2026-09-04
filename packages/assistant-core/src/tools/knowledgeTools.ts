@@ -49,6 +49,20 @@ export const searchVaultMetadataTool = tool({
   execute: async (input) => ({ ok: true as const, command: "vault.searchMetadata" as const, input }),
 });
 
+export const createVaultSecretTool = tool({
+  description: "Create one encrypted Vault credential. Use one record per account. Never put passwords in notes.",
+  inputSchema: z.object({
+    serviceName: z.string().trim().min(1).max(160),
+    category: z.string().trim().min(1).max(100).default("Login"),
+    accountIdentifier: z.string().trim().min(1).max(320),
+    password: z.string().min(1).max(10_000),
+    url: z.string().url().max(2_000).optional(),
+    notes: z.string().max(5_000).optional(),
+    totpSeed: z.string().max(2_000).optional(),
+  }).strict(),
+  execute: async (input) => ({ ok: true as const, command: "vault.create" as const, input }),
+});
+
 export const updateVaultMetadataTool = tool({
   description: "Update vault metadata only: service name, category, account identifier, URL, or notes. Never accepts or returns passwords, OTP seeds, or encryption fields.",
   inputSchema: z.object({

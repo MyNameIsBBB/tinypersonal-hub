@@ -231,7 +231,11 @@ export async function updateScheduleItem(
   if (type === "ROUTINE" && (!recurrenceRule || !routineEndDate)) {
     throw new Error("A routine requires recurrenceRule and routineEndDate");
   }
-  return toDomain(await prisma.scheduleItem.update({ where: { id }, data: input }));
+  const data = { ...input };
+  if (input.startTime && input.endTime === undefined && current.startTime && current.endTime) {
+    data.endTime = new Date(input.startTime.getTime() + current.endTime.getTime() - current.startTime.getTime());
+  }
+  return toDomain(await prisma.scheduleItem.update({ where: { id }, data }));
 }
 
 export async function deleteScheduleItem(id: string): Promise<void> {
