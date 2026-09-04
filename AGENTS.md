@@ -31,7 +31,7 @@ Dependencies flow in one direction: `personal-app` may call `assistant-core` and
 ### `packages/backend-api`
 
 - Owns Prisma schema/client access, repositories, transactions, external API adapters, background jobs, retries, and idempotency.
-- Integrations include Google Forms/Workspace, Gmail, Calendar, and finance providers.
+- Add external adapters only when their orchestration and permission boundaries are ready; no credential-backed external integration is enabled by default.
 - Expose small typed service functions. Do not leak raw vendor responses or Prisma models across package boundaries when a stable domain type is appropriate.
 - Never import React, Next.js page components, or AI prompt text.
 

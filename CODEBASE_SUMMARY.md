@@ -8,11 +8,11 @@ TinyPersonal Hub คือ personal workspace แบบ self-hosted ที่ร
 
 โปรเจกต์เป็น TypeScript monorepo ใช้ npm workspaces และแบ่งเป็น 3 packages:
 
-| Package | หน้าที่หลัก |
-| --- | --- |
-| `@tinypersonal/assistant-core` | system prompt, Zod contracts, tool metadata/registry และ agent configuration |
-| `@tinypersonal/personal-app` | Next.js UI, API routes, auth, chat streaming และการเชื่อม orchestration เข้ากับ backend |
-| `@tinypersonal/backend-api` | Prisma/SQLite, domain services, encryption, jobs, audit และ external integrations |
+| Package                        | หน้าที่หลัก                                                                             |
+| ------------------------------ | --------------------------------------------------------------------------------------- |
+| `@tinypersonal/assistant-core` | system prompt, Zod contracts, tool metadata/registry และ agent configuration            |
+| `@tinypersonal/personal-app`   | Next.js UI, API routes, auth, chat streaming และการเชื่อม orchestration เข้ากับ backend |
+| `@tinypersonal/backend-api`    | Prisma/SQLite, domain services, encryption, jobs, audit และ external integrations       |
 
 Dependency flow ที่ตั้งใจไว้คือ:
 
@@ -100,8 +100,6 @@ tinypersonal-hub/
 
 - ค้นเว็บผ่าน SearXNG และ scrape หน้า public HTTP/HTTPS
 - web scraper มี private-network protection เพื่อลดความเสี่ยง SSRF
-- finance ใช้ Alpha Vantage เมื่อมี `FINANCE_API_KEY`
-- Google Calendar/Gmail มี configuration placeholders แต่ service ปัจจุบันยังรายงานว่าไม่ได้เชื่อมจริง
 
 ### Codex delegation
 
@@ -138,13 +136,13 @@ tinypersonal-hub/
 
 ## Database models
 
-| กลุ่ม | Models |
-| --- | --- |
-| Identity/legacy task | `User`, `Task` |
-| Workspace | `ScheduleItem`, `Note`, `VaultSecret` |
-| Chat | `ChatSession`, `ChatMessage` |
-| Controlled execution | `PendingAction`, `AuditLog` |
-| Background jobs | `ChatGenerationJob`, `CodingJob` |
+| กลุ่ม                | Models                                                   |
+| -------------------- | -------------------------------------------------------- |
+| Identity/legacy task | `User`, `Task`                                           |
+| Workspace            | `ScheduleItem`, `Note`, `VaultSecret`                    |
+| Chat                 | `ChatSession`, `ChatMessage`                             |
+| Controlled execution | `PendingAction`, `AuditLog`                              |
+| Background jobs      | `ChatGenerationJob`, `CodingJob`                         |
 | Notifications/search | `NotificationDelivery`, `PushSubscription`, `ToolVector` |
 
 SQLite เหมาะกับ personal/single-node deployment ตามรูปแบบปัจจุบัน แต่ queue claiming และ in-memory rate limiting ไม่ได้ออกแบบมาสำหรับ horizontal scale หลาย instance
@@ -211,7 +209,7 @@ npm run briefing:run
 2. **Chat route ถูกแยกแล้ว** — `route.ts` เหลือเฉพาะ HTTP exports ส่วน controller, request context, agent runner, adapters, confirmation, persistence และ response stream แยกเป็นโมดูล server-only
 3. **Tool contract มี source of truth เดียวแล้ว** — ชื่อ, description, mutation flag, backend command และ Zod input schema อยู่ใน `assistant-core/src/tools/definitions.ts`; executable adapters import schema ชุดเดียวกัน
 4. **มี deterministic tool scoping แล้ว** — general request ได้ zero tools และแต่ละ domain เปิดเฉพาะ read/mutation tools ที่สัมพันธ์กับ intent พร้อม baseline eval 50 prompts
-5. **บาง integration ยังเป็น scaffold** — Gmail/Google Calendar ยังไม่มี adapter ทำงานจริง ขณะที่ finance และ web search มี implementation แล้ว
+5. **Credential-backed external integration ถูกปิดไว้ก่อน** — Google Calendar, Gmail และ finance API key ถูกถอดออกจาก config แล้ว; self-hosted web search ยังเป็น capability ภายในที่เปิดแยกได้
 6. **ข้อมูลบาง field ยังเก็บเป็น JSON string** — recurrence, tags, embeddings, message payload และ job result ยืดหยุ่นดีสำหรับ SQLite แต่เสีย database-level validation และ queryability
 7. **มี model ที่ดูเป็น legacy** — `User`/`Task` แยกจาก owner-key-based workspace และ `ScheduleItem`; ควรยืนยันการใช้งานก่อนเพิ่ม feature ใหม่หรือวางแผน migration cleanup
 8. **rate limit เป็น process-local** — ใช้ได้กับ single instance แต่ไม่สม่ำเสมอเมื่อ scale หลาย process/container
@@ -220,10 +218,10 @@ npm run briefing:run
 
 1. เพิ่ม API integration tests ครอบคลุม auth, owner isolation, confirmation expiry/idempotency และ job retry
 2. ขยาย eval จาก deterministic routing ไปสู่ argument validity, confirmation policy และ execution success กับ live/model fixtures
-3. เพิ่ม UI สำหรับอ่าน owner-scoped Agent Trace และเปรียบเทียบ run ที่สำเร็จ/ล้มเหลว
+3. เพิ่ม integration/E2E coverage ให้หน้า Agent Trace ที่ `/traces` รวมถึง filter, empty state และสถานะ run ที่กำลังทำงาน
 4. เพิ่ม permission-aware tool scoping นอกเหนือจาก intent-based scoping ปัจจุบัน
 5. เพิ่ม E2E smoke test สำหรับ chat, schedule, notes และ vault reveal
-6. ระบุสถานะ Google integrations ให้ชัดใน UI/docs หรือ implement adapters ให้ครบ
+6. เพิ่ม external integration ใหม่เมื่อ core orchestration, permission model และ integration tests พร้อม
 7. ทบทวน legacy `User`/`Task` models และจัดทำ migration plan หากไม่ได้ใช้แล้ว
 
 ## จุดเริ่มอ่านโค้ด

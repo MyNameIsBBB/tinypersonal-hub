@@ -49,7 +49,7 @@ Each Gemini run creates an `AgentRunTrace` containing:
 - tool name, execution duration, success/error state, and a non-sensitive summary
 - bounded final response, total duration, or error
 
-Raw tool arguments, tool output payloads, prompts, passwords, tokens, Vault data, and private display values must not be stored in traces. Traces are exposed through owner-scoped `GET /api/chat/traces`.
+Raw tool arguments, tool output payloads, prompts, passwords, tokens, Vault data, and private display values must not be stored in traces. Traces are exposed through owner-scoped `GET /api/chat/traces` and the authenticated Agent Trace UI at `/traces`.
 
 ## Evaluation
 
