@@ -9,6 +9,7 @@ import { BackgroundChatMonitor } from "./BackgroundChatMonitor";
 
 const modules = [
   { href: "/ai", label: "AI Assistant", icon: Bot },
+  { href: "/os", label: "B1 OS", icon: Sparkles },
   { href: "/schedule", label: "Schedule", icon: CalendarDays },
   { href: "/notes", label: "Notes", icon: NotebookPen },
   { href: "/vault", label: "Vault", icon: KeyRound },
@@ -79,6 +80,15 @@ export function WorkspaceShell({ active, title, subtitle, action, focusMode = fa
     document.body.style.overflow = "hidden";
     return () => { document.body.style.overflow = previousOverflow; };
   }, [open]);
+
+  useEffect(() => {
+    const toggleFromImmersivePage = () => {
+      if (window.matchMedia("(max-width: 760px)").matches) setOpen((value) => !value);
+      else setCollapsed((value) => !value);
+    };
+    window.addEventListener("tinypersonal:toggle-sidebar", toggleFromImmersivePage);
+    return () => window.removeEventListener("tinypersonal:toggle-sidebar", toggleFromImmersivePage);
+  }, []);
 
   async function toggleNotifications() {
     setNotificationBusy(true); setNotificationMessage("");

@@ -145,12 +145,13 @@ model ToolVector {
 }
 
 model ChatSession {
-  id        String        @id @default(cuid())
-  ownerKey  String
-  title     String?
-  messages  ChatMessage[]
-  createdAt DateTime      @default(now())
-  updatedAt DateTime      @updatedAt
+  id                 String        @id @default(cuid())
+  ownerKey           String
+  title              String?
+  customSystemPrompt String?
+  messages           ChatMessage[]
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
 
   @@index([ownerKey, updatedAt])
 }
