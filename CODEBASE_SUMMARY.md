@@ -196,11 +196,11 @@ npm run briefing:run
 - server authentication
 - chat context window, message merge และ confirmation parsing
 
-ยังไม่พบ integration/E2E tests สำหรับ API routes, Prisma migrations, browser UI, background-worker lifecycle หรือ external integrations
+มี API integration tests ที่ใช้ SQLite ชั่วคราวและ migration จริง ครอบคลุม auth, owner isolation, confirmation expiry/cross-owner/concurrent idempotency และ retry lifecycle ของ coding/chat-generation jobs ส่วน browser E2E และ external integration tests ยังไม่มี
 
 ผลตรวจ ณ วันที่จัดทำเอกสาร:
 
-- `npm test` ผ่านทั้งหมด: 13 test files, 56 tests
+- `npm test` ผ่านทั้งหมด: 15 test files, 64 tests
 - `npm run typecheck` ผ่านครบทั้ง 3 workspaces หลัง regenerate Next route types
 
 ## ข้อสังเกตทางสถาปัตยกรรม
@@ -216,13 +216,12 @@ npm run briefing:run
 
 ## ลำดับปรับปรุงที่แนะนำ
 
-1. เพิ่ม API integration tests ครอบคลุม auth, owner isolation, confirmation expiry/idempotency และ job retry
-2. ขยาย eval จาก deterministic routing ไปสู่ argument validity, confirmation policy และ execution success กับ live/model fixtures
-3. เพิ่ม integration/E2E coverage ให้หน้า Agent Trace ที่ `/traces` รวมถึง filter, empty state และสถานะ run ที่กำลังทำงาน
-4. เพิ่ม permission-aware tool scoping นอกเหนือจาก intent-based scoping ปัจจุบัน
-5. เพิ่ม E2E smoke test สำหรับ chat, schedule, notes และ vault reveal
-6. เพิ่ม external integration ใหม่เมื่อ core orchestration, permission model และ integration tests พร้อม
-7. ทบทวน legacy `User`/`Task` models และจัดทำ migration plan หากไม่ได้ใช้แล้ว
+1. ต่อ capability eval observation shape เข้ากับ live/model runner เพื่อวัด output จริงนอกเหนือจาก deterministic fixtures
+2. เพิ่ม integration/E2E coverage ให้หน้า Agent Trace ที่ `/traces` รวมถึง filter, empty state และสถานะ run ที่กำลังทำงาน
+3. เพิ่ม permission-aware tool scoping นอกเหนือจาก intent-based scoping ปัจจุบัน
+4. เพิ่ม E2E smoke test สำหรับ chat, schedule, notes และ vault reveal
+5. เพิ่ม external integration ใหม่เมื่อ core orchestration, permission model และ integration tests พร้อม
+6. ทบทวน legacy `User`/`Task` models และจัดทำ migration plan หากไม่ได้ใช้แล้ว
 
 ## จุดเริ่มอ่านโค้ด
 

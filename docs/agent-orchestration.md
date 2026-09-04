@@ -53,7 +53,9 @@ Raw tool arguments, tool output payloads, prompts, passwords, tokens, Vault data
 
 ## Evaluation
 
-The initial eval suite contains 50 Thai/English routing prompts. It reports intent and exact tool-selection accuracy. The framework also supports argument validity, confirmation-policy correctness, and execution success; these remain `null` until observations are supplied by integration or live-model eval runners.
+The routing suite contains 50 Thai/English prompts and reports intent plus exact tool-selection accuracy. A separate eight-case capability suite records expected tool arguments, confirmation behavior, and execution outcomes. Arguments are validated against the central Zod tool contracts and compared with the expected semantic fields; confirmation defaults to each contract's mutation policy. Live/model runners can provide the same observation shape without changing the scoring framework.
+
+API integration tests run against a fresh temporary SQLite database assembled from every checked-in migration. They exercise authenticated route handlers and real Prisma services for owner isolation, confirmation expiry, concurrent confirmation idempotency, and the three-attempt retry lifecycle of coding and chat-generation jobs.
 
 ## Compatibility
 

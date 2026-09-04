@@ -46,9 +46,13 @@ export async function createPendingAction(input: {
 }
 
 export async function resolvePendingAction(ownerKey: string, id: string, approved: boolean) {
-  const action = await prisma.pendingAction.findFirst({ where: { id, ownerKey, status: "PENDING", expiresAt: { gt: new Date() } } });
-  if (!action) return null;
-  return prisma.pendingAction.update({ where: { id }, data: { status: approved ? "APPROVED" : "DENIED", resolvedAt: new Date() } });
+  const resolvedAt = new Date();
+  const claimed = await prisma.pendingAction.updateMany({
+    where: { id, ownerKey, status: "PENDING", expiresAt: { gt: resolvedAt } },
+    data: { status: approved ? "APPROVED" : "DENIED", resolvedAt },
+  });
+  if (claimed.count !== 1) return null;
+  return prisma.pendingAction.findUnique({ where: { id } });
 }
 
 export async function executePendingAction(ownerKey: string, id: string, approved: boolean) {

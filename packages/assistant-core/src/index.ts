@@ -8,5 +8,6 @@ export type { DelegateCodingTaskInput } from "./tools/definitions";
 export { scopeToolsForMessage } from "./routing/toolScoper";
 export type { AgentIntent, ToolScope } from "./routing/toolScoper";
 export { evaluateAgentCases } from "./evals/framework";
-export type { AgentEvalCase, AgentEvalMetrics, AgentEvalObservation } from "./evals/framework";
+export type { AgentEvalCase, AgentEvalMetrics, AgentEvalObservation, AgentExpectedToolCall, AgentObservedToolCall } from "./evals/framework";
 export { routingEvalCases } from "./evals/routingCases";
+export { capabilityEvalCases, capabilityEvalObservations } from "./evals/capabilityCases";
