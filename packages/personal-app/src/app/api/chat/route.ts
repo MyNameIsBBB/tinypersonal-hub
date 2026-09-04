@@ -1,5 +1,5 @@
 import { google } from "@ai-sdk/google";
-import { createPendingAction, deleteChatSession, enqueueChatGenerationJob, ensureDailyGeneralChat, executeAllPendingActions, generateAndUpdateSessionTitle, getLatestCodingJob, getOrCreateChatSession, getScheduleByRange, listActiveRoutines, listChatSessions, loadChatMessages, recordAudit, saveAssistantChatMessageIfCurrent, scrapeWebPage, searchNotes, searchVaultMetadata, searchWeb, supersedePendingActions } from "@tinypersonal/backend-api";
+import { createPendingAction, deleteChatSession, enqueueChatGenerationJob, ensureDailyGeneralChat, executeAllPendingActions, generateAndUpdateSessionTitle, getLatestCodingJob, getOrCreateChatSession, getScheduleByRange, listActiveRoutines, listChatSessions, loadChatMessages, recordAudit, saveAssistantChatMessageIfCurrent, scrapeWebPage, searchNotes, searchVaultMetadata, searchWeb } from "@tinypersonal/backend-api";
 import { consumeStream, convertToModelMessages, createUIMessageStream, createUIMessageStreamResponse, isStepCount, streamText, tool, type UIMessage } from "ai";
 import { after } from "next/server";
 import { isCronAuthorizedRequest, isValidSessionToken, SESSION_COOKIE } from "@/lib/serverAuth";
@@ -474,7 +474,6 @@ export async function POST(request: Request) {
   }
 
   const userText = latestUserText(baseMessages);
-  await supersedePendingActions(ownerKey, session.id);
   if (asksForCodingStatus(userText)) {
     const job = await getLatestCodingJob(ownerKey, session.id);
     if (job?.status === "SUCCEEDED") {
@@ -526,7 +525,7 @@ export async function POST(request: Request) {
       deleteVaultSecret: deleteVaultMutationTool(ownerKey, session.id),
     },
     // Allow follow-up model steps after tool output so responses do not stop at finishReason=tool-calls.
-    stopWhen: isStepCount(3),
+    stopWhen: isStepCount(5),
   });
 
   const onPersistenceEnd = async ({ messages }: { messages: UIMessage[] }) => {

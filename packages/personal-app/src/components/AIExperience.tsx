@@ -11,7 +11,7 @@ import remarkMath from "remark-math";
 import { WorkspaceShell } from "@/components/WorkspaceShell";
 import { AppModal } from "@/components/AppModal";
 import { markChatSessionActive, registerChatTask } from "@/lib/chat/backgroundTasks";
-import { mergeServerMessages } from "@/lib/chat/ChatStreamHandler";
+import { hasRenderableMessageContent, mergeServerMessages } from "@/lib/chat/ChatStreamHandler";
 
 const suggestions = [
   { icon: CalendarPlus, text: "ตั้ง Routine วิ่งทุกวันจันทร์และพุธ 07:00 ถึงสิ้นเดือน" },
@@ -272,6 +272,11 @@ export function AIExperience({ mode = "chat" }: { mode?: "chat" | "os" }) {
 
   const latestProgressEvent = codingJobEvents.at(-1);
   const activeCodingJob = codingJob?.status === "QUEUED" || codingJob?.status === "RUNNING" ? codingJob : null;
+  const awaitingChatResponse = Boolean(
+    chatGenerationJob
+    && reloadedChatGenerationJobId.current !== chatGenerationJob.id
+    && (chatGenerationJob.status === "QUEUED" || chatGenerationJob.status === "RUNNING" || chatGenerationJob.status === "SUCCEEDED"),
+  );
 
   useEffect(() => { messagesRef.current = messages; }, [messages]);
 
@@ -629,16 +634,19 @@ export function AIExperience({ mode = "chat" }: { mode?: "chat" | "os" }) {
         if (Array.isArray(chatData.messages)) {
           const merged = mergeServerMessages(messagesRef.current, chatData.messages);
           messagesRef.current = merged;
-          reloadedChatGenerationJobId.current = data.job.id;
           setMessages(merged);
+          const completedMessage = merged.find(({ id }) => id === `chat-job-${data.job!.id}`);
+          if (hasRenderableMessageContent(completedMessage)) {
+            reloadedChatGenerationJobId.current = data.job.id;
+          }
         }
       }
     };
     void poll();
-    const interval = chatGenerationJob?.status === "RUNNING" ? 1_500 : chatGenerationJob?.status === "QUEUED" ? 2_500 : 30_000;
+    const interval = awaitingChatResponse ? 1_500 : 30_000;
     const timer = window.setInterval(() => void poll(), interval);
     return () => { cancelled = true; window.clearInterval(timer); };
-  }, [chatGenerationJob?.status, historyReady, sessionId, setMessages, status]);
+  }, [awaitingChatResponse, chatGenerationJob?.status, historyReady, sessionId, setMessages, status]);
 
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -870,7 +878,7 @@ export function AIExperience({ mode = "chat" }: { mode?: "chat" | "os" }) {
               </div>
             ) : (
               <>
-              {messages.map((message) => (
+              {messages.filter((message) => message.role !== "assistant" || hasRenderableMessageContent(message)).map((message) => (
                 <article className={`chat-message ${message.role}`} key={message.id}>
                   <div className="message-avatar">{message.role === "assistant" ? <Bot size={17} /> : "P"}</div>
                   <div>{renderMessageParts(message.parts, (actionId, approved) => void handleConfirmAction(actionId, approved))}</div>
@@ -879,8 +887,8 @@ export function AIExperience({ mode = "chat" }: { mode?: "chat" | "os" }) {
               </>
             )}
 
-            {(chatGenerationJob?.status === "QUEUED" || chatGenerationJob?.status === "RUNNING") && (
-              <div className="thinking" role="status"><LoaderCircle size={15} /> {chatGenerationJob.status === "QUEUED" ? "คำตอบอยู่ในคิวของเซิร์ฟเวอร์…" : "AI กำลังสร้างคำตอบที่เซิร์ฟเวอร์…"}</div>
+            {awaitingChatResponse && chatGenerationJob && (
+              <div className="thinking" role="status"><LoaderCircle size={15} /> {chatGenerationJob.status === "QUEUED" ? "คำตอบอยู่ในคิวของเซิร์ฟเวอร์…" : chatGenerationJob.status === "RUNNING" ? "AI กำลังสร้างคำตอบที่เซิร์ฟเวอร์…" : "AI กำลังส่งคำตอบ…"}</div>
             )}
 
             {activeCodingJob && (

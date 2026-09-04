@@ -55,6 +55,13 @@ export function latestUserText(messages: UIMessage[]) {
   return message?.parts.filter((part) => part.type === "text").map((part) => part.text).join(" ").trim() ?? "";
 }
 
+/** True only after an assistant placeholder has content the chat can display. */
+export function hasRenderableMessageContent(message: UIMessage | undefined) {
+  return Boolean(message?.parts.some((part) =>
+    part.type === "text" ? part.text.trim().length > 0 : true,
+  ));
+}
+
 /** Merge durable messages without dropping optimistic or still-streaming UI messages. */
 export function mergeServerMessages(local: UIMessage[], server: UIMessage[]) {
   const serverIds = new Set(server.map(({ id }) => id));

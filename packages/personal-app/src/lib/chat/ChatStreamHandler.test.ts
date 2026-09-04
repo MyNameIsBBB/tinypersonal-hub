@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { UIMessage } from "ai";
-import { confirmationDecision, mergeServerMessages, selectContextWindow } from "./ChatStreamHandler";
+import { confirmationDecision, hasRenderableMessageContent, mergeServerMessages, selectContextWindow } from "./ChatStreamHandler";
 
 describe("chat context window", () => {
   it("keeps a local message missing from a delayed server snapshot", () => {
@@ -19,6 +19,13 @@ describe("chat context window", () => {
     const local = [{ id: "chat-queued-job-1", role: "assistant", parts: [{ type: "text", text: "queued" }] }] as UIMessage[];
     const server = [{ id: "chat-job-job-1", role: "assistant", parts: [{ type: "text", text: "done" }] }] as UIMessage[];
     expect(mergeServerMessages(local, server).map(({ id }) => id)).toEqual(["chat-job-job-1"]);
+  });
+
+  it("distinguishes an empty job placeholder from a renderable response", () => {
+    const placeholder = { id: "chat-job-1", role: "assistant", parts: [{ type: "text", text: "" }] } as UIMessage;
+    const response = { ...placeholder, parts: [{ type: "text", text: "done" }] } as UIMessage;
+    expect(hasRenderableMessageContent(placeholder)).toBe(false);
+    expect(hasRenderableMessageContent(response)).toBe(true);
   });
 
   it("keeps at most 16 recent messages", () => {
