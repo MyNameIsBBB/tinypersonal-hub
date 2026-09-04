@@ -1,4 +1,4 @@
-import { claimCodingJob, completeCodingJob, delegateCodingTask, getLatestCodingJob, saveChatMessage, sendWebPushNotification, updateCodingJobProgress } from "@tinypersonal/backend-api";
+import { claimCodingJob, completeCodingJob, delegateCodingTask, getLatestCodingJob, saveChatMessage, sendWebPushNotification, updateCodingJobProgress, type CodingExecutionResult } from "@tinypersonal/backend-api";
 import { authorizedOwnerKey, isCronAuthorizedRequest } from "@/lib/serverAuth";
 
 export const maxDuration = 1800;
@@ -16,6 +16,33 @@ function codexSummary(logs: Array<{ command: string; stdout: string; stderr: str
   return (summary || log.stderr || "Codex completed without a textual summary").trim().slice(-12_000);
 }
 
+function structuredResult(
+  ok: boolean,
+  result: Awaited<ReturnType<typeof delegateCodingTask>> | undefined,
+  summary: string,
+): CodingExecutionResult {
+  const logs = result?.data.logs ?? [];
+  const status = [...logs].reverse().find((log) => log.command.includes("git status --porcelain"));
+  const filesChanged = (status?.stdout ?? "")
+    .split(/\r?\n/)
+    .map((line) => line.trim().slice(2).trim())
+    .filter(Boolean);
+  const passed = summary.match(/(?:Test Files\s+)?(\d+)\s+passed/iu);
+  const failed = summary.match(/(?:Test Files\s+)?(\d+)\s+failed/iu);
+  return {
+    status: ok ? "success" : "failed",
+    repo: process.env.HOST_JARVIS_PROJECT_ROOT ?? process.env.JARVIS_PROJECT_ROOT ?? "host-worker",
+    branch: result?.data.branch ?? null,
+    filesChanged,
+    tests: {
+      passed: passed ? Number(passed[1]) : null,
+      failed: failed ? Number(failed[1]) : null,
+    },
+    diffSummary: summary.slice(0, 12_000),
+    commit: null,
+  };
+}
+
 export async function GET(request: Request) {
   const ownerKey = authorizedOwnerKey(request);
   const sessionId = new URL(request.url).searchParams.get("sessionId");
@@ -30,21 +57,28 @@ export async function POST(request: Request) {
   let ok = false;
   let responseText: string;
   let result: Awaited<ReturnType<typeof delegateCodingTask>> | undefined;
+  let summary = "";
   try {
     result = await delegateCodingTask(JSON.parse(job.inputJson), (progress) => {
       void updateCodingJobProgress(job.id, progress);
     });
     ok = result.ok;
     if (result.ok) {
-      const summary = codexSummary(result.data.logs);
+      summary = codexSummary(result.data.logs);
       responseText = `Codex ทำงานเสร็จแล้วครับ\n\nBranch: ${result.data.branch}\n\n${summary}`;
     } else {
       responseText = `Codex ทำงานไม่สำเร็จครับ: ${result.error.message}`;
     }
   } catch (error) {
     responseText = `Codex worker ขัดข้องครับ: ${error instanceof Error ? error.message : "Unknown error"}`;
+    summary = responseText;
   }
-  const completed = await completeCodingJob(job.id, { ok, result, ...(!ok && { error: responseText }) });
+  if (!summary) summary = responseText;
+  const completed = await completeCodingJob(job.id, {
+    ok,
+    result: structuredResult(ok, result, summary),
+    ...(!ok && { error: responseText }),
+  });
   if (completed.status === "QUEUED") return Response.json({ ok: false, retrying: true, jobId: job.id });
   await saveChatMessage(job.ownerKey, job.sessionId, { id: `coding-job-${job.id}`, role: "assistant", parts: [{ type: "text", text: responseText }] });
   await sendWebPushNotification(ok ? "Codex ทำงานเสร็จแล้ว" : "งาน Codex มีปัญหา", ok ? "แตะเพื่อเปิดผลลัพธ์ในแชท" : responseText.slice(0, 180), `/ai?sessionId=${encodeURIComponent(job.sessionId)}`, job.ownerKey);

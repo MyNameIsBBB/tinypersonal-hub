@@ -237,3 +237,26 @@ model AuditLog {
   @@index([actorId, createdAt])
   @@index([action, createdAt])
 }
+
+model AgentRunTrace {
+  id               String   @id @default(cuid())
+  ownerKey         String
+  sessionId        String
+  userMessageId    String
+  intent           String
+  contextJson      String   @default("[]")
+  allowedToolsJson String   @default("[]")
+  model            String
+  status           String   @default("RUNNING")
+  toolCallsJson    String   @default("[]")
+  finalResponse    String?
+  durationMs       Int?
+  error            String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  completedAt      DateTime?
+
+  @@index([ownerKey, createdAt])
+  @@index([sessionId, createdAt])
+  @@index([status, createdAt])
+}

@@ -1,6 +1,12 @@
 export { createAgentConfig } from "./orchestrator";
 export type { PromptContext } from "./prompts/base";
-export type { ToolName } from "./tools";
+export { defineTool, toolContracts } from "./tools/definitions";
+export type { ToolContract, ToolName } from "./tools/definitions";
 export * from "./contracts";
-export { delegateCodingTaskInputSchema } from "./tools/jarvis";
-export type { DelegateCodingTaskInput } from "./tools/jarvis";
+export { delegateCodingTaskInputSchema } from "./tools/definitions";
+export type { DelegateCodingTaskInput } from "./tools/definitions";
+export { scopeToolsForMessage } from "./routing/toolScoper";
+export type { AgentIntent, ToolScope } from "./routing/toolScoper";
+export { evaluateAgentCases } from "./evals/framework";
+export type { AgentEvalCase, AgentEvalMetrics, AgentEvalObservation } from "./evals/framework";
+export { routingEvalCases } from "./evals/routingCases";
