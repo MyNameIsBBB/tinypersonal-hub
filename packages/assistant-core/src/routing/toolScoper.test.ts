@@ -6,7 +6,10 @@ describe("scopeToolsForMessage", () => {
     ["พรุ่งนี้มีอะไรบ้าง", "schedule.query", ["getSchedule"]],
     ["สรุป ตอนนี้เราต้องส่งผ้าวันไหนบ้าง", "schedule.query", ["getSchedule"]],
     ["ดูวันหน่อย สรุป เราต้องส่งผ้า วันไหนบ้าง", "schedule.query", ["getSchedule"]],
+    ["แล้วสรุปงาน สัปดาหน้าทั้งหมดมาหน่อย", "schedule.query", ["getSchedule"]],
     ["เพิ่มเรียน ADT พรุ่งนี้ 9 โมง", "schedule.mutate", ["getSchedule", "createScheduleItem"]],
+    ["เพิ่มวันที่ 12 มี deadline SDKU Devops", "schedule.mutate", ["getSchedule", "createScheduleItem"]],
+    ["เพิ่มนัดวันที่ 12 มี deadline งาน SDKU Devops", "schedule.mutate", ["getSchedule", "createScheduleItem"]],
     ["เลื่อนนัดหมอเป็นบ่ายสอง", "schedule.mutate", ["getSchedule", "updateTaskStatus", "updateScheduleItem"]],
     ["ลบ routine ออก", "schedule.mutate", ["getSchedule", "updateTaskStatus", "deleteRoutine"]],
     ["หาโน้ต TinyPersonal", "notes.query", ["searchNotes"]],
@@ -25,8 +28,31 @@ describe("scopeToolsForMessage", () => {
 
   it("unions tools for an explicit multi-domain request", () => {
     const scope = scopeToolsForMessage("หาโน้ตแผนเที่ยวแล้วค้นเว็บข่าวล่าสุดด้วย");
-    expect(scope.intents).toEqual(["notes.query", "web.query"]);
-    expect(scope.allowedTools).toEqual(["searchNotes", "searchWeb"]);
+    expect(scope.intents).toEqual(["web.query", "notes.query"]);
+    expect(scope.allowedTools).toEqual(["searchWeb", "searchNotes"]);
+  });
+
+  it("keeps coding terms inside note content from hijacking the note action", () => {
+    const scope = scopeToolsForMessage("จดโน้ตไว้ว่า repo นี้ deploy ไม่ผ่าน");
+    expect(scope.primaryIntent).toBe("notes.mutate");
+    expect(scope.allowedTools).toEqual(["searchNotes", "createNote"]);
+  });
+
+  it("uses domain-aware mutation phrases for historical queries", () => {
+    expect(scopeToolsForMessage("โน้ตที่แก้ไขเมื่อวานอยู่ไหน")).toMatchObject({
+      primaryIntent: "notes.query",
+      allowedTools: ["searchNotes"],
+    });
+    expect(scopeToolsForMessage("งานที่ยกเลิกไปมีอะไรบ้าง")).toMatchObject({
+      primaryIntent: "schedule.query",
+      allowedTools: ["getSchedule"],
+    });
+  });
+
+  it("scores a web-to-note dependency in execution order", () => {
+    const scope = scopeToolsForMessage("ค้นเว็บแล้วจดเป็นโน้ตให้หน่อย");
+    expect(scope.intents).toEqual(["web.query", "notes.mutate"]);
+    expect(scope.allowedTools).toEqual(["searchWeb", "searchNotes", "createNote"]);
   });
 
   it("keeps source-code requests out of live workspace domains", () => {
@@ -39,13 +65,20 @@ describe("scopeToolsForMessage", () => {
     expect(scopeToolsForConversation([
       "สรุป ตอนนี้เราต้องส่งผ้าวันไหนบ้าง",
       "เอ่า หาย",
-    ])).toMatchObject({ primaryIntent: "schedule.query", allowedTools: ["getSchedule"], confidence: 0.8 });
+    ])).toMatchObject({ primaryIntent: "schedule.query", allowedTools: ["getSchedule"], confidence: 0.51 });
     expect(scopeToolsForConversation(["พรุ่งนี้มีอะไร", "ขอบคุณครับ"]).primaryIntent).toBe("general.response");
   });
 
   it("requires fresh data for read intents but not general responses", () => {
-    expect(requiredFirstTool(scopeToolsForMessage("สรุป ตอนนี้เราต้องส่งผ้าวันไหนบ้าง"))).toBe("getSchedule");
-    expect(requiredFirstTool(scopeToolsForMessage("หาโน้ต TinyPersonal"))).toBe("searchNotes");
+    expect(requiredFirstTool(scopeToolsForMessage("สรุป ตอนนี้เราต้องส่งผ้าวันไหนบ้าง"))).toMatchObject({ tool: "getSchedule" });
+    expect(requiredFirstTool(scopeToolsForMessage("หาโน้ต TinyPersonal"))).toMatchObject({ tool: "searchNotes" });
     expect(requiredFirstTool(scopeToolsForMessage("สวัสดี"))).toBeNull();
+  });
+
+  it("extracts deterministic arguments for an explicit URL", () => {
+    expect(requiredFirstTool(
+      scopeToolsForMessage("อ่าน https://example.com/docs"),
+      "อ่าน https://example.com/docs",
+    )).toMatchObject({ tool: "fetchWebPage", args: { url: "https://example.com/docs" } });
   });
 });

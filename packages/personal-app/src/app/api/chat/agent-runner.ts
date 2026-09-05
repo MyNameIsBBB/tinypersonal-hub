@@ -48,7 +48,7 @@ export async function runChatAgent(input: RunAgentInput) {
       .join(" ")
       .trim());
   const scope = scopeToolsForConversation(userTurns);
-  const requiredTool = requiredFirstTool(scope);
+  const requiredTool = requiredFirstTool(scope, input.userText);
   let executedToolCount = 0;
   const agent = createAgentConfig(
     { locale: "th-TH", timezone: "Asia/Bangkok" },
@@ -66,6 +66,8 @@ export async function runChatAgent(input: RunAgentInput) {
       intents: scope.intents,
       availableTools: scope.allowedTools,
       scopeConfidence: scope.confidence,
+      requiredTool: requiredTool?.tool,
+      requiredToolReason: requiredTool?.reason,
       routing: "gemini",
       messageCount: input.baseMessages.length,
     },
@@ -108,7 +110,7 @@ export async function runChatAgent(input: RunAgentInput) {
     tools: createChatTools(input.ownerKey, input.sessionId, input.userText, scope.allowedTools),
     stopWhen: isStepCount(3),
     prepareStep: ({ stepNumber }) => stepNumber === 0 && requiredTool
-      ? { toolChoice: { type: "tool", toolName: requiredTool } }
+      ? { toolChoice: { type: "tool", toolName: requiredTool.tool } }
       : { toolChoice: "auto" },
     onError: async ({ error }) => {
       await failTraceOnce(error);
@@ -155,7 +157,7 @@ export async function runChatAgent(input: RunAgentInput) {
     },
     onEnd: async (event) => {
       if (requiredTool && executedToolCount === 0) {
-        await failTraceOnce(new Error(`Required tool ${requiredTool} was not executed`));
+        await failTraceOnce(new Error(`Required tool ${requiredTool.tool} was not executed`));
       }
       await persistOnEnd(event);
     },
