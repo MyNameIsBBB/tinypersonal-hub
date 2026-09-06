@@ -18,6 +18,14 @@ route.ts
 
 Tool contracts have one source of truth in `packages/assistant-core/src/tools/definitions.ts`. Each contract owns its public name, description, Zod input schema, mutation classification, and backend command. Executable adapters import those contracts and only add execution behavior.
 
+## Conversation state
+
+Each chat session stores a bounded, validated conversation-state document. It tracks the active intent/domain/tool, missing fields, the most recently referenced entity, up to 20 recent entity references, and a pending confirmation ID. Tool results update this state with real schedule, note, or Vault record IDs; confirmation and cancellation clear the pending ID.
+
+State is consulted before deterministic routing for short contextual turns such as a time-only answer, "อันแรก", "อันเมื่อกี้", or a change/delete reference. It supplies context but never bypasses tool input validation, mutation confirmation, or backend authorization.
+
+When state-aware deterministic routing remains below `0.9` confidence, a small Gemini structured-output call classifies only domain and action. The classifier receives no tools and cannot execute an operation. Its validated result is converted to a fixed application-owned tool scope; classifier failure falls back to the deterministic decision.
+
 ## Tool scoping
 
 `scopeToolsForMessage` performs deterministic, conservative first-pass routing:
@@ -28,6 +36,7 @@ Tool contracts have one source of truth in `packages/assistant-core/src/tools/de
 - Explicit multi-domain requests receive the union of those scoped tools.
 - Coding requests receive only Codex delegation; coding status remains a controller fast path.
 - Short explicit retry/follow-up messages may inherit the most recent recognized domain; unrelated general replies do not inherit tools.
+- Contextual turns first use persisted session state; regex history remains a conservative compatibility fallback.
 - Read intents for schedules, notes, Vault metadata, and web data force their scoped read tool in the first model step. Later steps return to automatic selection so the model can summarize the fresh result.
 
 The scope decision is recorded in both `AuditLog` and `AgentRunTrace`. Adding a tool requires updating its contract, scoping policy, and routing eval cases.

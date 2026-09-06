@@ -3,7 +3,7 @@ export { claimCodingJob, completeCodingJob, enqueueCodingJob, getLatestCodingJob
 export { codingExecutionResultSchema } from "./services/codingJobService";
 export type { CodingExecutionResult } from "./services/codingJobService";
 export { claimChatGenerationJob, completeChatGenerationJob, enqueueChatGenerationJob, getLatestChatGenerationJob, saveUserMessageAndEnqueueChatGeneration } from "./services/chatGenerationJobService";
-export { createChatSession, deleteChatSession, ensureDailyGeneralChat, generateAndUpdateSessionTitle, GENERAL_CHAT_TITLE, getOrCreateChatSession, listChatSessions, loadChatMessages, replaceChatMessages, resetAllGeneralChats, saveAssistantChatMessageIfCurrent, saveChatMessage, saveUserChatMessage, updateChatSessionSystemPrompt } from "./services/chatService";
+export { clearConversationPendingAction, createChatSession, deleteChatSession, ensureDailyGeneralChat, generateAndUpdateSessionTitle, GENERAL_CHAT_TITLE, getOrCreateChatSession, listChatSessions, loadChatMessages, loadConversationState, replaceChatMessages, resetAllGeneralChats, saveAssistantChatMessageIfCurrent, saveChatMessage, saveConversationState, saveUserChatMessage, updateChatSessionSystemPrompt } from "./services/chatService";
 export type { StoredChatMessage } from "./services/chatService";
 export { createPendingAction, executeAllPendingActions, executeLatestPendingAction, executePendingAction, recordAudit, resolvePendingAction, supersedePendingActions } from "./services/auditService";
 export { appendAgentToolTraces, completeAgentRunTrace, createAgentRunTrace, describeAgentError, failAgentRunTrace, getAgentRunTrace, listAgentRunTraces } from "./services/agentTraceService";

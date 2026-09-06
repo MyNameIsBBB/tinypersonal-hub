@@ -5,8 +5,20 @@ import {
   describeAgentError,
   failAgentRunTrace,
   recordAudit,
+  saveConversationState,
 } from "@tinypersonal/backend-api";
-import { createAgentConfig, requiredFirstTool, scopeToolsForConversation } from "@tinypersonal/assistant-core";
+import {
+  conversationStateSchema,
+  createAgentConfig,
+  requiredFirstTool,
+  resolveConversationReference,
+  routeWithState,
+  scopeToolsForMessage,
+  stateAfterToolResult,
+  stateFromScope,
+  type ConversationState,
+  type ToolName,
+} from "@tinypersonal/assistant-core";
 import {
   convertToModelMessages,
   createUIMessageStreamResponse,
@@ -18,6 +30,7 @@ import { after } from "next/server";
 import { selectContextWindow } from "@/lib/chat/ChatStreamHandler";
 import { buildAgentContext } from "./context-builder";
 import { createChatTools } from "./tool-adapter-factory";
+import { classifyIntentWithGemini } from "./intent-classifier";
 import {
   consumePersistenceStream,
   createPersistenceEndHandler,
@@ -34,20 +47,33 @@ type RunAgentInput = {
   customSystemPrompt: string | null;
   voiceMode?: boolean;
   visionContext?: { currentUrl: string; title: string };
+  conversationState?: unknown;
 };
 
 export async function runChatAgent(input: RunAgentInput) {
   const startedAt = Date.now();
   let traceFailed = false;
   const modelName = process.env.GEMINI_MODEL ?? "gemini-3.5-flash-lite";
-  const userTurns = input.baseMessages
-    .filter(({ role }) => role === "user")
-    .map(({ parts }) => parts
-      .filter((part) => part.type === "text")
-      .map((part) => part.text)
-      .join(" ")
-      .trim());
-  const scope = scopeToolsForConversation(userTurns);
+  const parsedState = conversationStateSchema.safeParse(input.conversationState);
+  let conversationState: ConversationState | null = parsedState.success ? parsedState.data : null;
+  conversationState = resolveConversationReference(conversationState, input.userText);
+  const deterministicScope = routeWithState(
+    input.userText,
+    scopeToolsForMessage(input.userText),
+    conversationState,
+  );
+  const classifierScope = deterministicScope.confidence < 0.9
+    ? await classifyIntentWithGemini({
+        message: input.userText,
+        state: conversationState,
+        deterministicScope,
+      })
+    : null;
+  const scope = classifierScope ?? deterministicScope;
+  conversationState = stateFromScope(scope, conversationState);
+  if (conversationState) {
+    await saveConversationState(input.ownerKey, input.sessionId, conversationState);
+  }
   const requiredTool = requiredFirstTool(scope, input.userText);
   let executedToolCount = 0;
   const agent = createAgentConfig(
@@ -68,6 +94,7 @@ export async function runChatAgent(input: RunAgentInput) {
       scopeConfidence: scope.confidence,
       requiredTool: requiredTool?.tool,
       requiredToolReason: requiredTool?.reason,
+      classifierUsed: Boolean(classifierScope),
       routing: "gemini",
       messageCount: input.baseMessages.length,
     },
@@ -75,8 +102,10 @@ export async function runChatAgent(input: RunAgentInput) {
 
   const context = await buildAgentContext({
     intents: scope.intents,
+    ownerKey: input.ownerKey,
     sessionId: input.sessionId,
     userText: input.userText,
+    conversationState,
     visionContext: input.visionContext,
   });
   const trace = await createAgentRunTrace({
@@ -138,6 +167,16 @@ export async function runChatAgent(input: RunAgentInput) {
         at: new Date().toISOString(),
       }]);
       if (isError) await failTraceOnce(toolError);
+      if (!isError && scope.allowedTools.includes(toolCall.toolName as ToolName)) {
+        conversationState = stateAfterToolResult(
+          conversationState,
+          toolCall.toolName as ToolName,
+          outputRecord,
+        );
+        if (conversationState) {
+          await saveConversationState(input.ownerKey, input.sessionId, conversationState);
+        }
+      }
     },
   });
 

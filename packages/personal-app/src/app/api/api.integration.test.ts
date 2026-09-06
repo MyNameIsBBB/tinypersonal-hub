@@ -4,8 +4,11 @@ import {
   claimCodingJob,
   completeChatGenerationJob,
   completeCodingJob,
+  createChatSession,
   createPendingAction,
+  loadConversationState,
   prisma,
+  saveConversationState,
 } from "@tinypersonal/backend-api";
 import { createSessionToken, SESSION_COOKIE } from "../../lib/serverAuth";
 import { GET as listSessions, PATCH as updateSession, POST as createSession } from "./chat/sessions/route";
@@ -74,6 +77,20 @@ describe("API authentication and owner isolation", () => {
     expect(crossOwnerUpdate.status).toBe(404);
     await expect(prisma.chatSession.findUniqueOrThrow({ where: { id: bobSession.id } }))
       .resolves.toMatchObject({ customSystemPrompt: null });
+  });
+
+  it("persists conversation state only for the owning session", async () => {
+    const session = await createChatSession(aliceOwner);
+    const state = {
+      activeIntent: "schedule.query",
+      activeDomain: "schedule",
+      activeTool: "getSchedule",
+      updatedAt: new Date().toISOString(),
+    };
+    await expect(saveConversationState(aliceOwner, session.id, state)).resolves.toBe(true);
+    await expect(loadConversationState(aliceOwner, session.id)).resolves.toEqual(state);
+    await expect(loadConversationState(bobOwner, session.id)).resolves.toBeNull();
+    await expect(saveConversationState(bobOwner, session.id, state)).resolves.toBe(false);
   });
 });
 

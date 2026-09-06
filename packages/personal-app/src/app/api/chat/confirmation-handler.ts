@@ -1,4 +1,4 @@
-import { executeAllPendingActions } from "@tinypersonal/backend-api";
+import { clearConversationPendingAction, executeAllPendingActions } from "@tinypersonal/backend-api";
 import { directTextResponse } from "./response-stream";
 
 export async function handleConfirmation(
@@ -11,6 +11,7 @@ export async function handleConfirmation(
   let responseText: string;
   try {
     const executions = await executeAllPendingActions(ownerKey, sessionId, approved);
+    await clearConversationPendingAction(ownerKey, sessionId);
     if (executions.length === 0) {
       responseText = "ไม่มีรายการที่รอการยืนยันครับ กรุณาส่งคำสั่งที่ต้องการอีกครั้ง";
     } else if (!approved) {

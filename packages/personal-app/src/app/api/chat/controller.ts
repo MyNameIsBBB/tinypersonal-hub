@@ -6,6 +6,7 @@ import {
   getOrCreateChatSession,
   listChatSessions,
   loadChatMessages,
+  loadConversationState,
 } from "@tinypersonal/backend-api";
 import { chatRequestSchema } from "@tinypersonal/assistant-core";
 import type { UIMessage } from "ai";
@@ -154,5 +155,6 @@ export async function handlePostChat(request: Request) {
     customSystemPrompt: session.customSystemPrompt,
     voiceMode: payload.voiceMode,
     visionContext: payload.visionContext,
+    conversationState: await loadConversationState(ownerKey, session.id),
   });
 }

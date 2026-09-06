@@ -1,5 +1,5 @@
-import type { AgentIntent } from "@tinypersonal/assistant-core";
-import { searchNotes } from "@tinypersonal/backend-api";
+import type { AgentIntent, ConversationState } from "@tinypersonal/assistant-core";
+import { getLatestCodingJob, searchNotes } from "@tinypersonal/backend-api";
 
 export type ContextSource =
   | "session"
@@ -25,10 +25,12 @@ export type AgentContextItem = {
 
 type BuildContextInput = {
   intents: AgentIntent[];
+  ownerKey: string;
   sessionId: string;
   now?: Date;
   visionContext?: { currentUrl: string; title: string };
   userText: string;
+  conversationState?: ConversationState | null;
 };
 
 function bangkokDateTime(now: Date) {
@@ -86,6 +88,18 @@ export async function buildAgentContext(input: BuildContextInput) {
     },
   ];
 
+  if (input.conversationState) {
+    items.push({
+      source: "recent-conversation",
+      entity: "conversation-state",
+      value: JSON.stringify(input.conversationState),
+      relevance: 1,
+      confidence: 1,
+      updatedAt: input.conversationState.updatedAt,
+      sensitivity: "private",
+    });
+  }
+
   if (input.visionContext) {
     items.push({
       source: "session",
@@ -109,6 +123,34 @@ export async function buildAgentContext(input: BuildContextInput) {
       updatedAt: note.updatedAt.toISOString(),
       sensitivity: "private",
     })));
+  }
+
+  if (input.intents.some((intent) => intent === "notes.query" || intent === "notes.mutate")) {
+    const recentNotes = await searchNotes("", 5);
+    items.push(...recentNotes.map((note, index): AgentContextItem => ({
+      source: "notes",
+      entity: `recent-note:${note.id}`,
+      value: JSON.stringify({ id: note.id, title: note.title, folder: note.folder, tags: note.tags }),
+      relevance: Math.max(0.55, 0.8 - index * 0.05),
+      confidence: 1,
+      updatedAt: note.updatedAt.toISOString(),
+      sensitivity: "private",
+    })));
+  }
+
+  if (input.intents.includes("coding.delegate")) {
+    const job = await getLatestCodingJob(input.ownerKey, input.sessionId);
+    if (job) {
+      items.push({
+        source: "projects",
+        entity: `recent-coding-job:${job.id}`,
+        value: JSON.stringify({ id: job.id, status: job.status, updatedAt: job.updatedAt }),
+        relevance: 0.8,
+        confidence: 1,
+        updatedAt: job.updatedAt.toISOString(),
+        sensitivity: "private",
+      });
+    }
   }
 
   return {
