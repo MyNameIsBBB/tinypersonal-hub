@@ -176,6 +176,7 @@ model PendingAction {
   sessionId   String?
   toolName    String
   argumentsJson String
+  dedupeKey   String?
   summary     String
   status      String   @default("PENDING")
   expiresAt   DateTime

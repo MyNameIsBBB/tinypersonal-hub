@@ -75,6 +75,8 @@ describe("chat context window", () => {
 describe("confirmationDecision", () => {
   it("recognizes concise approval and denial replies", () => {
     expect(confirmationDecision("ยืนยันครับ")).toBe(true);
+    expect(confirmationDecision("โอเค ยืนยัน")).toBe(true);
+    expect(confirmationDecision("โอเคครับ ยืนยันเลยครับ")).toBe(true);
     expect(confirmationDecision("เอาเลย")).toBe(true);
     expect(confirmationDecision("ยกเลิก")).toBe(false);
     expect(confirmationDecision("cancel please")).toBeNull();

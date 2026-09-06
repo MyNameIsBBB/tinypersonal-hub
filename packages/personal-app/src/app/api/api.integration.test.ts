@@ -95,6 +95,29 @@ describe("API authentication and owner isolation", () => {
 });
 
 describe("confirmation expiry, owner isolation, and idempotency", () => {
+  it("deduplicates identical pending actions within one session", async () => {
+    const session = await createChatSession(aliceOwner);
+    const input = {
+      ownerKey: aliceOwner,
+      sessionId: session.id,
+      toolName: "schedule.create",
+      arguments: {
+        title: `${runId}-SDKU`,
+        type: "EVENT",
+        startTime: "2026-09-12T02:00:00.000Z",
+        endTime: "2026-09-12T02:30:00.000Z",
+      },
+      summary: "Create SDKU deadline",
+    };
+    const first = await createPendingAction(input);
+    const duplicate = await createPendingAction(input);
+
+    expect(duplicate.id).toBe(first.id);
+    await expect(prisma.pendingAction.count({
+      where: { ownerKey: aliceOwner, sessionId: session.id, status: "PENDING" },
+    })).resolves.toBe(1);
+  });
+
   it("rejects expired and cross-owner confirmations", async () => {
     const expired = await prisma.pendingAction.create({ data: {
       ownerKey: aliceOwner,

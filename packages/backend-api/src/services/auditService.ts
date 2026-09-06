@@ -4,6 +4,7 @@ import { createScheduleItem, deleteOrCancelRoutine, updateScheduleItem, updateSc
 import { createVaultSecret, deleteVaultSecret, updateVaultMetadata } from "./vaultService";
 import { decryptSecret, encryptSecret } from "../security/vaultCrypto";
 import { enqueueCodingJob } from "./codingJobService";
+import { createHash } from "node:crypto";
 
 function safeMetadata(metadata: Record<string, unknown>): string {
   const sanitized = Object.fromEntries(Object.entries(metadata).filter(([key]) =>
@@ -32,17 +33,62 @@ export async function createPendingAction(input: {
   ownerKey: string; sessionId?: string; toolName: string; arguments: unknown; summary: string; sensitive?: boolean;
 }) {
   const id = crypto.randomUUID();
+  const plainArgumentsJson = JSON.stringify(input.arguments);
+  const dedupeKey = input.sensitive || !input.sessionId
+    ? null
+    : createHash("sha256").update(`${input.toolName}\0${plainArgumentsJson}`).digest("hex");
   const argumentsJson = input.sensitive
     ? JSON.stringify({ sealed: encryptSecret(JSON.stringify(input.arguments), `pending:${id}`) })
-    : JSON.stringify(input.arguments);
-  const action = await prisma.pendingAction.create({ data: {
-    id,
-    ownerKey: input.ownerKey, sessionId: input.sessionId, toolName: input.toolName,
-    argumentsJson, summary: input.summary.slice(0, 500),
-    expiresAt: new Date(Date.now() + 15 * 60_000),
-  } });
+    : plainArgumentsJson;
+  if (dedupeKey) {
+    await prisma.pendingAction.updateMany({
+      where: {
+        ownerKey: input.ownerKey,
+        sessionId: input.sessionId,
+        toolName: input.toolName,
+        dedupeKey,
+        status: "PENDING",
+        expiresAt: { lte: new Date() },
+      },
+      data: { status: "DENIED", resolvedAt: new Date() },
+    });
+    const existing = await prisma.pendingAction.findFirst({
+      where: {
+        ownerKey: input.ownerKey,
+        sessionId: input.sessionId,
+        toolName: input.toolName,
+        dedupeKey,
+        status: "PENDING",
+        expiresAt: { gt: new Date() },
+      },
+    });
+    if (existing) return existing;
+  }
+  let action;
+  try {
+    action = await prisma.pendingAction.create({ data: {
+      id,
+      ownerKey: input.ownerKey, sessionId: input.sessionId, toolName: input.toolName,
+      argumentsJson, dedupeKey, summary: input.summary.slice(0, 500),
+      expiresAt: new Date(Date.now() + 15 * 60_000),
+    } });
+  } catch (error) {
+    if (!dedupeKey || !error || typeof error !== "object" || !("code" in error) || error.code !== "P2002") throw error;
+    const racedAction = await prisma.pendingAction.findFirst({
+      where: { ownerKey: input.ownerKey, sessionId: input.sessionId, toolName: input.toolName, dedupeKey, status: "PENDING" },
+    });
+    if (!racedAction) throw error;
+    return racedAction;
+  }
   await recordAudit({ actorId: input.ownerKey, action: input.toolName, targetType: "PendingAction", targetId: action.id, status: "REQUESTED", metadata: { summary: input.summary, sessionId: input.sessionId } });
   return action;
+}
+
+export async function hasPendingActions(ownerKey: string, sessionId: string): Promise<boolean> {
+  return Boolean(await prisma.pendingAction.findFirst({
+    where: { ownerKey, sessionId, status: "PENDING", expiresAt: { gt: new Date() } },
+    select: { id: true },
+  }));
 }
 
 export async function resolvePendingAction(ownerKey: string, id: string, approved: boolean) {

@@ -4,6 +4,7 @@ import {
   ensureDailyGeneralChat,
   getLatestCodingJob,
   getOrCreateChatSession,
+  hasPendingActions,
   listChatSessions,
   loadChatMessages,
   loadConversationState,
@@ -105,7 +106,7 @@ export async function handlePostChat(request: Request) {
   baseMessages = baseMessages.slice(0, triggerIndex + 1);
   const responseMessageId = `chat-job-${internalWorker.jobId}`;
   const decision = confirmationDecision(latestUserText(baseMessages));
-  if (decision !== null) {
+  if (decision !== null && await hasPendingActions(ownerKey, session.id)) {
     return handleConfirmation(
       ownerKey,
       session.id,

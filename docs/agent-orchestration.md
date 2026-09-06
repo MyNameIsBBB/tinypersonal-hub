@@ -24,6 +24,8 @@ Each chat session stores a bounded, validated conversation-state document. It tr
 
 State is consulted before deterministic routing for short contextual turns such as a time-only answer, "อันแรก", "อันเมื่อกี้", or a change/delete reference. It supplies context but never bypasses tool input validation, mutation confirmation, or backend authorization.
 
+Confirmation phrases are intercepted only when the session has a live pending action. Natural variants such as "โอเค ยืนยัน" are accepted, and identical non-sensitive pending actions are deduplicated per session with a database-enforced partial unique key so retries cannot create duplicate side effects.
+
 When state-aware deterministic routing remains below `0.9` confidence, a small Gemini structured-output call classifies only domain and action. The classifier receives no tools and cannot execute an operation. Its validated result is converted to a fixed application-owned tool scope; classifier failure falls back to the deterministic decision.
 
 ## Tool scoping
