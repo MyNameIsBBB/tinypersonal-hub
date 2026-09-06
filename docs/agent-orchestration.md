@@ -18,6 +18,8 @@ route.ts
 
 Tool contracts have one source of truth in `packages/assistant-core/src/tools/definitions.ts`. Each contract owns its public name, description, Zod input schema, mutation classification, and backend command. Executable adapters import those contracts and only add execution behavior.
 
+Task Management v1 is documented in `docs/task-management.md`. Tasks use their own owner-scoped model and checklist table; they are not new `ScheduleItem` records.
+
 ## Conversation state
 
 Each chat session stores a bounded, validated conversation-state document. It tracks the active intent/domain/tool, missing fields, the most recently referenced entity, up to 20 recent entity references, and a pending confirmation ID. Tool results update this state with real schedule, note, or Vault record IDs; confirmation and cancellation clear the pending ID.

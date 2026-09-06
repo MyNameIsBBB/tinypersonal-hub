@@ -6,9 +6,13 @@ import {
   completeCodingJob,
   createChatSession,
   createPendingAction,
+  createTask,
+  getTasks,
+  getTask,
   loadConversationState,
   prisma,
   saveConversationState,
+  updateTaskChecklistItem,
 } from "@tinypersonal/backend-api";
 import { createSessionToken, SESSION_COOKIE } from "../../lib/serverAuth";
 import { GET as listSessions, PATCH as updateSession, POST as createSession } from "./chat/sessions/route";
@@ -41,9 +45,25 @@ afterAll(async () => {
   await prisma.chatMessage.deleteMany({ where: { session: { ownerKey: { in: [aliceOwner, bobOwner] } } } });
   await prisma.chatSession.deleteMany({ where: { ownerKey: { in: [aliceOwner, bobOwner] } } });
   await prisma.note.deleteMany({ where: { title: { startsWith: runId } } });
+  await prisma.task.deleteMany({ where: { ownerKey: { in: [aliceOwner, bobOwner] } } });
 });
 
 describe("API authentication and owner isolation", () => {
+  it("creates an owner-scoped task and its checklist atomically", async () => {
+    const task = await createTask(aliceOwner, {
+      title: `${runId}-EGAT`,
+      deadline: "2026-09-15T23:59:00+07:00",
+      requirements: "infographic A4 and prototype",
+      checklist: ["แยก requirement", "ทำ UI", "test"],
+    });
+    expect(task.checklistItems.map(({ title }) => title)).toEqual(["แยก requirement", "ทำ UI", "test"]);
+    await updateTaskChecklistItem(aliceOwner, { taskId: task.id, id: task.checklistItems[0].id, isCompleted: true });
+    const updated = await getTask(aliceOwner, { id: task.id });
+    expect(updated?.checklistItems[0]).toMatchObject({ title: "แยก requirement", isCompleted: true });
+    await expect(getTasks(bobOwner, { query: `${runId}-EGAT` })).resolves.toEqual([]);
+    await expect(getTasks(aliceOwner, { query: `${runId}-EGAT` })).resolves.toHaveLength(1);
+  });
+
   it("rejects missing and invalid authentication", async () => {
     const missing = await listSessions(new Request("http://localhost/api/chat/sessions"));
     const invalid = await listSessions(new Request("http://localhost/api/chat/sessions", {
@@ -95,6 +115,25 @@ describe("API authentication and owner isolation", () => {
 });
 
 describe("confirmation expiry, owner isolation, and idempotency", () => {
+  it("creates one task with its checklist after confirmation", async () => {
+    const session = await createChatSession(aliceOwner);
+    const title = `${runId}-confirmed-task`;
+    const action = await createPendingAction({
+      ownerKey: aliceOwner,
+      sessionId: session.id,
+      toolName: "task.create",
+      arguments: { title, checklist: ["ออกแบบ", "ทำ UI", "ทดสอบ"] },
+      summary: `สร้าง Task: ${title}`,
+    });
+    const response = await confirmAction(decisionRequest(action.id, `${runId}-alice`), {
+      params: Promise.resolve({ id: action.id }),
+    });
+    expect(response.status).toBe(200);
+    await expect(getTasks(aliceOwner, { query: title })).resolves.toMatchObject([
+      { title, checklistItems: [{ title: "ออกแบบ" }, { title: "ทำ UI" }, { title: "ทดสอบ" }] },
+    ]);
+  });
+
   it("deduplicates identical pending actions within one session", async () => {
     const session = await createChatSession(aliceOwner);
     const input = {

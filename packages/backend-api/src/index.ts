@@ -1,4 +1,5 @@
 export { prisma } from "./db/client";
+export { getTasks, getTask, createTask, updateTask, deleteTask, addTaskChecklistItem, updateTaskChecklistItem, deleteTaskChecklistItem, getTodayTasks } from "./services/taskService";
 export { claimCodingJob, completeCodingJob, enqueueCodingJob, getLatestCodingJob, updateCodingJobProgress } from "./services/codingJobService";
 export { codingExecutionResultSchema } from "./services/codingJobService";
 export type { CodingExecutionResult } from "./services/codingJobService";

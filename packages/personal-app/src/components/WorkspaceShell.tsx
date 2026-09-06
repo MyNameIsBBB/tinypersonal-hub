@@ -11,6 +11,7 @@ const modules = [
   { href: "/ai", label: "AI Assistant", icon: Bot },
   { href: "/os", label: "B1 OS", icon: Sparkles },
   { href: "/schedule", label: "Schedule", icon: CalendarDays },
+  { href: "/tasks", label: "Tasks", icon: NotebookPen },
   { href: "/notes", label: "Notes", icon: NotebookPen },
   { href: "/vault", label: "Vault", icon: KeyRound },
   { href: "/traces", label: "Agent Trace", icon: Activity },

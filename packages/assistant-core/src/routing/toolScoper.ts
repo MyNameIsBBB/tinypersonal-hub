@@ -1,8 +1,11 @@
 import type { ToolName } from "../tools/definitions";
+import { routeTaskMessage } from "./taskRouting";
 
-export type AgentDomain = "coding" | "schedule" | "notes" | "vault" | "web" | "memory";
+export type AgentDomain = "coding" | "schedule" | "notes" | "vault" | "web" | "memory" | "task";
 
 export type AgentIntent =
+  | "task.query"
+  | "task.mutate"
   | "general.response"
   | "schedule.query"
   | "schedule.mutate"
@@ -155,6 +158,8 @@ function collectCandidates(text: string): RoutedCandidate[] {
 
 /** Deterministic, conservative fast-path routing. Unknown requests receive no tools. */
 export function scopeToolsForMessage(message: string): ToolScope {
+  const task = routeTaskMessage(message);
+  if (task) return task;
   const text = message.trim();
   const candidates = collectCandidates(text);
   if (candidates.length === 0) {
@@ -196,6 +201,10 @@ export function scopeToolsForConversation(userMessages: string[]): ToolScope {
 
 /** Read intents require fresh backend data before the model may answer. */
 export function requiredFirstTool(scope: ToolScope, message = ""): RequiredToolCall | null {
+  if (scope.primaryIntent === "task.query") return { tool: "getTasks", reason: "Read fresh tasks before answering" };
+  if (scope.primaryIntent === "task.mutate" && !scope.allowedTools.includes("createTask")) {
+    return { tool: "getTasks", reason: "Resolve the task and checklist IDs before editing" };
+  }
   if (scope.primaryIntent === "schedule.query") {
     return { tool: "getSchedule", reason: "Schedule answers require fresh backend data" };
   }

@@ -19,7 +19,7 @@ export const routingEvalCases: AgentEvalCase[] = [
   { id: "schedule-05", prompt: "เพิ่มนัดวันที่ 12 มี deadline งาน SDKU Devops", expectedIntent: "schedule.mutate", expectedTools: ["getSchedule", "createScheduleItem"] },
   { id: "schedule-06", prompt: "สร้าง routine วิ่งทุกเช้า", expectedIntent: "schedule.mutate", expectedTools: ["getSchedule", "createScheduleItem"] },
   { id: "schedule-07", prompt: "เลื่อนนัดหมอเป็นบ่ายสอง", expectedIntent: "schedule.mutate", expectedTools: ["getSchedule", "updateTaskStatus", "updateScheduleItem"] },
-  { id: "schedule-08", prompt: "ทำ task ซื้อของเป็นเสร็จแล้ว", expectedIntent: "schedule.mutate", expectedTools: ["getSchedule", "updateTaskStatus", "updateScheduleItem"] },
+  { id: "schedule-08", prompt: "ทำ task ซื้อของเป็นเสร็จแล้ว", expectedIntent: "task.mutate", expectedTools: ["getTasks", "getTask", "updateTask"] },
   { id: "schedule-09", prompt: "ยกเลิกนัดวันศุกร์", expectedIntent: "schedule.mutate", expectedTools: ["getSchedule", "updateTaskStatus", "deleteRoutine"] },
   { id: "schedule-10", prompt: "ลบ routine วิ่ง", expectedIntent: "schedule.mutate", expectedTools: ["getSchedule", "updateTaskStatus", "deleteRoutine"] },
   { id: "notes-01", prompt: "หาโน้ต TinyPersonal", expectedIntent: "notes.query", expectedTools: ["searchNotes"] },

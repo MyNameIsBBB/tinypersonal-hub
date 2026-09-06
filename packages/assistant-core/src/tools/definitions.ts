@@ -1,4 +1,5 @@
 import { z, type ZodTypeAny } from "zod";
+import { taskListSchema, taskIdSchema, taskCreateSchema, taskUpdateSchema, checklistAddSchema, checklistUpdateSchema, checklistDeleteSchema } from "./taskSchemas";
 
 export type ToolContract<
   Name extends string = string,
@@ -51,6 +52,14 @@ export const delegateCodingTaskInputSchema = z.object({
 export type DelegateCodingTaskInput = z.infer<typeof delegateCodingTaskInputSchema>;
 
 export const toolContracts = {
+  getTasks: defineTool({ name: "getTasks", description: "List tasks by status, deadline or title. Tasks represent work to finish, not calendar events.", input: taskListSchema, mutation: false, backendCommand: "task.list" }),
+  getTask: defineTool({ name: "getTask", description: "Read task details, requirements and ordered checklist by ID.", input: taskIdSchema, mutation: false, backendCommand: "task.get" }),
+  createTask: defineTool({ name: "createTask", description: "Propose a task with deadline, requirements and an entire checklist in one call. Requires confirmation.", input: taskCreateSchema, mutation: true, backendCommand: "task.create" }),
+  updateTask: defineTool({ name: "updateTask", description: "Propose edits to task details, deadline, progress note, priority or status. Requires confirmation.", input: taskUpdateSchema, mutation: true, backendCommand: "task.update" }),
+  deleteTask: defineTool({ name: "deleteTask", description: "Propose deleting a task and its checklist. Requires confirmation.", input: taskIdSchema, mutation: true, backendCommand: "task.delete" }),
+  addTaskChecklistItem: defineTool({ name: "addTaskChecklistItem", description: "Propose adding one checklist item to a task.", input: checklistAddSchema, mutation: true, backendCommand: "task.checklist.add" }),
+  updateTaskChecklistItem: defineTool({ name: "updateTaskChecklistItem", description: "Propose editing, checking, unchecking or reordering one task checklist item.", input: checklistUpdateSchema, mutation: true, backendCommand: "task.checklist.update" }),
+  deleteTaskChecklistItem: defineTool({ name: "deleteTaskChecklistItem", description: "Propose deleting one checklist item.", input: checklistDeleteSchema, mutation: true, backendCommand: "task.checklist.delete" }),
   getSchedule: defineTool({
     name: "getSchedule",
     description: "Get schedule items in an inclusive date range.",

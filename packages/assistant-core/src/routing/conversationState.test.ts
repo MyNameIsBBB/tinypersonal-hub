@@ -62,4 +62,18 @@ describe("conversation state routing", () => {
     );
     expect(pending).toMatchObject({ activeTool: "createScheduleItem", pendingActionId: "pending-id" });
   });
+
+  it("resolves checklist references from a task detail result", () => {
+    const state = stateAfterToolResult(null, "getTask", { tasks: [{
+      id: "task-1",
+      title: "EGAT",
+      checklistItems: [{ id: "check-1", title: "ทำ UI" }, { id: "check-2", title: "test" }],
+    }] });
+    const resolved = resolveConversationReference(state, "ติ๊กอันแรก");
+    expect(resolved?.referencedEntity).toEqual({ type: "taskChecklistItem", id: "check-1", label: "ทำ UI" });
+    expect(routeWithState("ติ๊กอันแรก", scopeToolsForMessage("ติ๊กอันแรก"), resolved)).toMatchObject({
+      primaryIntent: "task.mutate",
+      allowedTools: ["getTasks", "getTask", "updateTaskChecklistItem"],
+    });
+  });
 });

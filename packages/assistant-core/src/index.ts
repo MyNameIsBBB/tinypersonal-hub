@@ -1,4 +1,5 @@
 export { createAgentConfig } from "./orchestrator";
+export * from "./tools/taskSchemas";
 export type { PromptContext } from "./prompts/base";
 export { defineTool, toolContracts } from "./tools/definitions";
 export type { ToolContract, ToolName } from "./tools/definitions";

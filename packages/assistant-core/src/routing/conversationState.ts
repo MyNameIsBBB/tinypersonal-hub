@@ -1,8 +1,11 @@
 import { z } from "zod";
 import { toolContracts, type ToolName } from "../tools/definitions";
 import type { AgentDomain, AgentIntent, ToolScope } from "./toolScoper";
+import { taskScope } from "./taskRouting";
 
 const agentIntentSchema = z.enum([
+  "task.query",
+  "task.mutate",
   "general.response",
   "schedule.query",
   "schedule.mutate",
@@ -15,8 +18,8 @@ const agentIntentSchema = z.enum([
   "memory.query",
 ]);
 
-const agentDomainSchema = z.enum(["coding", "schedule", "notes", "vault", "web", "memory"]);
-const entityTypeSchema = z.enum(["schedule", "note", "vault", "codingJob"]);
+const agentDomainSchema = z.enum(["coding", "schedule", "notes", "vault", "web", "memory", "task"]);
+const entityTypeSchema = z.enum(["schedule", "note", "vault", "codingJob", "task", "taskChecklistItem"]);
 const toolNameSchema = z.custom<ToolName>(
   (value) => typeof value === "string" && value in toolContracts,
   "Unknown tool name",
@@ -42,12 +45,17 @@ export const conversationStateSchema = z.object({
 export type ConversationEntity = z.infer<typeof conversationEntitySchema>;
 export type ConversationState = z.infer<typeof conversationStateSchema>;
 
-const stateContinuationPattern = /(?:^\s*(?:\d{1,2}(?::\d{2})?\s*(?:น\.|โมง)|อัน(?:แรก|ที่\s*\d+|นั้น|นี้|เมื่อกี้))\s*$|อัน(?:แรก|ที่\s*\d+|นั้น|นี้|เมื่อกี้)|เปลี่ยนเป็น|เลื่อนไป|ลบอัน|ยกเลิกอัน)/iu;
+const stateContinuationPattern = /(?:^\s*(?:\d{1,2}(?::\d{2})?\s*(?:น\.|โมง)|อัน(?:แรก|ที่\s*\d+|นั้น|นี้|เมื่อกี้))\s*$|อัน(?:แรก|ที่\s*\d+|นั้น|นี้|เมื่อกี้)|เปลี่ยนเป็น|เลื่อนไป|ลบอัน|ยกเลิกอัน|ติ๊กอัน|เพิ่ม(?:อีก)?ข้อ)/iu;
 
 function scopeForActiveState(state: ConversationState, message: string): ToolScope | null {
   if (!state.activeDomain || !state.activeIntent || !state.activeTool) return null;
   const remove = /(?:ลบ|ยกเลิก)/u.test(message);
-  const update = /(?:เปลี่ยน|เลื่อน|แก้)/u.test(message);
+  const update = /(?:เปลี่ยน|เลื่อน|แก้|ติ๊ก|เสร็จ)/u.test(message);
+  if (state.activeDomain === "task") {
+    const checklist = state.referencedEntity?.type === "taskChecklistItem" || /TaskChecklistItem$/.test(state.activeTool);
+    const create = state.activeTool === "createTask" || state.activeTool === "addTaskChecklistItem";
+    return taskScope(remove ? "remove" : update ? "update" : create ? "create" : "query", checklist);
+  }
   let intent = state.activeIntent;
   let tools: ToolName[];
 
@@ -118,6 +126,8 @@ export function routeWithState(
 }
 
 const domainForIntent: Partial<Record<AgentIntent, AgentDomain>> = {
+  "task.query": "task",
+  "task.mutate": "task",
   "schedule.query": "schedule",
   "schedule.mutate": "schedule",
   "notes.query": "notes",
@@ -148,6 +158,14 @@ export function stateFromScope(
 }
 
 const toolState: Partial<Record<ToolName, { domain: AgentDomain; intent: AgentIntent }>> = {
+  getTasks: { domain: "task", intent: "task.query" },
+  getTask: { domain: "task", intent: "task.query" },
+  createTask: { domain: "task", intent: "task.mutate" },
+  updateTask: { domain: "task", intent: "task.mutate" },
+  deleteTask: { domain: "task", intent: "task.mutate" },
+  addTaskChecklistItem: { domain: "task", intent: "task.mutate" },
+  updateTaskChecklistItem: { domain: "task", intent: "task.mutate" },
+  deleteTaskChecklistItem: { domain: "task", intent: "task.mutate" },
   getSchedule: { domain: "schedule", intent: "schedule.query" },
   createScheduleItem: { domain: "schedule", intent: "schedule.mutate" },
   updateTaskStatus: { domain: "schedule", intent: "schedule.mutate" },
@@ -182,6 +200,19 @@ export function stateAfterToolResult(
   const tool = toolState[toolName];
   if (!tool) return previous;
   let recentEntities = previous?.recentEntities;
+  let referencedEntity = previous?.referencedEntity;
+  if (toolName === "getTasks" || toolName === "getTask") {
+    const tasks = recordArray(output, "tasks").slice(0, 20);
+    const taskEntities = tasks.flatMap(item => typeof item.id === "string"
+      ? [{ type: "task" as const, id: item.id, label: String(item.title ?? "").slice(0, 300) }] : []);
+    if (toolName === "getTask" && tasks.length === 1) {
+      referencedEntity = taskEntities[0];
+      recentEntities = recordArray(tasks[0], "checklistItems").slice(0, 20).flatMap(item =>
+        typeof item.id === "string" ? [{ type: "taskChecklistItem" as const, id: item.id, label: String(item.title ?? "").slice(0, 300) }] : []);
+    } else {
+      recentEntities = taskEntities;
+    }
+  }
   if (toolName === "getSchedule") {
     recentEntities = recordArray(output, "items").slice(0, 20).flatMap((item) =>
       typeof item.id === "string"
@@ -217,7 +248,7 @@ export function stateAfterToolResult(
     activeDomain: tool.domain,
     activeTool: toolName,
     ...(recentEntities ? { recentEntities } : {}),
-    ...(recentEntities?.length === 1 ? { referencedEntity: recentEntities[0] } : {}),
+    ...(referencedEntity ? { referencedEntity } : recentEntities?.length === 1 ? { referencedEntity: recentEntities[0] } : {}),
     ...(pendingActionId ? { pendingActionId } : {}),
     updatedAt: new Date().toISOString(),
   });

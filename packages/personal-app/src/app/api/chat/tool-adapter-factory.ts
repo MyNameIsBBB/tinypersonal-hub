@@ -9,9 +9,16 @@ import {
 } from "@tinypersonal/backend-api";
 import { toolContracts, type ToolName } from "@tinypersonal/assistant-core";
 import { tool } from "ai";
+import { getTasks, getTask } from "@tinypersonal/backend-api";
 import { parseBangkokDateTimeInput } from "@/lib/chat/ContextBuilder";
 
 type RecurrenceFrequency = "DAILY" | "WEEKLY" | "MONTHLY" | "YEARLY";
+function taskSummary(input: { title?: string; id?: string; taskId?: string }) {
+  return input.title ?? input.id ?? input.taskId ?? "";
+}
+function taskCreateSummary(input: { title: string; deadline?: string | null; checklist?: string[] }) {
+  return `สร้าง Task: ${input.title}${input.deadline ? ` — deadline ${input.deadline}` : ""}${input.checklist?.length ? ` — checklist ${input.checklist.length} ข้อ` : ""}`;
+}
 
 function parseRoutineEndInput(value: string): Date {
   return parseBangkokDateTimeInput(
@@ -337,6 +344,22 @@ export function createChatTools(
   allowedTools: ToolName[],
 ) {
   const adapters = {
+    getTasks: tool({ description: toolContracts.getTasks.description, inputSchema: toolContracts.getTasks.input,
+      execute: async (input) => ({ ok: true as const, tasks: await getTasks(ownerKey, input) }) }),
+    getTask: tool({ description: toolContracts.getTask.description, inputSchema: toolContracts.getTask.input,
+      execute: async (input) => { const task = await getTask(ownerKey, input); return task ? { ok: true as const, tasks: [task] } : { ok: false as const, error: { code: "NOT_FOUND", message: "Task not found" } }; } }),
+    createTask: tool({ description: toolContracts.createTask.description, inputSchema: toolContracts.createTask.input,
+      execute: async (input) => pendingResult(ownerKey, sessionId, "task.create", taskCreateSummary(input), input) }),
+    updateTask: tool({ description: toolContracts.updateTask.description, inputSchema: toolContracts.updateTask.input,
+      execute: async (input) => pendingResult(ownerKey, sessionId, "task.update", "แก้ไข Task: " + taskSummary(input), input) }),
+    deleteTask: tool({ description: toolContracts.deleteTask.description, inputSchema: toolContracts.deleteTask.input,
+      execute: async (input) => pendingResult(ownerKey, sessionId, "task.delete", "ลบ Task: " + taskSummary(input), input) }),
+    addTaskChecklistItem: tool({ description: toolContracts.addTaskChecklistItem.description, inputSchema: toolContracts.addTaskChecklistItem.input,
+      execute: async (input) => pendingResult(ownerKey, sessionId, "task.checklist.add", "เพิ่ม Checklist: " + taskSummary(input), input) }),
+    updateTaskChecklistItem: tool({ description: toolContracts.updateTaskChecklistItem.description, inputSchema: toolContracts.updateTaskChecklistItem.input,
+      execute: async (input) => pendingResult(ownerKey, sessionId, "task.checklist.update", "แก้ไข Checklist: " + taskSummary(input), input) }),
+    deleteTaskChecklistItem: tool({ description: toolContracts.deleteTaskChecklistItem.description, inputSchema: toolContracts.deleteTaskChecklistItem.input,
+      execute: async (input) => pendingResult(ownerKey, sessionId, "task.checklist.delete", "ลบ Checklist: " + taskSummary(input), input) }),
     getSchedule: scheduleGetTool,
     createScheduleItem: scheduleCreateTool(ownerKey, sessionId),
     updateTaskStatus: scheduleStatusTool(ownerKey, sessionId),

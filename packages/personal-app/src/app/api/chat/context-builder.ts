@@ -1,7 +1,8 @@
 import type { AgentIntent, ConversationState } from "@tinypersonal/assistant-core";
-import { getLatestCodingJob, searchNotes } from "@tinypersonal/backend-api";
+import { getLatestCodingJob, searchNotes, getTodayTasks, getTask } from "@tinypersonal/backend-api";
 
 export type ContextSource =
+  | "tasks"
   | "session"
   | "recent-conversation"
   | "schedule"
@@ -98,6 +99,19 @@ export async function buildAgentContext(input: BuildContextInput) {
       updatedAt: input.conversationState.updatedAt,
       sensitivity: "private",
     });
+  }
+
+  if (input.intents.some(intent => intent.startsWith("task.") || intent.startsWith("schedule."))) {
+    const tasks = await getTodayTasks(input.ownerKey, now);
+    const reference = input.conversationState?.referencedEntity;
+    const referenced = reference?.type === "task" ? await getTask(input.ownerKey, { id: reference.id }) : null;
+    for (const task of [...new Map([...tasks, ...(referenced ? [referenced] : [])].map(task => [task.id, task])).values()]) {
+      items.push({ source: "tasks", entity: "task:" + task.id,
+        value: JSON.stringify({ id: task.id, title: task.title, status: task.status, priority: task.priority,
+          deadline: task.deadline, progressNote: task.progressNote?.slice(0, 500),
+          completed: task.checklistItems.filter(item => item.isCompleted).length, total: task.checklistItems.length }),
+        relevance: 0.9, confidence: 1, updatedAt: task.updatedAt.toISOString(), sensitivity: "private" });
+    }
   }
 
   if (input.visionContext) {

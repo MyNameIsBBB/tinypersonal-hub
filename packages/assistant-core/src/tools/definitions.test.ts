@@ -25,6 +25,12 @@ describe("tool contracts", () => {
 
   it("marks every write contract as a mutation", () => {
     const expectedMutations = [
+      "createTask",
+      "updateTask",
+      "deleteTask",
+      "addTaskChecklistItem",
+      "updateTaskChecklistItem",
+      "deleteTaskChecklistItem",
       "createScheduleItem",
       "updateTaskStatus",
       "updateScheduleItem",
@@ -41,5 +47,14 @@ describe("tool contracts", () => {
     expect(Object.entries(toolContracts)
       .filter(([, contract]) => contract.mutation)
       .map(([name]) => name)).toEqual(expectedMutations);
+  });
+
+  it("accepts one structured task creation with an embedded checklist", () => {
+    expect(toolContracts.createTask.input.safeParse({
+      title: "โปรเจกต์ EGAT",
+      deadline: "2026-09-15T23:59:00+07:00",
+      requirements: "infographic A4, architecture diagram และ prototype",
+      checklist: ["แยก requirement", "ทำ UI", "test", "เตรียม present"],
+    }).success).toBe(true);
   });
 });

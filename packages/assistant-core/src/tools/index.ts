@@ -16,6 +16,14 @@ function declarationTool(name: ToolName) {
 
 /** The complete set of tools that may be exposed to the chat model. */
 export const toolRegistry = {
+  getTasks: declarationTool("getTasks"),
+  getTask: declarationTool("getTask"),
+  createTask: declarationTool("createTask"),
+  updateTask: declarationTool("updateTask"),
+  deleteTask: declarationTool("deleteTask"),
+  addTaskChecklistItem: declarationTool("addTaskChecklistItem"),
+  updateTaskChecklistItem: declarationTool("updateTaskChecklistItem"),
+  deleteTaskChecklistItem: declarationTool("deleteTaskChecklistItem"),
   getSchedule: declarationTool("getSchedule"),
   createScheduleItem: declarationTool("createScheduleItem"),
   updateTaskStatus: declarationTool("updateTaskStatus"),

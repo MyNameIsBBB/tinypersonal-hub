@@ -1,14 +1,16 @@
 import { z } from "zod";
 import type { AgentIntent, ToolScope } from "./toolScoper";
+import { taskScope } from "./taskRouting";
 
 export const classifierDecisionSchema = z.object({
-  domain: z.enum(["general", "coding", "schedule", "notes", "vault", "web", "memory"]),
+  domain: z.enum(["general", "coding", "schedule", "notes", "vault", "web", "memory", "task"]),
   action: z.enum(["respond", "query", "create", "update", "remove", "delegate"]),
   confidence: z.number().min(0).max(1),
   reason: z.string().max(240),
 }).strict().superRefine(({ domain, action }, context) => {
   const allowedActions: Record<typeof domain, Array<typeof action>> = {
     general: ["respond"],
+    task: ["query", "create", "update", "remove"],
     coding: ["delegate"],
     schedule: ["query", "create", "update", "remove"],
     notes: ["query", "create", "update", "remove"],
@@ -29,6 +31,9 @@ export type ClassifierDecision = z.infer<typeof classifierDecisionSchema>;
 
 export function scopeFromClassification(decision: ClassifierDecision, message: string): ToolScope {
   const { domain, action } = decision;
+  if (domain === "task" && (action === "query" || action === "create" || action === "update" || action === "remove")) {
+    return { ...taskScope(action, /checklist|เช็กลิสต์/iu.test(message) && action !== "create"), confidence: decision.confidence };
+  }
   let intent: AgentIntent = "general.response";
   let allowedTools: ToolScope["allowedTools"] = [];
   if (domain === "schedule") {

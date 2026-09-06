@@ -1,4 +1,5 @@
 import { prisma } from "../db/client";
+import * as tasks from "./taskService";
 import { createNote, deleteNote, updateNote } from "./noteService";
 import { createScheduleItem, deleteOrCancelRoutine, updateScheduleItem, updateScheduleStatus } from "./scheduleService";
 import { createVaultSecret, deleteVaultSecret, updateVaultMetadata } from "./vaultService";
@@ -116,7 +117,13 @@ export async function executePendingAction(ownerKey: string, id: string, approve
       ? JSON.parse(decryptSecret(sealed as { ciphertext: string; iv: string; authTag: string }, `pending:${action.id}`)) as Record<string, unknown>
       : storedArgs;
     let result: unknown;
-    if (action.toolName === "schedule.create") result = await createScheduleItem(args as Parameters<typeof createScheduleItem>[0]);
+    if (action.toolName === "task.create") result = await tasks.createTask(ownerKey, args);
+    else if (action.toolName === "task.update") result = await tasks.updateTask(ownerKey, args);
+    else if (action.toolName === "task.delete") result = await tasks.deleteTask(ownerKey, args);
+    else if (action.toolName === "task.checklist.add") result = await tasks.addTaskChecklistItem(ownerKey, args);
+    else if (action.toolName === "task.checklist.update") result = await tasks.updateTaskChecklistItem(ownerKey, args);
+    else if (action.toolName === "task.checklist.delete") result = await tasks.deleteTaskChecklistItem(ownerKey, args);
+    else if (action.toolName === "schedule.create") result = await createScheduleItem(args as Parameters<typeof createScheduleItem>[0]);
     else if (action.toolName === "schedule.updateStatus") result = await updateScheduleStatus(String(args.id), args.status as Parameters<typeof updateScheduleStatus>[1]);
     else if (action.toolName === "schedule.update") {
       const { id: routineId, startTime, endTime, routineEndDate, ...input } = args;
