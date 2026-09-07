@@ -1,5 +1,5 @@
 import { z, type ZodTypeAny } from "zod";
-import { taskListSchema, taskIdSchema, taskCreateSchema, taskUpdateSchema, checklistAddSchema, checklistUpdateSchema, checklistDeleteSchema } from "./taskSchemas";
+import { taskListSchema, taskFocusSchema, taskIdSchema, taskCreateSchema, taskUpdateSchema, checklistAddSchema, checklistUpdateSchema, checklistDeleteSchema } from "./taskSchemas";
 
 export type ToolContract<
   Name extends string = string,
@@ -52,6 +52,7 @@ export const delegateCodingTaskInputSchema = z.object({
 export type DelegateCodingTaskInput = z.infer<typeof delegateCodingTaskInputSchema>;
 
 export const toolContracts = {
+  getTaskFocus: defineTool({ name: "getTaskFocus", description: "Rank unfinished tasks deterministically by deadline urgency, explicit priority, overdue state and active progress. Returns overdue, due-today, upcoming, in-progress and recommended groups with checklist progress.", input: taskFocusSchema, mutation: false, backendCommand: "task.focus" }),
   getTasks: defineTool({ name: "getTasks", description: "List tasks by status, deadline or title. Tasks represent work to finish, not calendar events.", input: taskListSchema, mutation: false, backendCommand: "task.list" }),
   getTask: defineTool({ name: "getTask", description: "Read task details, requirements and ordered checklist by ID.", input: taskIdSchema, mutation: false, backendCommand: "task.get" }),
   createTask: defineTool({ name: "createTask", description: "Propose a task with deadline, requirements and an entire checklist in one call. Requires confirmation.", input: taskCreateSchema, mutation: true, backendCommand: "task.create" }),

@@ -7,7 +7,8 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "npm run dev --workspace=@tinypersonal/personal-app",
+    "dev": "./scripts/start-dev.sh",
+    "dev:mobile": "ENABLE_TAILSCALE_FUNNEL=1 ./scripts/start-dev.sh",
     "build": "npm run build --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "vitest run",

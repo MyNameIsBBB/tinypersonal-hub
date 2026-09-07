@@ -11,7 +11,7 @@ import remarkMath from "remark-math";
 import { WorkspaceShell } from "@/components/WorkspaceShell";
 import { AppModal } from "@/components/AppModal";
 import { markChatSessionActive, registerChatTask } from "@/lib/chat/backgroundTasks";
-import { hasRenderableMessageContent, mergeServerMessages } from "@/lib/chat/ChatStreamHandler";
+import { hasRenderableMessageContent, isChatGenerationPending, mergeServerMessages } from "@/lib/chat/ChatStreamHandler";
 
 const suggestions = [
   { icon: CalendarPlus, text: "ตั้ง Routine วิ่งทุกวันจันทร์และพุธ 07:00 ถึงสิ้นเดือน" },
@@ -272,11 +272,7 @@ export function AIExperience({ mode = "chat" }: { mode?: "chat" | "os" }) {
 
   const latestProgressEvent = codingJobEvents.at(-1);
   const activeCodingJob = codingJob?.status === "QUEUED" || codingJob?.status === "RUNNING" ? codingJob : null;
-  const awaitingChatResponse = Boolean(
-    chatGenerationJob
-    && reloadedChatGenerationJobId.current !== chatGenerationJob.id
-    && (chatGenerationJob.status === "QUEUED" || chatGenerationJob.status === "RUNNING" || chatGenerationJob.status === "SUCCEEDED"),
-  );
+  const awaitingChatResponse = isChatGenerationPending(chatGenerationJob, now?.getTime());
 
   useEffect(() => { messagesRef.current = messages; }, [messages]);
 
@@ -539,6 +535,8 @@ export function AIExperience({ mode = "chat" }: { mode?: "chat" | "os" }) {
     if (!response.ok) return;
     const data = await response.json() as { sessionId: string; messages: Parameters<typeof setMessages>[0] };
     clearError();
+    setChatGenerationJob(null);
+    reloadedChatGenerationJobId.current = null;
     setSessionId(data.sessionId);
     setMessages(data.messages);
   }
@@ -566,6 +564,8 @@ export function AIExperience({ mode = "chat" }: { mode?: "chat" | "os" }) {
     if (!response.ok) return;
     const data = await response.json() as { session: ChatSessionSummary };
     clearError();
+    setChatGenerationJob(null);
+    reloadedChatGenerationJobId.current = null;
     setMessages([]);
     setSessionId(data.session.id);
     setSessions((current) => [{ ...data.session, _count: { messages: 0 } }, ...current]);
@@ -583,7 +583,13 @@ export function AIExperience({ mode = "chat" }: { mode?: "chat" | "os" }) {
       if (!refreshed.ok) throw new Error("ลบแล้ว แต่โหลดรายการบทสนทนาใหม่ไม่สำเร็จ");
       const data = await refreshed.json() as { sessionId: string; sessions: ChatSessionSummary[]; messages: Parameters<typeof setMessages>[0] };
       setSessions(data.sessions);
-      if (sessionId === targetSessionId) { clearError(); setSessionId(data.sessionId); setMessages(data.messages); }
+      if (sessionId === targetSessionId) {
+        clearError();
+        setChatGenerationJob(null);
+        reloadedChatGenerationJobId.current = null;
+        setSessionId(data.sessionId);
+        setMessages(data.messages);
+      }
     } catch (deleteError) {
       setPersistenceError(deleteError instanceof Error ? deleteError.message : "ลบบทสนทนาไม่สำเร็จ กรุณาลองใหม่");
     } finally { setDeleteBusySessionId(null); }

@@ -10,10 +10,10 @@ describe("scopeToolsForMessage", () => {
     ["เพิ่มเรียน ADT พรุ่งนี้ 9 โมง", "schedule.mutate", ["getSchedule", "createScheduleItem"]],
     ["เพิ่มวันที่ 12 มี deadline SDKU Devops", "schedule.mutate", ["getSchedule", "createScheduleItem"]],
     ["เพิ่มนัดวันที่ 12 มี deadline งาน SDKU Devops", "schedule.mutate", ["getSchedule", "createScheduleItem"]],
-    ["งานอะไรใกล้ deadline", "task.query", ["getTasks", "getTask"]],
+    ["งานอะไรใกล้ deadline", "task.query", ["getTaskFocus", "getTasks", "getTask"]],
     ["เพิ่ม task ทำ Assignment 7 ส่งศุกร์นี้ แล้ว checklist อ่านโจทย์ เขียน code test แล้ว submit", "task.mutate", ["createTask"]],
     ["จด task ทำโปรเจกต์ EGAT ส่งวันที่ 15 กันยา requirement มี infographic A4, architecture diagram แล้วก็ prototype checklist ให้แยก requirement, ทำ UI, test, เตรียม present", "task.mutate", ["createTask"]],
-    ["วันนี้ควรทำอะไรก่อน", "task.query", ["getTasks", "getTask", "getSchedule"]],
+    ["วันนี้ควรทำอะไรก่อน", "task.query", ["getTaskFocus", "getTasks", "getTask", "getSchedule"]],
     ["เลื่อนนัดหมอเป็นบ่ายสอง", "schedule.mutate", ["getSchedule", "updateTaskStatus", "updateScheduleItem"]],
     ["ลบ routine ออก", "schedule.mutate", ["getSchedule", "updateTaskStatus", "deleteRoutine"]],
     ["หาโน้ต TinyPersonal", "notes.query", ["searchNotes"]],
@@ -74,6 +74,7 @@ describe("scopeToolsForMessage", () => {
   });
 
   it("requires fresh data for read intents but not general responses", () => {
+    expect(requiredFirstTool(scopeToolsForMessage("งานอะไรใกล้ deadline"))).toMatchObject({ tool: "getTaskFocus", args: { range: "today" } });
     expect(requiredFirstTool(scopeToolsForMessage("สรุป ตอนนี้เราต้องส่งผ้าวันไหนบ้าง"))).toMatchObject({ tool: "getSchedule" });
     expect(requiredFirstTool(scopeToolsForMessage("หาโน้ต TinyPersonal"))).toMatchObject({ tool: "searchNotes" });
     expect(requiredFirstTool(scopeToolsForMessage("สวัสดี"))).toBeNull();

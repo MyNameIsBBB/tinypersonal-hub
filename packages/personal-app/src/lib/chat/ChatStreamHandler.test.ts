@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { UIMessage } from "ai";
-import { confirmationDecision, hasRenderableMessageContent, mergeServerMessages, selectContextWindow } from "./ChatStreamHandler";
+import { confirmationDecision, hasRenderableMessageContent, isChatGenerationPending, mergeServerMessages, selectContextWindow } from "./ChatStreamHandler";
 
 describe("chat context window", () => {
   it("keeps a local message missing from a delayed server snapshot", () => {
@@ -84,5 +84,20 @@ describe("confirmationDecision", () => {
 
   it("does not execute from a general sentence", () => {
     expect(confirmationDecision("ช่วยยืนยันเวลานัดให้หน่อย")).toBeNull();
+  });
+});
+
+describe("isChatGenerationPending", () => {
+  const now = Date.parse("2026-09-07T00:30:00.000Z");
+
+  it("shows only recent queued or running work", () => {
+    expect(isChatGenerationPending({ status: "QUEUED", createdAt: "2026-09-07T00:29:00.000Z" }, now)).toBe(true);
+    expect(isChatGenerationPending({ status: "RUNNING", createdAt: "2026-09-07T00:20:00.000Z" }, now)).toBe(true);
+  });
+
+  it("hides terminal and stale jobs", () => {
+    expect(isChatGenerationPending({ status: "SUCCEEDED", createdAt: "2026-09-07T00:29:00.000Z" }, now)).toBe(false);
+    expect(isChatGenerationPending({ status: "FAILED", createdAt: "2026-09-07T00:29:00.000Z" }, now)).toBe(false);
+    expect(isChatGenerationPending({ status: "QUEUED", createdAt: "2026-09-06T23:00:00.000Z" }, now)).toBe(false);
   });
 });

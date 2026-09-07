@@ -1,5 +1,5 @@
 import type { AgentIntent, ConversationState } from "@tinypersonal/assistant-core";
-import { getLatestCodingJob, searchNotes, getTodayTasks, getTask } from "@tinypersonal/backend-api";
+import { getLatestCodingJob, searchNotes, getTaskFocus, getTask } from "@tinypersonal/backend-api";
 
 export type ContextSource =
   | "tasks"
@@ -101,11 +101,16 @@ export async function buildAgentContext(input: BuildContextInput) {
     });
   }
 
-  if (input.intents.some(intent => intent.startsWith("task.") || intent.startsWith("schedule."))) {
-    const tasks = await getTodayTasks(input.ownerKey, now);
+  const needsTaskFocus = input.intents.some(intent => intent.startsWith("task.") || intent.startsWith("schedule."))
+    || /(?:ทำอะไรได้บ้าง|ช่วยอะไรได้บ้าง|ควรทำอะไร|งานของฉัน|งานของผม)/iu.test(input.userText);
+  if (needsTaskFocus) {
+    const focus = await getTaskFocus(input.ownerKey, { range: "today", limit: 8 }, now);
     const reference = input.conversationState?.referencedEntity;
     const referenced = reference?.type === "task" ? await getTask(input.ownerKey, { id: reference.id }) : null;
-    for (const task of [...new Map([...tasks, ...(referenced ? [referenced] : [])].map(task => [task.id, task])).values()]) {
+    items.push({ source: "tasks", entity: "task-focus",
+      value: JSON.stringify({ summary: focus.summary, overdue: focus.overdue.slice(0, 5), dueToday: focus.dueToday.slice(0, 5), recommended: focus.recommended }),
+      relevance: 0.95, confidence: 1, updatedAt: focus.generatedAt, sensitivity: "private" });
+    for (const task of referenced ? [referenced] : []) {
       items.push({ source: "tasks", entity: "task:" + task.id,
         value: JSON.stringify({ id: task.id, title: task.title, status: task.status, priority: task.priority,
           deadline: task.deadline, progressNote: task.progressNote?.slice(0, 500),

@@ -7,6 +7,7 @@ import {
   createChatSession,
   createPendingAction,
   createTask,
+  getTaskFocus,
   getTasks,
   getTask,
   loadConversationState,
@@ -62,6 +63,10 @@ describe("API authentication and owner isolation", () => {
     expect(updated?.checklistItems[0]).toMatchObject({ title: "แยก requirement", isCompleted: true });
     await expect(getTasks(bobOwner, { query: `${runId}-EGAT` })).resolves.toEqual([]);
     await expect(getTasks(aliceOwner, { query: `${runId}-EGAT` })).resolves.toHaveLength(1);
+    await expect(getTaskFocus(bobOwner)).resolves.toMatchObject({ summary: { unfinished: 0 } });
+    await expect(getTaskFocus(aliceOwner)).resolves.toMatchObject({
+      recommended: [expect.objectContaining({ id: task.id, checklist: { completed: 1, total: 3, remaining: ["ทำ UI", "test"] } })],
+    });
   });
 
   it("rejects missing and invalid authentication", async () => {

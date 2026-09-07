@@ -26,6 +26,10 @@ export const taskListSchema = z.object({
   deadlineBefore: z.string().datetime({ offset: true }).optional(),
   limit: z.number().int().min(1).max(100).default(50),
 }).strict();
+export const taskFocusSchema = z.object({
+  range: z.enum(["today", "week"]).default("today"),
+  limit: z.number().int().min(1).max(20).default(5),
+}).strict();
 export const checklistAddSchema = z.object({ taskId: id, title: z.string().trim().min(1).max(1000) }).strict();
 export const checklistUpdateSchema = z.object({
   taskId: id, id,

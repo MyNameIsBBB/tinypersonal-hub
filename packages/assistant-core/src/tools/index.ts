@@ -16,6 +16,7 @@ function declarationTool(name: ToolName) {
 
 /** The complete set of tools that may be exposed to the chat model. */
 export const toolRegistry = {
+  getTaskFocus: declarationTool("getTaskFocus"),
   getTasks: declarationTool("getTasks"),
   getTask: declarationTool("getTask"),
   createTask: declarationTool("createTask"),

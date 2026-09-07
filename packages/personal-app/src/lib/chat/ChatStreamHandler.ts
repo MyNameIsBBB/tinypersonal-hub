@@ -4,6 +4,7 @@ const maxStoredMessages = 120;
 const maxContextMessages = 16;
 const maxContextCharacters = 24_000;
 const maxToolSummaryCharacters = 600;
+const maxVisiblePendingJobAgeMs = 15 * 60_000;
 type MessagePart = UIMessage["parts"][number];
 type ToolLikePart = MessagePart & { output?: unknown };
 
@@ -74,6 +75,27 @@ export function hasRenderableMessageContent(message: UIMessage | undefined) {
   return Boolean(message?.parts.some((part) =>
     part.type === "text" ? part.text.trim().length > 0 : true,
   ));
+}
+
+type ChatGenerationProgress = {
+  status: string;
+  createdAt: string;
+};
+
+/**
+ * A terminal or abandoned server job must never leave the global thinking
+ * indicator visible. Old queued jobs can survive a stopped worker, so only a
+ * recent QUEUED/RUNNING job represents work the user is currently waiting on.
+ */
+export function isChatGenerationPending(
+  job: ChatGenerationProgress | null,
+  nowMs = Date.now(),
+) {
+  if (!job || (job.status !== "QUEUED" && job.status !== "RUNNING")) return false;
+  const createdAtMs = Date.parse(job.createdAt);
+  return Number.isFinite(createdAtMs)
+    && nowMs >= createdAtMs
+    && nowMs - createdAtMs <= maxVisiblePendingJobAgeMs;
 }
 
 /** Merge durable messages without dropping optimistic or still-streaming UI messages. */

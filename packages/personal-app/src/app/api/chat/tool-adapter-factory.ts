@@ -9,7 +9,7 @@ import {
 } from "@tinypersonal/backend-api";
 import { toolContracts, type ToolName } from "@tinypersonal/assistant-core";
 import { tool } from "ai";
-import { getTasks, getTask } from "@tinypersonal/backend-api";
+import { getTasks, getTask, getTaskFocus } from "@tinypersonal/backend-api";
 import { parseBangkokDateTimeInput } from "@/lib/chat/ContextBuilder";
 
 type RecurrenceFrequency = "DAILY" | "WEEKLY" | "MONTHLY" | "YEARLY";
@@ -344,6 +344,8 @@ export function createChatTools(
   allowedTools: ToolName[],
 ) {
   const adapters = {
+    getTaskFocus: tool({ description: toolContracts.getTaskFocus.description, inputSchema: toolContracts.getTaskFocus.input,
+      execute: async (input) => ({ ok: true as const, ...await getTaskFocus(ownerKey, input) }) }),
     getTasks: tool({ description: toolContracts.getTasks.description, inputSchema: toolContracts.getTasks.input,
       execute: async (input) => ({ ok: true as const, tasks: await getTasks(ownerKey, input) }) }),
     getTask: tool({ description: toolContracts.getTask.description, inputSchema: toolContracts.getTask.input,

@@ -76,6 +76,14 @@ npm run db:generate
 npm run dev
 ```
 
+คำสั่งนี้เปิดทั้ง Next.js และ chat generation runner เพื่อไม่ให้งาน AI ค้างในคิว แม้ไม่ได้ตั้ง `CRON_SECRET` ใน `.env` (ระบบจะสร้าง secret ชั่วคราวเฉพาะ process)
+
+ถ้าต้องการเปิดจากมือถือผ่าน Tailscale Funnel:
+
+```bash
+npm run dev:mobile
+```
+
 เปิดเว็บที่ [http://localhost:3000](http://localhost:3000)
 
 ถ้าต้องการเปลี่ยนพอร์ต:

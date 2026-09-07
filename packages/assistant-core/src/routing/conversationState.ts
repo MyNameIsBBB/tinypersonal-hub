@@ -158,6 +158,7 @@ export function stateFromScope(
 }
 
 const toolState: Partial<Record<ToolName, { domain: AgentDomain; intent: AgentIntent }>> = {
+  getTaskFocus: { domain: "task", intent: "task.query" },
   getTasks: { domain: "task", intent: "task.query" },
   getTask: { domain: "task", intent: "task.query" },
   createTask: { domain: "task", intent: "task.mutate" },
@@ -201,8 +202,8 @@ export function stateAfterToolResult(
   if (!tool) return previous;
   let recentEntities = previous?.recentEntities;
   let referencedEntity = previous?.referencedEntity;
-  if (toolName === "getTasks" || toolName === "getTask") {
-    const tasks = recordArray(output, "tasks").slice(0, 20);
+  if (toolName === "getTaskFocus" || toolName === "getTasks" || toolName === "getTask") {
+    const tasks = (toolName === "getTaskFocus" ? recordArray(output, "recommended") : recordArray(output, "tasks")).slice(0, 20);
     const taskEntities = tasks.flatMap(item => typeof item.id === "string"
       ? [{ type: "task" as const, id: item.id, label: String(item.title ?? "").slice(0, 300) }] : []);
     if (toolName === "getTask" && tasks.length === 1) {

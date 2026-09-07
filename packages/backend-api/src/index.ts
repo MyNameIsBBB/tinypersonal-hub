@@ -1,10 +1,12 @@
 export { prisma } from "./db/client";
 export { getTasks, getTask, createTask, updateTask, deleteTask, addTaskChecklistItem, updateTaskChecklistItem, deleteTaskChecklistItem, getTodayTasks } from "./services/taskService";
+export { buildTaskFocus, getTaskFocus } from "./services/taskFocusService";
+export type { TaskFocus, TaskFocusItem, TaskFocusReason } from "./services/taskFocusService";
 export { claimCodingJob, completeCodingJob, enqueueCodingJob, getLatestCodingJob, updateCodingJobProgress } from "./services/codingJobService";
 export { codingExecutionResultSchema } from "./services/codingJobService";
 export type { CodingExecutionResult } from "./services/codingJobService";
 export { claimChatGenerationJob, completeChatGenerationJob, enqueueChatGenerationJob, getLatestChatGenerationJob, saveUserMessageAndEnqueueChatGeneration } from "./services/chatGenerationJobService";
-export { clearConversationPendingAction, createChatSession, deleteChatSession, ensureDailyGeneralChat, generateAndUpdateSessionTitle, GENERAL_CHAT_TITLE, getOrCreateChatSession, listChatSessions, loadChatMessages, loadConversationState, replaceChatMessages, resetAllGeneralChats, saveAssistantChatMessageIfCurrent, saveChatMessage, saveConversationState, saveUserChatMessage, updateChatSessionSystemPrompt } from "./services/chatService";
+export { clearConversationPendingAction, createChatSession, deleteChatSession, ensureDailyGeneralChat, generateAndUpdateSessionTitle, GENERAL_CHAT_TITLE, getOrCreateChatSession, listChatSessions, loadChatMessages, loadConversationState, replaceChatMessages, resetAllGeneralChats, resetGeneralChat, saveAssistantChatMessageIfCurrent, saveChatMessage, saveConversationState, saveUserChatMessage, updateChatSessionSystemPrompt } from "./services/chatService";
 export type { StoredChatMessage } from "./services/chatService";
 export { createPendingAction, executeAllPendingActions, executeLatestPendingAction, executePendingAction, hasPendingActions, recordAudit, resolvePendingAction, supersedePendingActions } from "./services/auditService";
 export { appendAgentToolTraces, completeAgentRunTrace, createAgentRunTrace, describeAgentError, failAgentRunTrace, getAgentRunTrace, listAgentRunTraces } from "./services/agentTraceService";

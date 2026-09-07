@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "../db/client";
 import { getMarketQuotes, type MarketQuote } from "./integrations";
 import { sendWebPushNotification } from "./pushService";
+import { getTaskFocus, type TaskFocus } from "./taskFocusService";
 
 export type NewsHeadline = {
   title: string;
@@ -17,6 +18,7 @@ export type MorningBriefingContext = {
   schedule: ScheduleItem[];
   news: NewsHeadline[];
   markets: MarketQuote[];
+  taskFocus: TaskFocus;
 };
 
 export type NotificationResult = {
@@ -60,14 +62,15 @@ async function fetchImportantNews(): Promise<NewsHeadline[]> {
   });
 }
 
-export async function getMorningBriefingContext(now = new Date()): Promise<MorningBriefingContext> {
+export async function getMorningBriefingContext(ownerKey: string, now = new Date()): Promise<MorningBriefingContext> {
   const { start, end, date } = bangkokDayRange(now);
-  const [schedule, news, markets] = await Promise.all([
+  const [schedule, taskFocus, news, markets] = await Promise.all([
     getScheduleByRange(start, end),
+    getTaskFocus(ownerKey, { range: "today", limit: 5 }, now),
     fetchImportantNews().catch(() => []),
     getMarketQuotes().catch(() => []),
   ]);
-  return { date, timezone: "Asia/Bangkok", schedule, news, markets };
+  return { date, timezone: "Asia/Bangkok", schedule, taskFocus, news, markets };
 }
 
 async function reserveDelivery(idempotencyKey: string, channel: NotificationResult["channel"]): Promise<boolean> {
@@ -87,7 +90,7 @@ async function finishDelivery(idempotencyKey: string, result: NotificationResult
   });
 }
 
-export async function sendMorningNotification(message: string, idempotencyKey: string): Promise<NotificationResult[]> {
+export async function sendMorningNotification(message: string, idempotencyKey: string, ownerKey?: string): Promise<NotificationResult[]> {
   const results: NotificationResult[] = [];
   if (process.env.DISCORD_WEBHOOK_URL) {
     if (!await reserveDelivery(idempotencyKey, "discord")) results.push({ channel: "discord", ok: true, skipped: true });
@@ -108,7 +111,7 @@ export async function sendMorningNotification(message: string, idempotencyKey: s
   if (process.env.WEB_PUSH_PUBLIC_KEY && process.env.WEB_PUSH_PRIVATE_KEY) {
     if (!await reserveDelivery(idempotencyKey, "web-push")) results.push({ channel: "web-push", ok: true, skipped: true });
     else {
-      const push = await sendWebPushNotification("สรุปเช้าจาก TinyPersonal", message, "/ai");
+      const push = await sendWebPushNotification("สรุปเช้าจาก TinyPersonal", message, "/ai", ownerKey);
       const result: NotificationResult = { channel: "web-push", ok: push.ok, ...(push.skipped && { skipped: true }), ...(push.error && { error: push.error }) };
       results.push(result); await finishDelivery(idempotencyKey, result);
     }

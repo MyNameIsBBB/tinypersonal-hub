@@ -134,6 +134,16 @@ export async function resetAllGeneralChats(
     return sessions.length;
 }
 
+export async function resetGeneralChat(
+    ownerKey: string,
+    message: string,
+    cycleDate: string,
+): Promise<number> {
+    const session = await ensureDailyGeneralChat(ownerKey);
+    await resetGeneralSession(session.id, cycleDate, message, true);
+    return 1;
+}
+
 export async function listChatSessions(ownerKey: string, limit = 30) {
     return prisma.chatSession.findMany({
         where: { ownerKey },

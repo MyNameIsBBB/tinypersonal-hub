@@ -201,7 +201,9 @@ export function scopeToolsForConversation(userMessages: string[]): ToolScope {
 
 /** Read intents require fresh backend data before the model may answer. */
 export function requiredFirstTool(scope: ToolScope, message = ""): RequiredToolCall | null {
-  if (scope.primaryIntent === "task.query") return { tool: "getTasks", reason: "Read fresh tasks before answering" };
+  if (scope.primaryIntent === "task.query") return scope.allowedTools.includes("getTaskFocus")
+    ? { tool: "getTaskFocus", reason: "Read deterministic task priorities before answering", args: { range: "today" } }
+    : { tool: "getTasks", reason: "Read fresh tasks before answering" };
   if (scope.primaryIntent === "task.mutate" && !scope.allowedTools.includes("createTask")) {
     return { tool: "getTasks", reason: "Resolve the task and checklist IDs before editing" };
   }

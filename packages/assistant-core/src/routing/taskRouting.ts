@@ -6,8 +6,10 @@ export function taskScope(action: "query" | "create" | "update" | "remove", chec
     : action === "update" ? [checklist ? "updateTaskChecklistItem" : "updateTask"]
     : action === "remove" ? [checklist ? "deleteTaskChecklistItem" : "deleteTask"] : [];
   const intent = action === "query" ? "task.query" : "task.mutate";
-  return { primaryIntent: intent, intents: [intent], matchedDomains: ["task"], confidence: 0.96,
-    allowedTools: action === "create" && !checklist ? writes : ["getTasks", "getTask", ...writes] };
+  const allowedTools: ToolName[] = action === "query"
+    ? ["getTaskFocus", "getTasks", "getTask"]
+    : action === "create" && !checklist ? writes : ["getTasks", "getTask", ...writes];
+  return { primaryIntent: intent, intents: [intent], matchedDomains: ["task"], confidence: 0.96, allowedTools };
 }
 
 export function routeTaskMessage(message: string): ToolScope | null {
