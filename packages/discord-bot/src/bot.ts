@@ -1,5 +1,6 @@
 import {
   Client,
+  EmbedBuilder,
   Events,
   GatewayIntentBits,
   MessageFlags,
@@ -14,7 +15,7 @@ import {
   handleProxmoxButton,
 } from "./handlers/proxmoxHandler";
 import { handleAssistant } from "./handlers/assistantHandler";
-import { isDiscordInteractionAllowed } from "./security";
+import { isDiscordChannelAllowed, isDiscordUserAllowed } from "./security";
 
 export async function createDiscordBot(token = process.env.DISCORD_BOT_TOKEN) {
   if (!token) {
@@ -36,7 +37,11 @@ export async function createDiscordBot(token = process.env.DISCORD_BOT_TOKEN) {
     const checkedAt = new Date().toLocaleString("th-TH", { timeZone: "Asia/Bangkok" });
     if (!nodeResult.ok || !vmResult.ok) {
       const error = !nodeResult.ok ? nodeResult.error.message : !vmResult.ok ? vmResult.error.message : "Unknown error";
-      return `🟠 **Infrastructure status**\nProxmox: connection failed\nReason: ${error}\nUpdated: ${checkedAt}`;
+      return new EmbedBuilder()
+        .setColor(0xf59e0b)
+        .setTitle("Infrastructure status")
+        .setDescription(`⚠️ Proxmox connection failed\n\`${error.slice(0, 500)}\``)
+        .setFooter({ text: `Updated ${checkedAt}` });
     }
     const n = nodeResult.data;
     const gib = (value: number) => `${(value / 1024 ** 3).toFixed(1)} GiB`;
@@ -44,15 +49,15 @@ export async function createDiscordBot(token = process.env.DISCORD_BOT_TOKEN) {
     const vms = vmResult.data.map((vm) =>
       `${vm.status === "running" ? "🟢" : "⚫"} **${vm.vmId} ${vm.name}** — ${vm.status} | CPU ${pct(vm.cpuUsage)} | RAM ${gib(vm.memoryUsed)}/${gib(vm.memoryTotal)}`,
     );
-    return [
-      `🟢 **Proxmox ${n.node}** — ${n.status}`,
-      `CPU ${pct(n.cpuUsage)} | RAM ${gib(n.memoryUsed)}/${gib(n.memoryTotal)}`,
-      "",
-      "**Virtual machines**",
-      ...(vms.length ? vms : ["No VMs found"]),
-      "",
-      `Updated: ${checkedAt}`,
-    ].join("\n").slice(0, 2_000);
+    return new EmbedBuilder()
+      .setColor(0x22c55e)
+      .setTitle(`Proxmox · ${n.node}`)
+      .setDescription(`🟢 **${n.status.toUpperCase()}**`)
+      .addFields(
+        { name: "Host resources", value: `CPU  **${pct(n.cpuUsage)}**\nRAM  **${gib(n.memoryUsed)} / ${gib(n.memoryTotal)}**` },
+        { name: `Virtual machines · ${vmResult.data.length}`, value: (vms.length ? vms : ["No VMs found"]).join("\n").slice(0, 1024) },
+      )
+      .setFooter({ text: `Auto-refresh every 4 minutes · Updated ${checkedAt}` });
   };
 
   client.once(Events.ClientReady, async () => {
@@ -87,14 +92,14 @@ export async function createDiscordBot(token = process.env.DISCORD_BOT_TOKEN) {
     if (statusChannelId) {
       const channel = await client.channels.fetch(statusChannelId).catch(() => null);
       if (channel?.isTextBased() && "send" in channel) {
-        let statusMessage = await channel.send(await renderInfrastructureStatus()).catch(() => null);
+        let statusMessage = await channel.send({ embeds: [await renderInfrastructureStatus()] }).catch(() => null);
         const intervalMs = Math.max(180_000, Number(process.env.DISCORD_STATUS_INTERVAL_MS) || 240_000);
         statusTimer = setInterval(async () => {
           const content = await renderInfrastructureStatus();
           if (statusMessage) {
-            statusMessage = await statusMessage.edit(content).catch(() => null);
+            statusMessage = await statusMessage.edit({ embeds: [content] }).catch(() => null);
           }
-          if (!statusMessage) statusMessage = await channel.send(content).catch(() => null);
+          if (!statusMessage) statusMessage = await channel.send({ embeds: [content] }).catch(() => null);
         }, intervalMs);
       }
     }
@@ -105,7 +110,7 @@ export async function createDiscordBot(token = process.env.DISCORD_BOT_TOKEN) {
       const userId = interaction.user.id;
       const channelId = interaction.channelId ?? undefined;
 
-      if (!isDiscordInteractionAllowed(userId, channelId)) {
+      if (!isDiscordChannelAllowed(channelId)) {
         if (interaction.isRepliable()) {
           await interaction.reply({
             content: "This Discord account or channel is not authorized to use TinyPersonal.",
@@ -122,12 +127,20 @@ export async function createDiscordBot(token = process.env.DISCORD_BOT_TOKEN) {
         if (commandName === "assistant") {
           await handleAssistant(interaction, ownerKey);
         } else if (commandName === "vm") {
+          if (!isDiscordUserAllowed(userId)) {
+            await interaction.reply({ content: "Only the authorized owner can create VMs.", flags: MessageFlags.Ephemeral });
+            return;
+          }
           await handleVmCreate(interaction, ownerKey);
         }
         return;
       }
 
       if (interaction.isButton()) {
+        if (!isDiscordUserAllowed(userId)) {
+          await interaction.reply({ content: "Only the authorized owner can confirm VM creation.", flags: MessageFlags.Ephemeral });
+          return;
+        }
         await handleProxmoxButton(interaction, ownerKey);
         return;
       }

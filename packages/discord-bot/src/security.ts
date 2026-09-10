@@ -20,3 +20,23 @@ export function isDiscordInteractionAllowed(
       (allowedChannels.size === 0 || (channelId && allowedChannels.has(channelId))),
   );
 }
+
+export function isDiscordChannelAllowed(
+  channelId: string | undefined,
+  allowedChannelsRaw = process.env.DISCORD_ALLOWED_CHANNEL_IDS ?? "",
+): boolean {
+  const allowedChannels = new Set(
+    allowedChannelsRaw.split(",").map((id) => id.trim()).filter(Boolean),
+  );
+  return allowedChannels.size > 0 && Boolean(channelId && allowedChannels.has(channelId));
+}
+
+export function isDiscordUserAllowed(
+  userId: string | undefined,
+  allowedUsersRaw = process.env.DISCORD_ALLOWED_USER_IDS ?? "",
+): boolean {
+  const allowedUsers = new Set(
+    allowedUsersRaw.split(",").map((id) => id.trim()).filter(Boolean),
+  );
+  return allowedUsers.size > 0 && Boolean(userId && allowedUsers.has(userId));
+}
