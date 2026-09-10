@@ -26,6 +26,19 @@ const commands = [
       { type: 5, name: "on_boot", description: "Start VM automatically when the node boots" },
     ],
   },
+  {
+    name: "proxmox-status",
+    description: "Show Proxmox node health and resource usage",
+    options: [{ type: 3, name: "node", description: "Proxmox node (default: proxmox)" }],
+  },
+  {
+    name: "vm-status",
+    description: "Show all VMs or one VM on a Proxmox node",
+    options: [
+      { type: 3, name: "node", description: "Proxmox node (default: proxmox)" },
+      { type: 4, name: "vm_id", description: "Optional VM ID", min_value: 100 },
+    ],
+  },
 ];
 
 const guildId = process.env.DISCORD_GUILD_ID;

@@ -23,6 +23,29 @@ export type ProxmoxCreateVmResult =
   | { ok: true; data: { node: string; vmId: number; name: string; taskId: string } }
   | { ok: false; error: { code: "NOT_CONFIGURED" | "REQUEST_FAILED" | "INVALID_RESPONSE"; message: string } };
 
+export type ProxmoxStatusError = { code: "NOT_CONFIGURED" | "REQUEST_FAILED" | "INVALID_RESPONSE"; message: string };
+export type ProxmoxNodeStatus = {
+  node: string;
+  status: string;
+  uptimeSeconds: number;
+  cpuUsage: number;
+  cpuCores: number;
+  memoryUsed: number;
+  memoryTotal: number;
+  loadAverage: string[];
+};
+export type ProxmoxVmStatus = {
+  node: string;
+  vmId: number;
+  name: string;
+  status: string;
+  uptimeSeconds: number;
+  cpuUsage: number;
+  cpuCores: number;
+  memoryUsed: number;
+  memoryTotal: number;
+};
+
 function configuration() {
   const baseUrl = process.env.PROXMOX_BASE_URL?.trim().replace(/\/+$/, "");
   const tokenId = process.env.PROXMOX_TOKEN_ID?.trim();
@@ -31,6 +54,87 @@ function configuration() {
   const parsed = new URL(baseUrl);
   if (parsed.protocol !== "https:") throw new Error("PROXMOX_BASE_URL must use HTTPS");
   return { baseUrl, tokenId, tokenSecret };
+}
+
+async function proxmoxGet(path: string): Promise<{ ok: true; data: unknown } | { ok: false; error: ProxmoxStatusError }> {
+  let config: ReturnType<typeof configuration>;
+  try {
+    config = configuration();
+  } catch (error) {
+    return { ok: false, error: { code: "NOT_CONFIGURED", message: error instanceof Error ? error.message : "Invalid Proxmox configuration" } };
+  }
+  if (!config) return { ok: false, error: { code: "NOT_CONFIGURED", message: "Proxmox credentials are not configured" } };
+
+  let response: Response;
+  try {
+    response = await fetch(`${config.baseUrl}${path}`, {
+      headers: { Authorization: `PVEAPIToken=${config.tokenId}=${config.tokenSecret}` },
+      signal: AbortSignal.timeout(15_000),
+    });
+  } catch (error) {
+    return { ok: false, error: { code: "REQUEST_FAILED", message: error instanceof Error ? error.message : "Proxmox request failed" } };
+  }
+  if (!response.ok) return { ok: false, error: { code: "REQUEST_FAILED", message: `Proxmox API returned HTTP ${response.status}` } };
+  const payload = await response.json().catch(() => null) as { data?: unknown } | null;
+  if (!payload || !("data" in payload)) return { ok: false, error: { code: "INVALID_RESPONSE", message: "Proxmox API returned an invalid response" } };
+  return { ok: true, data: payload.data };
+}
+
+function finiteNumber(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function vmStatus(node: string, value: Record<string, unknown>): ProxmoxVmStatus | null {
+  const vmId = finiteNumber(value.vmid);
+  if (!Number.isInteger(vmId) || vmId < 100) return null;
+  return {
+    node,
+    vmId,
+    name: typeof value.name === "string" && value.name ? value.name : `VM ${vmId}`,
+    status: typeof value.status === "string" ? value.status : "unknown",
+    uptimeSeconds: finiteNumber(value.uptime),
+    cpuUsage: finiteNumber(value.cpu),
+    cpuCores: finiteNumber(value.cpus),
+    memoryUsed: finiteNumber(value.mem),
+    memoryTotal: finiteNumber(value.maxmem),
+  };
+}
+
+export async function getProxmoxNodeStatus(node: string): Promise<{ ok: true; data: ProxmoxNodeStatus } | { ok: false; error: ProxmoxStatusError }> {
+  const safeNode = resourceName.parse(node);
+  const result = await proxmoxGet(`/api2/json/nodes/${encodeURIComponent(safeNode)}/status`);
+  if (!result.ok) return result;
+  if (!result.data || typeof result.data !== "object" || Array.isArray(result.data)) {
+    return { ok: false, error: { code: "INVALID_RESPONSE", message: "Proxmox node status was invalid" } };
+  }
+  const data = result.data as Record<string, unknown>;
+  const memory = data.memory && typeof data.memory === "object" && !Array.isArray(data.memory) ? data.memory as Record<string, unknown> : {};
+  return { ok: true, data: {
+    node: safeNode,
+    status: "online",
+    uptimeSeconds: finiteNumber(data.uptime),
+    cpuUsage: finiteNumber(data.cpu),
+    cpuCores: finiteNumber(data.cpuinfo && typeof data.cpuinfo === "object" ? (data.cpuinfo as Record<string, unknown>).cpus : 0),
+    memoryUsed: finiteNumber(memory.used),
+    memoryTotal: finiteNumber(memory.total),
+    loadAverage: Array.isArray(data.loadavg) ? data.loadavg.filter((item): item is string => typeof item === "string").slice(0, 3) : [],
+  } };
+}
+
+export async function listProxmoxVms(node: string, vmId?: number): Promise<{ ok: true; data: ProxmoxVmStatus[] } | { ok: false; error: ProxmoxStatusError }> {
+  const safeNode = resourceName.parse(node);
+  const safeVmId = vmId === undefined ? undefined : z.number().int().min(100).max(999_999_999).parse(vmId);
+  const suffix = safeVmId === undefined ? "" : `/${safeVmId}/status/current`;
+  const result = await proxmoxGet(`/api2/json/nodes/${encodeURIComponent(safeNode)}/qemu${suffix}`);
+  if (!result.ok) return result;
+  const values = safeVmId === undefined ? result.data : [result.data];
+  if (!Array.isArray(values)) return { ok: false, error: { code: "INVALID_RESPONSE", message: "Proxmox VM status was invalid" } };
+  const vms = values
+    .filter((value): value is Record<string, unknown> => Boolean(value) && typeof value === "object" && !Array.isArray(value))
+    .map((value) => vmStatus(safeNode, value))
+    .filter((value): value is ProxmoxVmStatus => value !== null)
+    .sort((a, b) => a.vmId - b.vmId);
+  return { ok: true, data: vms };
 }
 
 /** Creates a QEMU VM and returns the Proxmox asynchronous task ID (UPID). */

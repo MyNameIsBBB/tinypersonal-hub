@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createProxmoxVm, proxmoxCreateVmSchema } from "./proxmoxService";
+import { createProxmoxVm, getProxmoxNodeStatus, listProxmoxVms, proxmoxCreateVmSchema } from "./proxmoxService";
 
 const validInput = {
   node: "pve1",
@@ -41,5 +41,47 @@ describe("createProxmoxVm", () => {
     expect(init.headers).toMatchObject({ Authorization: "PVEAPIToken=robot@pve!tinypersonal=secret-value" });
     expect(String(init.body)).toContain("vmid=120");
     expect(String(init.body)).not.toContain("secret-value");
+  });
+});
+
+describe("Proxmox status reads", () => {
+  function configure() {
+    process.env.PROXMOX_BASE_URL = "https://pve.example.test:8006";
+    process.env.PROXMOX_TOKEN_ID = "robot@pve!tinypersonal";
+    process.env.PROXMOX_TOKEN_SECRET = "secret-value";
+  }
+
+  it("normalizes node status", async () => {
+    configure();
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: {
+      uptime: 90_000,
+      cpu: 0.125,
+      cpuinfo: { cpus: 8 },
+      memory: { used: 4 * 1024 ** 3, total: 16 * 1024 ** 3 },
+      loadavg: ["0.10", "0.20", "0.30"],
+    } }), { status: 200 })));
+
+    await expect(getProxmoxNodeStatus("pve1")).resolves.toEqual({ ok: true, data: {
+      node: "pve1",
+      status: "online",
+      uptimeSeconds: 90_000,
+      cpuUsage: 0.125,
+      cpuCores: 8,
+      memoryUsed: 4 * 1024 ** 3,
+      memoryTotal: 16 * 1024 ** 3,
+      loadAverage: ["0.10", "0.20", "0.30"],
+    } });
+  });
+
+  it("lists and sorts QEMU VM status", async () => {
+    configure();
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: [
+      { vmid: 102, name: "second", status: "stopped", cpus: 2, maxmem: 2048 },
+      { vmid: 100, name: "first", status: "running", uptime: 3600, cpu: 0.25, cpus: 4, mem: 1024, maxmem: 4096 },
+    ] }), { status: 200 })));
+
+    const result = await listProxmoxVms("pve1");
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.data.map((vm) => vm.vmId)).toEqual([100, 102]);
   });
 });

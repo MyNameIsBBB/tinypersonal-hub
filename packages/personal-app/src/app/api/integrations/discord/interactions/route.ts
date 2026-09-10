@@ -1,6 +1,6 @@
-import { createPublicKey, verify } from "node:crypto";
-import { createPendingAction, ensureDailyGeneralChat, executePendingAction, proxmoxCreateVmSchema, saveUserMessageAndEnqueueChatGeneration } from "@tinypersonal/backend-api";
+import { createPendingAction, ensureDailyGeneralChat, executePendingAction, getProxmoxNodeStatus, listProxmoxVms, proxmoxCreateVmSchema, saveUserMessageAndEnqueueChatGeneration } from "@tinypersonal/backend-api";
 import { after } from "next/server";
+import { isDiscordInteractionAllowed, verifyDiscordRequest } from "./discordSecurity";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -22,19 +22,22 @@ function ephemeral(content: string, status = 200) {
   return Response.json({ type: 4, data: { content, flags: 64 } }, { status });
 }
 
-export function verifyDiscordRequest(body: string, timestamp: string | null, signature: string | null, publicKeyHex = process.env.DISCORD_PUBLIC_KEY): boolean {
-  if (!timestamp || !signature || !publicKeyHex || !/^[a-f\d]{64}$/i.test(publicKeyHex) || !/^[a-f\d]{128}$/i.test(signature)) return false;
-  try {
-    const derPrefix = Buffer.from("302a300506032b6570032100", "hex");
-    const publicKey = createPublicKey({ key: Buffer.concat([derPrefix, Buffer.from(publicKeyHex, "hex")]), format: "der", type: "spki" });
-    return verify(null, Buffer.from(timestamp + body), publicKey, Buffer.from(signature, "hex"));
-  } catch {
-    return false;
-  }
-}
-
 function optionMap(options: DiscordOption[] = []) {
   return Object.fromEntries(options.map(({ name, value }) => [name, value]));
+}
+
+function percent(value: number) {
+  return `${(value * 100).toFixed(1)}%`;
+}
+
+function gib(value: number) {
+  return `${(value / 1024 ** 3).toFixed(1)} GiB`;
+}
+
+function uptime(seconds: number) {
+  const days = Math.floor(seconds / 86_400);
+  const hours = Math.floor((seconds % 86_400) / 3_600);
+  return days > 0 ? `${days}d ${hours}h` : `${hours}h`;
 }
 
 function vmInput(options: Record<string, unknown>) {
@@ -85,8 +88,7 @@ export async function POST(request: Request) {
   if (interaction.type !== 2 && interaction.type !== 3) return ephemeral("Unsupported Discord interaction.");
 
   const userId = interaction.member?.user?.id ?? interaction.user?.id;
-  const allowedUsers = new Set((process.env.DISCORD_ALLOWED_USER_IDS ?? "").split(",").map((id) => id.trim()).filter(Boolean));
-  if (!userId || !allowedUsers.has(userId)) return ephemeral("This Discord account is not authorized to use TinyPersonal.");
+  if (!isDiscordInteractionAllowed(userId, interaction.channel_id)) return ephemeral("This Discord account or channel is not authorized to use TinyPersonal.");
   if (!interaction.id || !interaction.application_id || !interaction.token) return ephemeral("Discord interaction metadata is incomplete.");
 
   const ownerKey = process.env.DISCORD_OWNER_KEY?.trim() || `discord:${userId}`;
@@ -123,6 +125,30 @@ export async function POST(request: Request) {
   }
 
   const options = optionMap(interaction.data?.options);
+  if (interaction.data?.name === "proxmox-status") {
+    const node = typeof options.node === "string" && options.node.trim() ? options.node.trim() : "proxmox";
+    const result = await getProxmoxNodeStatus(node);
+    if (!result.ok) return ephemeral(`Proxmox status failed: ${result.error.message}`);
+    const status = result.data;
+    return ephemeral([
+      `Proxmox node **${status.node}**: ${status.status}`,
+      `CPU: ${percent(status.cpuUsage)} (${status.cpuCores} cores)`,
+      `Memory: ${gib(status.memoryUsed)} / ${gib(status.memoryTotal)}`,
+      `Uptime: ${uptime(status.uptimeSeconds)}`,
+      ...(status.loadAverage.length ? [`Load: ${status.loadAverage.join(" / ")}`] : []),
+    ].join("\n"));
+  }
+
+  if (interaction.data?.name === "vm-status") {
+    const node = typeof options.node === "string" && options.node.trim() ? options.node.trim() : "proxmox";
+    const vmId = typeof options.vm_id === "number" ? options.vm_id : undefined;
+    const result = await listProxmoxVms(node, vmId);
+    if (!result.ok) return ephemeral(`VM status failed: ${result.error.message}`);
+    if (result.data.length === 0) return ephemeral(vmId ? `VM ${vmId} was not found on ${node}.` : `No QEMU VMs found on ${node}.`);
+    const lines = result.data.map((vm) => `**${vm.vmId} ${vm.name}** — ${vm.status} | CPU ${percent(vm.cpuUsage)} | RAM ${gib(vm.memoryUsed)}/${gib(vm.memoryTotal)} | up ${uptime(vm.uptimeSeconds)}`);
+    return ephemeral(lines.join("\n").slice(0, 2_000));
+  }
+
   if (interaction.data?.name === "vm") {
     const parsed = vmInput(options);
     if (!parsed.success) return ephemeral(`Invalid VM settings: ${parsed.error.issues[0]?.message ?? "validation failed"}`);

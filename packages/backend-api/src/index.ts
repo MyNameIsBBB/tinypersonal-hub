@@ -14,8 +14,8 @@ export { appendAgentToolTraces, completeAgentRunTrace, createAgentRunTrace, desc
 export type { AgentToolTrace, AgentTraceContextItem } from "./services/agentTraceService";
 export { getMarketQuotes, integrationHealth } from "./services/integrations";
 export type { IntegrationName } from "./services/integrations";
-export { createProxmoxVm, proxmoxCreateVmSchema, proxmoxHealth } from "./services/proxmoxService";
-export type { ProxmoxCreateVmInput, ProxmoxCreateVmResult } from "./services/proxmoxService";
+export { createProxmoxVm, getProxmoxNodeStatus, listProxmoxVms, proxmoxCreateVmSchema, proxmoxHealth } from "./services/proxmoxService";
+export type { ProxmoxCreateVmInput, ProxmoxCreateVmResult, ProxmoxNodeStatus, ProxmoxStatusError, ProxmoxVmStatus } from "./services/proxmoxService";
 export { getMorningBriefingContext, sendMorningNotification } from "./services/morningBriefingService";
 export type { NewsHeadline, MorningBriefingContext, NotificationResult } from "./services/morningBriefingService";
 export { hasPushSubscription, removePushSubscription, savePushSubscription, sendDueScheduleNotifications, sendWebPushNotification } from "./services/pushService";
