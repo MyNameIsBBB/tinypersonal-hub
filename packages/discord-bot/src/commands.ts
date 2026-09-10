@@ -13,33 +13,6 @@ export const commands = [
     ),
 
   new SlashCommandBuilder()
-    .setName("proxmox-status")
-    .setDescription("Show Proxmox node health and resource usage")
-    .addStringOption((option) =>
-      option
-        .setName("node")
-        .setDescription("Proxmox node name (default: proxmox)")
-        .setRequired(false),
-    ),
-
-  new SlashCommandBuilder()
-    .setName("vm-status")
-    .setDescription("Show all VMs or one VM on a Proxmox node")
-    .addStringOption((option) =>
-      option
-        .setName("node")
-        .setDescription("Proxmox node name (default: proxmox)")
-        .setRequired(false),
-    )
-    .addIntegerOption((option) =>
-      option
-        .setName("vm_id")
-        .setDescription("Optional VM ID")
-        .setRequired(false)
-        .setMinValue(100),
-    ),
-
-  new SlashCommandBuilder()
     .setName("vm")
     .setDescription("Propose a new Proxmox VM (confirmation is required)")
     .addStringOption((option) =>

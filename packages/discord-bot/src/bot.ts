@@ -10,8 +10,6 @@ import {
 import { getProxmoxNodeStatus, listProxmoxVms } from "@tinypersonal/backend-api";
 import { commands } from "./commands";
 import {
-  handleProxmoxStatus,
-  handleVmStatus,
   handleVmCreate,
   handleProxmoxButton,
 } from "./handlers/proxmoxHandler";
@@ -123,10 +121,6 @@ export async function createDiscordBot(token = process.env.DISCORD_BOT_TOKEN) {
         const { commandName } = interaction;
         if (commandName === "assistant") {
           await handleAssistant(interaction, ownerKey);
-        } else if (commandName === "proxmox-status") {
-          await handleProxmoxStatus(interaction);
-        } else if (commandName === "vm-status") {
-          await handleVmStatus(interaction);
         } else if (commandName === "vm") {
           await handleVmCreate(interaction, ownerKey);
         }
