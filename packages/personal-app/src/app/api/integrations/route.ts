@@ -1,4 +1,4 @@
-import { getMarketQuotes, integrationHealth } from "@tinypersonal/backend-api";
+import { getMarketQuotes, integrationHealth, proxmoxHealth } from "@tinypersonal/backend-api";
 import { authorizedOwnerKey } from "@/lib/serverAuth";
 
 export async function GET(request: Request) {
@@ -7,5 +7,5 @@ export async function GET(request: Request) {
     integrationHealth("finance"),
     getMarketQuotes().catch(() => []),
   ]);
-  return Response.json({ health: [finance], markets }, { headers: { "Cache-Control": "no-store" } });
+  return Response.json({ health: [finance, proxmoxHealth()], markets }, { headers: { "Cache-Control": "no-store" } });
 }

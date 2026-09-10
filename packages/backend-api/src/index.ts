@@ -5,7 +5,8 @@ export type { TaskFocus, TaskFocusItem, TaskFocusReason } from "./services/taskF
 export { claimCodingJob, completeCodingJob, enqueueCodingJob, getLatestCodingJob, updateCodingJobProgress } from "./services/codingJobService";
 export { codingExecutionResultSchema } from "./services/codingJobService";
 export type { CodingExecutionResult } from "./services/codingJobService";
-export { claimChatGenerationJob, completeChatGenerationJob, enqueueChatGenerationJob, getLatestChatGenerationJob, saveUserMessageAndEnqueueChatGeneration } from "./services/chatGenerationJobService";
+export { claimChatGenerationJob, completeChatGenerationJob, decodeChatGenerationRequest, enqueueChatGenerationJob, getLatestChatGenerationJob, saveUserMessageAndEnqueueChatGeneration } from "./services/chatGenerationJobService";
+export type { DiscordChatCallback } from "./services/chatGenerationJobService";
 export { clearConversationPendingAction, createChatSession, deleteChatSession, ensureDailyGeneralChat, generateAndUpdateSessionTitle, GENERAL_CHAT_TITLE, getOrCreateChatSession, listChatSessions, loadChatMessages, loadConversationState, replaceChatMessages, resetAllGeneralChats, resetGeneralChat, saveAssistantChatMessageIfCurrent, saveChatMessage, saveConversationState, saveUserChatMessage, updateChatSessionSystemPrompt } from "./services/chatService";
 export type { StoredChatMessage } from "./services/chatService";
 export { createPendingAction, executeAllPendingActions, executeLatestPendingAction, executePendingAction, hasPendingActions, recordAudit, resolvePendingAction, supersedePendingActions } from "./services/auditService";
@@ -13,6 +14,8 @@ export { appendAgentToolTraces, completeAgentRunTrace, createAgentRunTrace, desc
 export type { AgentToolTrace, AgentTraceContextItem } from "./services/agentTraceService";
 export { getMarketQuotes, integrationHealth } from "./services/integrations";
 export type { IntegrationName } from "./services/integrations";
+export { createProxmoxVm, proxmoxCreateVmSchema, proxmoxHealth } from "./services/proxmoxService";
+export type { ProxmoxCreateVmInput, ProxmoxCreateVmResult } from "./services/proxmoxService";
 export { getMorningBriefingContext, sendMorningNotification } from "./services/morningBriefingService";
 export type { NewsHeadline, MorningBriefingContext, NotificationResult } from "./services/morningBriefingService";
 export { hasPushSubscription, removePushSubscription, savePushSubscription, sendDueScheduleNotifications, sendWebPushNotification } from "./services/pushService";

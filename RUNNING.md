@@ -221,6 +221,34 @@ tailscale up
 
 Tailscale Funnel จะเผยแพร่แอปออกสู่อินเทอร์เน็ตแบบสาธารณะ โปรดตรวจสอบว่าไม่มีข้อมูลหรือฟังก์ชันที่ไม่ต้องการเปิดเผย
 
+## เชื่อม Discord และ Proxmox
+
+สร้าง Discord application แล้วตั้ง **Interactions Endpoint URL** เป็น URL สาธารณะของแอปตามด้วย:
+
+```text
+https://your-host.example/api/integrations/discord/interactions
+```
+
+กำหนด `DISCORD_APPLICATION_ID`, `DISCORD_PUBLIC_KEY`, `DISCORD_BOT_TOKEN` และ `DISCORD_ALLOWED_USER_IDS` ใน `.env` โดย allowlist ต้องมี Discord user ID ที่อนุญาตอย่างน้อยหนึ่งรายการ หากต้องการให้ Discord ใช้ประวัติแชทเดียวกับผู้ใช้เว็บ ให้ตั้ง `DISCORD_OWNER_KEY` เป็น owner key เดียวกัน เช่น `user:alice` จากนั้นลงทะเบียน slash commands:
+
+```bash
+npm run discord:register
+```
+
+สคริปต์จะแสดง Install URL สำหรับเพิ่ม application commands เข้า Discord server หลังลงทะเบียนสำเร็จ
+
+ตั้ง `DISCORD_GUILD_ID` ก่อนรันเพื่อให้ `/assistant` และ `/vm` ปรากฏทันทีใน test server หรือไม่ตั้งเพื่อ register แบบ global คำตอบเป็น ephemeral โดย `/assistant` ส่งข้อความเข้าคิวผู้ช่วยเดิม ส่วน `/vm` เป็นคำสั่งตรงที่ไม่ผ่าน AI: ระบบ validate arguments, แสดงสรุป และเรียก Proxmox หลังผู้ใช้กดปุ่ม Confirm เท่านั้น
+
+สำหรับ Proxmox ให้สร้าง API token ที่มีสิทธิ์ขั้นต่ำสำหรับสร้าง VM บน node/storage ที่ต้องการ แล้วกำหนด:
+
+```dotenv
+PROXMOX_BASE_URL=https://proxmox.example.com:8006
+PROXMOX_TOKEN_ID=automation@pve!tinypersonal
+PROXMOX_TOKEN_SECRET=your_token_secret
+```
+
+ใบรับรอง HTTPS ของ Proxmox ต้องเชื่อถือได้จากเครื่องที่รันแอป ระบบไม่ปิด TLS verification คำสั่ง `/vm` ต้องระบุ node, VM ID, name และ storage ส่วน CPU, memory, disk และ bridge มีค่าเริ่มต้นแบบอนุรักษ์นิยม ทุกคำขอถูก validate ซ้ำใน backend และบันทึก audit result
+
 ## 3. รันด้วย Docker
 
 `start-docker.sh` เป็นคำสั่งเดียวสำหรับเส้นทาง Docker ปกติ โดยสคริปต์จะ:

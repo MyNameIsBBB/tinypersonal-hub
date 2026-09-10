@@ -1,5 +1,6 @@
 import { prisma } from "../db/client";
 import type { StoredChatMessage } from "./chatService";
+import { decryptSecret, encryptSecret, type EncryptedValue } from "../security/vaultCrypto";
 
 const MAX_ATTEMPTS = 3;
 const MAX_ERROR_LENGTH = 4_000;
@@ -11,6 +12,56 @@ type EnqueueInput = {
   userMessageId: string;
   request: unknown;
 };
+
+export type DiscordChatCallback = {
+  kind: "discord";
+  applicationId: string;
+  interactionToken: string;
+};
+
+function encodeJobRequest(request: unknown, jobId: string): string {
+  if (!request || typeof request !== "object" || Array.isArray(request)) return JSON.stringify(request);
+  const { discordCallback, ...assistantRequest } = request as Record<string, unknown>;
+  if (!discordCallback || typeof discordCallback !== "object" || Array.isArray(discordCallback)) {
+    return JSON.stringify(request);
+  }
+  const callback = discordCallback as Record<string, unknown>;
+  if (typeof callback.applicationId !== "string" || typeof callback.interactionToken !== "string") {
+    return JSON.stringify(assistantRequest);
+  }
+  return JSON.stringify({
+    ...assistantRequest,
+    discordCallback: {
+      kind: "discord",
+      applicationId: callback.applicationId,
+      sealed: encryptSecret(callback.interactionToken, `chat-callback:${jobId}`),
+    },
+  });
+}
+
+export function decodeChatGenerationRequest(jobId: string, inputJson: string): {
+  assistantRequest: Record<string, unknown>;
+  callback: DiscordChatCallback | null;
+} {
+  const parsed = JSON.parse(inputJson) as unknown;
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return { assistantRequest: {}, callback: null };
+  const { discordCallback, ...assistantRequest } = parsed as Record<string, unknown>;
+  if (!discordCallback || typeof discordCallback !== "object" || Array.isArray(discordCallback)) {
+    return { assistantRequest, callback: null };
+  }
+  const value = discordCallback as Record<string, unknown>;
+  if (value.kind !== "discord" || typeof value.applicationId !== "string" || !value.sealed || typeof value.sealed !== "object") {
+    return { assistantRequest, callback: null };
+  }
+  return {
+    assistantRequest,
+    callback: {
+      kind: "discord",
+      applicationId: value.applicationId,
+      interactionToken: decryptSecret(value.sealed as EncryptedValue, `chat-callback:${jobId}`),
+    },
+  };
+}
 
 function pendingAssistantMessage(jobId: string): StoredChatMessage {
   return {
@@ -47,11 +98,13 @@ export async function saveUserMessageAndEnqueueChatGeneration(input: {
       where: { sessionId_userMessageId: { sessionId: input.sessionId, userMessageId: input.message.id } },
     });
     if (!job) {
+      const jobId = crypto.randomUUID();
       job = await tx.chatGenerationJob.create({ data: {
+        id: jobId,
         ownerKey: input.ownerKey,
         sessionId: input.sessionId,
         userMessageId: input.message.id,
-        inputJson: JSON.stringify(input.request),
+        inputJson: encodeJobRequest(input.request, jobId),
       } });
       const placeholder = pendingAssistantMessage(job.id);
       await tx.chatMessage.create({ data: {
@@ -82,12 +135,14 @@ export async function enqueueChatGenerationJob(input: EnqueueInput) {
     };
     const existing = await tx.chatGenerationJob.findUnique({ where: uniqueJob });
     if (existing) return existing;
+    const jobId = crypto.randomUUID();
     const job = await tx.chatGenerationJob.create({
       data: {
+        id: jobId,
         ownerKey: input.ownerKey,
         sessionId: input.sessionId,
         userMessageId: input.userMessageId,
-        inputJson: JSON.stringify(input.request),
+        inputJson: encodeJobRequest(input.request, jobId),
       },
     });
     const message = pendingAssistantMessage(job.id);

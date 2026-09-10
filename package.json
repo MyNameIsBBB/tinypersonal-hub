@@ -29,7 +29,8 @@
     "briefing:install-systemd": "bash ./scripts/install-morning-briefing-systemd.sh",
     "docker:install-systemd": "bash ./scripts/install-start-docker-systemd.sh",
     "search:up": "./scripts/start-searxng.sh",
-    "search:logs": "docker compose logs --tail=100 searxng"
+    "search:logs": "docker compose logs --tail=100 searxng",
+    "discord:register": "node ./scripts/register-discord-commands.mjs"
   },
   "devDependencies": {
     "typescript": "^5.7.0",

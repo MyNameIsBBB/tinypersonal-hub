@@ -1,7 +1,26 @@
-import { claimChatGenerationJob, completeChatGenerationJob, getLatestChatGenerationJob, saveChatMessage, sendWebPushNotification } from "@tinypersonal/backend-api";
+import { claimChatGenerationJob, completeChatGenerationJob, decodeChatGenerationRequest, getLatestChatGenerationJob, loadChatMessages, saveChatMessage, sendWebPushNotification, type DiscordChatCallback } from "@tinypersonal/backend-api";
 import { authorizedOwnerKey, isCronAuthorizedRequest } from "@/lib/serverAuth";
 
 export const maxDuration = 600;
+
+function messageText(parts: unknown[]) {
+  return parts.flatMap((part) => part && typeof part === "object" && "text" in part
+    ? [String((part as { text: unknown }).text)]
+    : []).join("\n").trim();
+}
+
+async function completeDiscordResponse(callback: DiscordChatCallback, content: string) {
+  const response = await fetch(
+    `https://discord.com/api/v10/webhooks/${encodeURIComponent(callback.applicationId)}/${encodeURIComponent(callback.interactionToken)}/messages/@original`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: content.slice(0, 2_000) || "TinyPersonal completed without a text response." }),
+      signal: AbortSignal.timeout(15_000),
+    },
+  );
+  if (!response.ok) throw new Error(`Discord callback returned HTTP ${response.status}`);
+}
 
 export async function GET(request: Request) {
   const ownerKey = authorizedOwnerKey(request);
@@ -18,8 +37,11 @@ export async function POST(request: Request) {
   const baseUrl = process.env.INTERNAL_APP_URL ?? "http://127.0.0.1:3000";
   let ok = false;
   let errorMessage: string | undefined;
+  let callback: DiscordChatCallback | null = null;
   try {
-    const storedRequest = JSON.parse(job.inputJson) as Record<string, unknown>;
+    const decoded = decodeChatGenerationRequest(job.id, job.inputJson);
+    const storedRequest = decoded.assistantRequest;
+    callback = decoded.callback;
     const response = await fetch(new URL("/api/chat", baseUrl), {
       method: "POST",
       headers: {
@@ -45,8 +67,15 @@ export async function POST(request: Request) {
     const text = `AI ตอบไม่สำเร็จครับ: ${errorMessage ?? "Unknown error"}`;
     await saveChatMessage(job.ownerKey, job.sessionId, { id: `chat-job-${job.id}`, role: "assistant", parts: [{ type: "text", text }] });
     await sendWebPushNotification("TinyPersonal ตอบไม่สำเร็จ", text.slice(0, 180), `/ai?sessionId=${encodeURIComponent(job.sessionId)}`, job.ownerKey);
+    if (callback) await completeDiscordResponse(callback, text).catch((error) => console.error("Discord callback failed", error instanceof Error ? error.message : error));
   } else {
     await sendWebPushNotification("TinyPersonal ตอบแล้ว", "แตะเพื่อเปิดคำตอบในแชท", `/ai?sessionId=${encodeURIComponent(job.sessionId)}`, job.ownerKey);
+    if (callback) {
+      const messages = await loadChatMessages(job.ownerKey, job.sessionId);
+      const reply = messages.find(({ id }) => id === `chat-job-${job.id}`);
+      await completeDiscordResponse(callback, reply ? messageText(reply.parts) : "TinyPersonal completed without a text response.")
+        .catch((error) => console.error("Discord callback failed", error instanceof Error ? error.message : error));
+    }
   }
   return Response.json({ ok, jobId: job.id });
 }
