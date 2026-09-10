@@ -1,5 +1,6 @@
 import {
   Client,
+  Events,
   GatewayIntentBits,
   MessageFlags,
   REST,
@@ -25,7 +26,7 @@ export async function createDiscordBot(token = process.env.DISCORD_BOT_TOKEN) {
     intents: [GatewayIntentBits.Guilds],
   });
 
-  client.once("ready", async () => {
+  client.once(Events.ClientReady, async () => {
     console.log(`[Discord Bot] Logged in as ${client.user?.tag} (ID: ${client.user?.id})`);
 
     // Register slash commands

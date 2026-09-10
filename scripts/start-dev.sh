@@ -70,7 +70,8 @@ node scripts/chat/run-jobs.mjs &
 child_pids+=("$!")
 
 if [[ -n "${DISCORD_BOT_TOKEN:-}" ]]; then
-  node --no-warnings packages/discord-bot/src/index.ts &
+  npm run build --workspace=@tinypersonal/discord-bot
+  node packages/discord-bot/dist/index.js &
   child_pids+=("$!")
 fi
 

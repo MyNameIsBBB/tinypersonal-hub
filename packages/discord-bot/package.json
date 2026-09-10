@@ -4,11 +4,11 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./dist/index.js"
   },
   "scripts": {
-    "start": "node --no-warnings ./src/index.ts",
-    "build": "tsc --noEmit",
+    "build": "esbuild src/index.ts --bundle --platform=node --format=esm --external:discord.js --external:@prisma/client --external:zod --external:web-push --outfile=dist/index.js",
+    "start": "node dist/index.js",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -18,6 +18,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
+    "esbuild": "^0.28.2",
     "typescript": "^5.7.0"
   }
 }

@@ -31,7 +31,7 @@
     "search:up": "./scripts/start-searxng.sh",
     "search:logs": "docker compose logs --tail=100 searxng",
     "discord:register": "node ./scripts/register-discord-commands.mjs",
-    "discord:bot": "node --no-warnings ./packages/discord-bot/src/index.ts"
+    "discord:bot": "npm run build --workspace=@tinypersonal/discord-bot && node packages/discord-bot/dist/index.js"
   },
   "devDependencies": {
     "typescript": "^5.7.0",
