@@ -1,6 +1,16 @@
+if (typeof process.loadEnvFile === "function") {
+  try {
+    process.loadEnvFile();
+  } catch {}
+}
+
 const applicationId = process.env.DISCORD_APPLICATION_ID;
 const botToken = process.env.DISCORD_BOT_TOKEN;
-if (!applicationId || !botToken) throw new Error("DISCORD_APPLICATION_ID and DISCORD_BOT_TOKEN are required");
+if (!applicationId || !botToken) {
+  throw new Error(
+    "DISCORD_APPLICATION_ID and DISCORD_BOT_TOKEN are required. Please set them in your .env file."
+  );
+}
 
 const commands = [
   {
