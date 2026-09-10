@@ -29,7 +29,7 @@ function uptime(seconds: number) {
 }
 
 export async function handleProxmoxStatus(interaction: ChatInputCommandInteraction) {
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  await interaction.deferReply();
   const node = interaction.options.getString("node")?.trim() || "proxmox";
   const result = await getProxmoxNodeStatus(node);
   if (!result.ok) {
@@ -49,7 +49,7 @@ export async function handleProxmoxStatus(interaction: ChatInputCommandInteracti
 }
 
 export async function handleVmStatus(interaction: ChatInputCommandInteraction) {
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  await interaction.deferReply();
   const node = interaction.options.getString("node")?.trim() || "proxmox";
   const vmId = interaction.options.getInteger("vm_id") ?? undefined;
   const result = await listProxmoxVms(node, vmId);

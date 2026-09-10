@@ -30,9 +30,8 @@ services:
       CODEX_WORKER_SOCKET: /run/codex-worker/worker.sock
       PORT: "3000"
       HOSTNAME: 0.0.0.0
-      SEARXNG_BASE_URL: http://searxng:8080
-    ports:
-      - "3000:3000"
+      SEARXNG_BASE_URL: http://127.0.0.1:8080
+    network_mode: host
     volumes:
       - tinypersonal-hub-data:/data
       - ${CODEX_WORKER_DIR:-/tmp/tinypersonal-codex-worker}:/run/codex-worker
@@ -42,8 +41,6 @@ services:
       timeout: 5s
       retries: 3
       start_period: 20s
-    networks:
-      - tinypersonal-network
 
 volumes:
   tinypersonal-hub-data:
