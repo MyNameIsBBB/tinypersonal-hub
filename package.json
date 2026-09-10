@@ -30,7 +30,8 @@
     "docker:install-systemd": "bash ./scripts/install-start-docker-systemd.sh",
     "search:up": "./scripts/start-searxng.sh",
     "search:logs": "docker compose logs --tail=100 searxng",
-    "discord:register": "node ./scripts/register-discord-commands.mjs"
+    "discord:register": "node ./scripts/register-discord-commands.mjs",
+    "discord:bot": "node --no-warnings ./packages/discord-bot/src/index.ts"
   },
   "devDependencies": {
     "typescript": "^5.7.0",

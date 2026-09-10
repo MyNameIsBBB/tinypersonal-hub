@@ -26,5 +26,9 @@ if [[ -n "${CRON_SECRET:-}" ]]; then
   start_child node scripts/chat/run-jobs.mjs
 fi
 
+if [[ -n "${DISCORD_BOT_TOKEN:-}" ]]; then
+  start_child node --no-warnings packages/discord-bot/src/index.ts
+fi
+
 # Any essential child exiting should restart the container and recover leased jobs.
 wait -n "${child_pids[@]}"

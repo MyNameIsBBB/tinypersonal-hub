@@ -4,13 +4,14 @@
 
 `tinypersonal-hub` is a central orchestrator for a modular personal workspace. It accepts human intent through a Next.js interface, converts that intent into a constrained AI plan, and delegates side effects to typed backend services. Keep the system observable and conservative: the model may propose or select an operation, but application code validates input and owns execution.
 
-The repository is an npm workspaces monorepo with three independently owned packages:
+The repository is an npm workspaces monorepo with four independently owned packages:
 
 1. `@tinypersonal/assistant-core` — reasoning configuration and tool selection.
 2. `@tinypersonal/personal-app` — the user-facing Next.js App Router application.
 3. `@tinypersonal/backend-api` — database and integration execution layer.
+4. `@tinypersonal/discord-bot` — Discord bot WebSocket client powered by discord.js.
 
-Dependencies flow in one direction: `personal-app` may call `assistant-core` and `backend-api`; `assistant-core` describes tools but does not import UI or persistence; `backend-api` does not import the UI or orchestration package.
+Dependencies flow in one direction: `personal-app` may call `assistant-core` and `backend-api`; `discord-bot` may call `backend-api`; `assistant-core` describes tools but does not import UI or persistence; `backend-api` does not import the UI or orchestration package.
 
 ## Architecture Boundaries
 

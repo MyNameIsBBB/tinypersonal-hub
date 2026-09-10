@@ -69,6 +69,11 @@ done
 node scripts/chat/run-jobs.mjs &
 child_pids+=("$!")
 
+if [[ -n "${DISCORD_BOT_TOKEN:-}" ]]; then
+  node --no-warnings packages/discord-bot/src/index.ts &
+  child_pids+=("$!")
+fi
+
 if [[ "$ENABLE_TAILSCALE_FUNNEL" == "1" ]]; then
   "$SCRIPT_DIR/open-funnel.sh" "$PORT"
 fi
