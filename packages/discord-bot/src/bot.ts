@@ -7,6 +7,7 @@ import {
   REST,
   Routes,
   type Interaction,
+  type Message,
 } from "discord.js";
 import { getProxmoxNodeStatus, listProxmoxVms } from "@tinypersonal/backend-api";
 import { commands } from "./commands";
@@ -91,15 +92,52 @@ export async function createDiscordBot(token = process.env.DISCORD_BOT_TOKEN) {
       || process.env.DISCORD_ALLOWED_CHANNEL_IDS?.split(",")[0]?.trim();
     if (statusChannelId) {
       const channel = await client.channels.fetch(statusChannelId).catch(() => null);
-      if (channel?.isTextBased() && "send" in channel) {
-        let statusMessage = await channel.send({ embeds: [await renderInfrastructureStatus()] }).catch(() => null);
+      if (channel?.isTextBased() && "send" in channel && "messages" in channel) {
+        const cleanupOldStatusMessages = async (keepMessageId?: string) => {
+          try {
+            const fetched = await channel.messages.fetch({ limit: 50 }).catch(() => null);
+            if (!fetched) return;
+            const botMessages = fetched.filter(
+              (msg) => msg.author.id === client.user?.id && msg.id !== keepMessageId,
+            );
+            for (const msg of botMessages.values()) {
+              await msg.delete().catch(() => null);
+            }
+          } catch (error) {
+            console.error("[Discord Bot] Failed to cleanup old status messages:", error);
+          }
+        };
+
+        let statusMessage: Message | null = null;
+        try {
+          const fetched = await channel.messages.fetch({ limit: 20 }).catch(() => null);
+          const existing = fetched
+            ?.filter((msg) => msg.author.id === client.user?.id)
+            .first();
+
+          if (existing) {
+            statusMessage = await existing.edit({ embeds: [await renderInfrastructureStatus()] }).catch(() => null);
+            await cleanupOldStatusMessages(statusMessage?.id);
+          }
+        } catch {
+          // fallback to sending new message
+        }
+
+        if (!statusMessage) {
+          await cleanupOldStatusMessages();
+          statusMessage = await channel.send({ embeds: [await renderInfrastructureStatus()] }).catch(() => null);
+        }
+
         const intervalMs = Math.max(180_000, Number(process.env.DISCORD_STATUS_INTERVAL_MS) || 240_000);
         statusTimer = setInterval(async () => {
           const content = await renderInfrastructureStatus();
           if (statusMessage) {
             statusMessage = await statusMessage.edit({ embeds: [content] }).catch(() => null);
           }
-          if (!statusMessage) statusMessage = await channel.send({ embeds: [content] }).catch(() => null);
+          if (!statusMessage) {
+            await cleanupOldStatusMessages();
+            statusMessage = await channel.send({ embeds: [content] }).catch(() => null);
+          }
         }, intervalMs);
       }
     }
