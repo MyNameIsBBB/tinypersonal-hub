@@ -14,7 +14,10 @@
     "db:deploy": "prisma migrate deploy"
   },
   "dependencies": {
+    "@ai-sdk/google": "^4.0.36",
     "@prisma/client": "^6.2.0",
+    "@tinypersonal/assistant-core": "*",
+    "ai": "^7.0.55",
     "web-push": "^3.6.7",
     "zod": "^3.24.0"
   },

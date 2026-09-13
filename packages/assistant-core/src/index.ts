@@ -1,11 +1,11 @@
+// Namespaced Foundation and Features
+export * as foundation from "./foundation/index";
+export * as features from "./features/index";
+
+// Foundation Re-exports
 export { createAgentConfig } from "./orchestrator";
-export * from "./tools/taskSchemas";
 export type { PromptContext } from "./prompts/base";
-export { defineTool, toolContracts } from "./tools/definitions";
-export type { ToolContract, ToolName } from "./tools/definitions";
 export * from "./contracts";
-export { delegateCodingTaskInputSchema } from "./tools/definitions";
-export type { DelegateCodingTaskInput } from "./tools/definitions";
 export { requiredFirstTool, scopeToolsForConversation, scopeToolsForMessage } from "./routing/toolScoper";
 export type { AgentDomain, AgentIntent, RequiredToolCall, ToolScope } from "./routing/toolScoper";
 export { classifierDecisionSchema, scopeFromClassification } from "./routing/classifier";
@@ -14,5 +14,10 @@ export { conversationEntitySchema, conversationStateSchema, resolveConversationR
 export type { ConversationEntity, ConversationState } from "./routing/conversationState";
 export { evaluateAgentCases } from "./evals/framework";
 export type { AgentEvalCase, AgentEvalMetrics, AgentEvalObservation, AgentExpectedToolCall, AgentObservedToolCall } from "./evals/framework";
+
+// Feature Re-exports
+export * from "./tools/taskSchemas";
+export { defineTool, toolContracts, delegateCodingTaskInputSchema } from "./tools/definitions";
+export type { ToolContract, ToolName, DelegateCodingTaskInput } from "./tools/definitions";
 export { routingEvalCases } from "./evals/routingCases";
 export { capabilityEvalCases, capabilityEvalObservations } from "./evals/capabilityCases";
