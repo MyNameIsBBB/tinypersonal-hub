@@ -22,7 +22,6 @@ npm run db:deploy
 start_child npm run start --workspace=@tinypersonal/personal-app -- --port 3000
 
 if [[ -n "${CRON_SECRET:-}" ]]; then
-  start_child node scripts/codex/run-jobs.mjs
   start_child node scripts/chat/run-jobs.mjs
 fi
 

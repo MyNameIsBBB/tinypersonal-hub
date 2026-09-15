@@ -17,17 +17,16 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: tinypersonal-hub:local
+    image: ${APP_IMAGE:-tinypersonal-hub:local}
     container_name: tinypersonal-hub
     restart: unless-stopped
     depends_on:
       searxng:
         condition: service_started
     env_file:
-      - .env
+      - ${APP_ENV_FILE:-.env}
     environment:
       DATABASE_URL: file:/data/dev.db
-      CODEX_WORKER_SOCKET: /run/codex-worker/worker.sock
       PORT: "3000"
       HOSTNAME: 0.0.0.0
       SEARXNG_BASE_URL: http://searxng:8080
@@ -35,7 +34,6 @@ services:
       - "3000:3000"
     volumes:
       - tinypersonal-hub-data:/data
-      - ${CODEX_WORKER_DIR:-/tmp/tinypersonal-codex-worker}:/run/codex-worker
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
       interval: 30s

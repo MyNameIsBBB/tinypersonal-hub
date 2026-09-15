@@ -213,19 +213,44 @@ tailscale up
 
 Tailscale Funnel จะเผยแพร่แอปออกสู่อินเทอร์เน็ตแบบสาธารณะ โปรดตรวจสอบว่าไม่มีข้อมูลหรือฟังก์ชันที่ไม่ต้องการเปิดเผย
 
+## GitHub Actions CI/CD
+
+`.github/workflows/ci-cd.yml` runs on the Linux `self-hosted` runner for pushes to
+`main`, or manual runs on `main`. Runs are serialized so deployments cannot overlap.
+Pull-request code is not executed on the production runner.
+
+The runner needs Docker with Compose v2 supporting `up --wait`, access to the Docker
+daemon, and read access to `/home/best/actions-runner/.env`. Application settings,
+including `CRON_SECRET` for background chat generation, belong in that file.
+The workflow does not copy it into the checkout or Docker build context.
+
+Each run builds an image tagged with the commit SHA, runs typecheck and all tests
+inside that image, and calls `scripts/deploy.sh` only after those checks pass.
+Deployment reuses the existing Compose project and persistent SQLite volume,
+applies migrations during container startup, and waits up to 180 seconds for health.
+A failed health check fails the workflow; it does not automatically roll back database
+migrations. The preceding image remains available on the host.
+
+Compose uses `APP_ENV_FILE` for application configuration and `APP_IMAGE` for the
+tested image. Local `docker compose` usage still defaults to `.env` and
+`tinypersonal-hub:local`. See [Docker's environment-file documentation](https://docs.docker.com/compose/how-tos/environment-variables/variable-interpolation/)
+and [Compose health-wait options](https://docs.docker.com/reference/cli/docker/compose/up/).
+
+Repository execution tools, coding-job routes, worker scripts, and progress UI have
+been removed. Historical job records and existing migration history are retained;
+the retired table is ignored by Prisma's generated client. Existing chat, schedule,
+notes, vault, and web tools continue to work. Any previously installed host worker
+service is outside this repository and should be stopped on the Linux host.
+
 ## 3. รันด้วย Docker
 
 `start-docker.sh` เป็นคำสั่งเดียวสำหรับเส้นทาง Docker ปกติ โดยสคริปต์จะ:
 
-1. เปิด host-side Codex worker และชี้ไปที่ repository นี้โดยค่าเริ่มต้น
-2. ล้าง Docker build cache ก่อน build
-3. build และเปิด application container
-4. เปิด coding-job runner ภายใน container เมื่อกำหนด `CRON_SECRET`
-5. ตรวจ health และเปิด Tailscale Funnel ตาม configuration
+1. Build and start the application container.
+2. Start the chat generation runner when `CRON_SECRET` is configured.
+3. Check application health and configure Tailscale Funnel.
 
-จึงไม่ต้องเปิด Codex worker หรือ coding-job runner แยกอีก หากต้องการให้ coding jobs ทำงาน ต้องกำหนด `CRON_SECRET` ที่ไม่ว่างใน `.env` ก่อนรัน หากต้องการให้ Codex ทำงานกับ repository อื่น ให้กำหนด `HOST_JARVIS_PROJECT_ROOT` เป็น absolute path ของ repository นั้น
-
-สิ่งที่ต้องติดตั้ง:
+Prerequisites:
 
 - Docker
 - Tailscale

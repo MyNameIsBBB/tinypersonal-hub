@@ -7,12 +7,6 @@ PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 SYSTEMD_USER_DIR="${HOME}/.config/systemd/user"
 SERVICE_NAME="tinypersonal-docker.service"
 SERVICE_PATH="$SYSTEMD_USER_DIR/$SERVICE_NAME"
-CODEX_BIN_DIR=""
-
-if command -v codex >/dev/null 2>&1; then
-  CODEX_BIN_DIR="$(dirname "$(command -v codex)")"
-fi
-
 if ! command -v systemctl >/dev/null 2>&1; then
   echo "systemctl is not installed."
   exit 1
@@ -36,7 +30,7 @@ Type=oneshot
 RemainAfterExit=yes
 WorkingDirectory=$PROJECT_DIR
 EnvironmentFile=-$PROJECT_DIR/.env
-Environment=PATH=${CODEX_BIN_DIR:+$CODEX_BIN_DIR:}/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 ExecStart=/usr/bin/env bash $PROJECT_DIR/start-docker.sh
 ExecStop=/usr/bin/docker stop tinypersonal-hub
 StandardOutput=append:$PROJECT_DIR/.data/start-docker-systemd.log

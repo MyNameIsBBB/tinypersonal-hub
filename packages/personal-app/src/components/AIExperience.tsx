@@ -1,7 +1,7 @@
 "use client";
 
 import { useChat } from "@ai-sdk/react";
-import { ArrowUp, Bot, CalendarPlus, Check, ChevronDown, CircleCheck, Clock3, Copy, Cpu, Database, FileSearch, KeyRound, LoaderCircle, Menu, MessageSquare, Mic, MicOff, Paperclip, Plus, Search, ShieldCheck, Sparkles, Trash2, Volume2, VolumeX, X } from "lucide-react";
+import { ArrowUp, Bot, CalendarPlus, Check, CircleCheck, Clock3, Copy, Database, FileSearch, KeyRound, LoaderCircle, Menu, MessageSquare, Mic, MicOff, Paperclip, Plus, Search, ShieldCheck, Sparkles, Trash2, Volume2, VolumeX, X } from "lucide-react";
 import { getToolName, isToolUIPart, type FileUIPart, type UIMessage, type UIMessagePart } from "ai";
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
@@ -19,8 +19,6 @@ const suggestions = [
   { icon: KeyRound, text: "ขอลิงก์เข้า GitHub จาก Vault" },
 ];
 
-type CodingJobProgressEvent = { at: string; kind: "status" | "command" | "file" | "tool"; message: string };
-type CodingJobProgress = { id: string; status: string; attempts: number; progressJson: string; createdAt: string; updatedAt: string; completedAt: string | null; error: string | null };
 type ChatGenerationJobProgress = { id: string; userMessageId: string; status: string; attempts: number; createdAt: string; updatedAt: string; completedAt: string | null; error: string | null };
 type ChatSessionSummary = { id: string; title: string | null; customSystemPrompt: string | null; updatedAt: string; _count: { messages: number } };
 type SystemHealth = { ok: boolean; service: string; timestamp?: string; system?: { memoryUsedBytes: number; memoryTotalBytes: number; diskFreeBytes: number; diskTotalBytes: number; loadAverage1m: number; cpuCount: number; uptimeSeconds: number } };
@@ -182,7 +180,6 @@ export function AIExperience({ mode = "chat" }: { mode?: "chat" | "os" }) {
   const voiceRequestPending = useRef(false);
   const lastSpokenMessageId = useRef<string | null>(null);
   const checkpointedAssistantId = useRef<string | null>(null);
-  const reloadedCodingJobId = useRef<string | null>(null);
   const reloadedChatGenerationJobId = useRef<string | null>(null);
   const threadRef = useRef<HTMLDivElement | null>(null);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
@@ -190,9 +187,7 @@ export function AIExperience({ mode = "chat" }: { mode?: "chat" | "os" }) {
   const [historyReady, setHistoryReady] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [sessions, setSessions] = useState<ChatSessionSummary[]>([]);
-  const [codingJob, setCodingJob] = useState<CodingJobProgress | null>(null);
   const [chatGenerationJob, setChatGenerationJob] = useState<ChatGenerationJobProgress | null>(null);
-  const [showCodexProgress, setShowCodexProgress] = useState(false);
   const [deleteSessionTarget, setDeleteSessionTarget] = useState<ChatSessionSummary | null>(null);
   const [deleteBusySessionId, setDeleteBusySessionId] = useState<string | null>(null);
   const [now, setNow] = useState<Date | null>(null);
@@ -264,14 +259,6 @@ export function AIExperience({ mode = "chat" }: { mode?: "chat" | "os" }) {
     }
   }
 
-  const codingJobEvents = useMemo(() => {
-    if (!codingJob?.progressJson) return [];
-    try { return JSON.parse(codingJob.progressJson) as CodingJobProgressEvent[]; }
-    catch { return []; }
-  }, [codingJob?.progressJson]);
-
-  const latestProgressEvent = codingJobEvents.at(-1);
-  const activeCodingJob = codingJob?.status === "QUEUED" || codingJob?.status === "RUNNING" ? codingJob : null;
   const awaitingChatResponse = Boolean(
     chatGenerationJob
     && reloadedChatGenerationJobId.current !== chatGenerationJob.id
@@ -593,34 +580,6 @@ export function AIExperience({ mode = "chat" }: { mode?: "chat" | "os" }) {
     if (!historyReady || !sessionId) return;
     let cancelled = false;
     const poll = async () => {
-      const response = await fetch(`/api/jobs/coding?sessionId=${encodeURIComponent(sessionId)}`, { cache: "no-store" });
-      if (!response.ok || cancelled) return;
-      const data = await response.json() as { job: CodingJobProgress | null };
-      if (cancelled) return;
-      setCodingJob((current) => current && current.id === data.job?.id && current.updatedAt === data.job?.updatedAt ? current : data.job);
-      const terminal = data.job?.status === "SUCCEEDED" || data.job?.status === "FAILED";
-      if (terminal && data.job && reloadedCodingJobId.current !== data.job.id && status === "ready") {
-        const chatResponse = await fetch(`/api/chat?sessionId=${encodeURIComponent(sessionId)}`, { cache: "no-store" });
-        if (!chatResponse.ok || cancelled) return;
-        const chatData = await chatResponse.json() as { messages?: Parameters<typeof setMessages>[0] };
-        if (Array.isArray(chatData.messages)) {
-          reloadedCodingJobId.current = data.job.id;
-          const merged = mergeServerMessages(messagesRef.current, chatData.messages);
-          messagesRef.current = merged;
-          setMessages(merged);
-        }
-      }
-    };
-    void poll();
-    const interval = codingJob?.status === "RUNNING" ? 1500 : codingJob?.status === "QUEUED" ? 4000 : 30_000;
-    const timer = window.setInterval(() => void poll(), interval);
-    return () => { cancelled = true; window.clearInterval(timer); };
-  }, [historyReady, sessionId, codingJob?.status, setMessages, status]);
-
-  useEffect(() => {
-    if (!historyReady || !sessionId) return;
-    let cancelled = false;
-    const poll = async () => {
       const response = await fetch(`/api/jobs/chat?sessionId=${encodeURIComponent(sessionId)}`, { cache: "no-store" });
       if (!response.ok || cancelled) return;
       const data = await response.json() as { job: ChatGenerationJobProgress | null };
@@ -796,10 +755,6 @@ export function AIExperience({ mode = "chat" }: { mode?: "chat" | "os" }) {
               <div className="service-row"><i /><span><b>{systemHealth?.service ?? "TinyPersonal Hub"}</b><small>{systemHealth?.timestamp ? `ตรวจล่าสุด ${new Date(systemHealth.timestamp).toLocaleTimeString("th-TH")}` : "กำลังตรวจสอบ"}</small></span><em>{systemHealth?.ok ? "ONLINE" : "—"}</em></div>
               {systemHealth?.system && <div className="service-row"><i /><span><b>{systemHealth.system.cpuCount} CPU cores</b><small>Uptime {Math.floor(systemHealth.system.uptimeSeconds / 3600)} ชั่วโมง</small></span><em>LIVE</em></div>}
             </section>
-            <section>
-              <h2><Cpu size={15} /> CODEX WORKER</h2>
-              <div className="worker-status"><span className={activeCodingJob ? "working" : ""}><i /></span><div><b>{activeCodingJob ? "Working" : "Idle"}</b><small>{activeCodingJob ? latestProgressEvent?.message ?? "กำลังประมวลผล" : "พร้อมรับคำสั่ง"}</small></div></div>
-            </section>
             <footer><ShieldCheck size={14} /> PRIVATE • LOCAL-FIRST</footer>
           </aside>
 
@@ -891,53 +846,6 @@ export function AIExperience({ mode = "chat" }: { mode?: "chat" | "os" }) {
               <div className="thinking" role="status"><LoaderCircle size={15} /> {chatGenerationJob.status === "QUEUED" ? "คำตอบอยู่ในคิวของเซิร์ฟเวอร์…" : chatGenerationJob.status === "RUNNING" ? "AI กำลังสร้างคำตอบที่เซิร์ฟเวอร์…" : "AI กำลังส่งคำตอบ…"}</div>
             )}
 
-            {activeCodingJob && (
-              <div className={`codex-status-card ${activeCodingJob.status.toLowerCase()}`}>
-                <div className="codex-status-header">
-                  <div className="codex-status-main">
-                    {activeCodingJob.status === "QUEUED" || activeCodingJob.status === "RUNNING" ? (
-                      <LoaderCircle size={15} className="spin" />
-                    ) : null}
-                    <div className="codex-status-info">
-                      <span className="codex-title">
-                        Codex: {activeCodingJob.status === "QUEUED" ? "กำลังจัดคิว" : (latestProgressEvent?.message ?? `กำลังทำงาน (รอบที่ ${activeCodingJob.attempts})`)}
-                      </span>
-                      {activeCodingJob.status === "RUNNING" && latestProgressEvent && (
-                        <span className="codex-timestamp">
-                          {new Date(latestProgressEvent.at).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  {codingJobEvents.length > 0 && (
-                    <button
-                      type="button"
-                      className="codex-toggle-btn"
-                      onClick={() => setShowCodexProgress((prev) => !prev)}
-                    >
-                      {showCodexProgress ? "ซ่อนขั้นตอน" : `ดูขั้นตอน (${codingJobEvents.length})`}
-                      <ChevronDown size={14} className={showCodexProgress ? "rotated" : ""} />
-                    </button>
-                  )}
-                </div>
-
-                {showCodexProgress && codingJobEvents.length > 0 && (
-                  <div className="codex-progress-log">
-                    {codingJobEvents.map((evt, idx) => (
-                      <div className="codex-log-item" key={idx}>
-                        <span className="log-kind-badge" data-kind={evt.kind}>
-                          {evt.kind === "command" ? "💻" : evt.kind === "file" ? "📝" : evt.kind === "tool" ? "🛠️" : "🧠"}
-                        </span>
-                        <span className="log-message">{evt.message}</span>
-                        <span className="log-time">
-                          {new Date(evt.at).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
             {(status === "submitted" || status === "streaming") && <div className="thinking"><LoaderCircle size={15} /> B1 กำลังคิด…</div>}
             {(error || persistenceError) && <div className="chat-error">{persistenceError ?? `เชื่อมต่อ AI ไม่สำเร็จ: ${error!.message}`}</div>}
           </div>

@@ -18,7 +18,6 @@ DATA_VOLUME="${APP_NAME}-data"
 PORT="${PORT:-3000}"
 DOCKER_NETWORK="${DOCKER_NETWORK:-}"
 ENABLE_TAILSCALE_FUNNEL="${ENABLE_TAILSCALE_FUNNEL:-1}"
-CODEX_WORKER_DIR="${CODEX_WORKER_DIR:-/tmp/tinypersonal-codex-worker}"
 DOCKERFILE="$SCRIPT_DIR/Dockerfile"
 
 for command_name in docker curl; do
@@ -31,14 +30,10 @@ done
 cd "$SCRIPT_DIR"
 
 if [[ -z "${CRON_SECRET:-}" ]]; then
-  echo "Error: CRON_SECRET is required so the coding-job runner can process queued tasks." >&2
+  echo "Error: CRON_SECRET is required so the chat generation runner can process queued tasks." >&2
   exit 1
 fi
 
-HOST_JARVIS_PROJECT_ROOT="${HOST_JARVIS_PROJECT_ROOT:-/home/best/codex-playground}" "$SCRIPT_DIR/scripts/codex/start-worker.sh"
-
-echo "Clearing Docker build cache before build..."
-docker builder prune --all --force
 
 echo "Building all workspaces in Docker..."
 docker build --file "$DOCKERFILE" --tag "$IMAGE_NAME" .
@@ -55,7 +50,6 @@ docker_args=(
   --restart unless-stopped
   --publish "${PORT}:3000"
   --volume "${DATA_VOLUME}:/data"
-  --volume "${CODEX_WORKER_DIR}:/run/codex-worker"
 )
 
 if [[ -n "$DOCKER_NETWORK" ]]; then
@@ -67,7 +61,6 @@ if [[ -f "$SCRIPT_DIR/.env" ]]; then
 fi
 
 docker_args+=(--env "DATABASE_URL=file:/data/dev.db")
-docker_args+=(--env "CODEX_WORKER_SOCKET=/run/codex-worker/worker.sock")
 docker_args+=("$IMAGE_NAME")
 docker "${docker_args[@]}" >/dev/null
 
@@ -85,11 +78,6 @@ for attempt in {1..30}; do
   sleep 2
 done
 
-if ! docker top "$CONTAINER_NAME" -eo pid,args | grep -q "scripts/codex/run-jobs.mjs"; then
-  echo "Error: coding-job runner is not running inside $CONTAINER_NAME." >&2
-  docker logs --tail 100 "$CONTAINER_NAME" >&2
-  exit 1
-fi
 if ! docker top "$CONTAINER_NAME" -eo pid,args | grep -q "scripts/chat/run-jobs.mjs"; then
   echo "Error: chat generation runner is not running inside $CONTAINER_NAME." >&2
   docker logs --tail 100 "$CONTAINER_NAME" >&2

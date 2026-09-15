@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { prisma } from "../db/client";
-import { assertSuccessfulToolResult, createPendingAction, recordAudit, supersedePendingActions } from "./auditService";
+import { assertSuccessfulToolResult, createPendingAction, executePendingAction, recordAudit, supersedePendingActions } from "./auditService";
 
 describe("audit service", () => {
   it("serializes metadata without passing it as an unknown Prisma field", async () => {
@@ -56,6 +56,24 @@ describe("batch pending actions", () => {
 });
 
 describe("pending action safety", () => {
+  it("rejects previously stored actions for the removed coding tool", async () => {
+    const action = {
+      id: "retired-action", ownerKey: "u1", sessionId: "s1",
+      toolName: "coding.delegateTask", argumentsJson: '{"instruction":"change files"}',
+    };
+    const findFirst = vi.spyOn(prisma.pendingAction, "findFirst").mockResolvedValue(action as never);
+    const update = vi.spyOn(prisma.pendingAction, "update").mockResolvedValue(action as never);
+    const auditCreate = vi.spyOn(prisma.auditLog, "create").mockResolvedValue({} as never);
+    try {
+      await expect(executePendingAction("u1", action.id, true)).rejects.toThrow("Unsupported pending action");
+      expect(auditCreate).toHaveBeenLastCalledWith({ data: expect.objectContaining({ status: "FAILED" }) });
+    } finally {
+      findFirst.mockRestore();
+      update.mockRestore();
+      auditCreate.mockRestore();
+    }
+  });
+
   it("seals sensitive arguments instead of storing plaintext secrets", async () => {
     const previousKey = process.env.VAULT_MASTER_KEY;
     process.env.VAULT_MASTER_KEY = Buffer.alloc(32, 7).toString("base64");

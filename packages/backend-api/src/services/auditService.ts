@@ -3,7 +3,6 @@ import { createNote, deleteNote, updateNote } from "./noteService";
 import { createScheduleItem, deleteOrCancelRoutine, updateScheduleItem, updateScheduleStatus } from "./scheduleService";
 import { createVaultSecret, deleteVaultSecret, updateVaultMetadata } from "./vaultService";
 import { decryptSecret, encryptSecret } from "../security/vaultCrypto";
-import { enqueueCodingJob } from "./codingJobService";
 
 function safeMetadata(metadata: Record<string, unknown>): string {
   const sanitized = Object.fromEntries(Object.entries(metadata).filter(([key]) =>
@@ -84,12 +83,6 @@ export async function executePendingAction(ownerKey: string, id: string, approve
     else if (action.toolName === "vault.create") result = await createVaultSecret(args as Parameters<typeof createVaultSecret>[0]);
     else if (action.toolName === "vault.updateMetadata") { const { id: targetId, ...input } = args; result = await updateVaultMetadata(String(targetId), input); }
     else if (action.toolName === "vault.delete") { await deleteVaultSecret(String(args.id)); result = { id: String(args.id), deleted: true }; }
-    else if (action.toolName === "coding.delegateTask") {
-      if (!action.sessionId) throw new Error("Coding task is missing a chat session");
-      const latestUser = await prisma.chatMessage.findFirst({ where: { sessionId: action.sessionId, role: "user" }, orderBy: { createdAt: "desc" }, select: { messageId: true } });
-      if (!latestUser) throw new Error("Coding task is missing its user message");
-      result = await enqueueCodingJob({ ownerKey, sessionId: action.sessionId, userMessageId: latestUser.messageId, task: args });
-    }
     else throw new Error("Unsupported pending action");
     assertSuccessfulToolResult(result);
     await recordAudit({ actorId: ownerKey, action: action.toolName, targetId: id, status: "SUCCEEDED" });

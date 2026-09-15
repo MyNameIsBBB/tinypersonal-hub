@@ -184,7 +184,11 @@ model PendingAction {
   @@index([ownerKey, status, expiresAt])
 }
 
-model CodingJob {
+// Historical records only: excluded from the generated client; no worker executes them.
+model RetiredCodingJob {
+  @@map("CodingJob")
+  @@ignore
+
   id            String   @id @default(cuid())
   ownerKey      String
   sessionId     String

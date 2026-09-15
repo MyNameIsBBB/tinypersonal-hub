@@ -1,6 +1,5 @@
 import { createScheduleItemTool, deleteOrCancelRoutineTool, getScheduleByRangeTool, updateScheduleItemTool, updateScheduleStatusTool } from "./scheduleTools";
 import { webScrapeTool, webSearchTool } from "./web";
-import { delegateCodingTaskTool } from "./jarvis";
 import {
   createNoteTool, createVaultSecretTool, deleteNoteTool, deleteVaultSecretTool,
   searchNotesTool, searchVaultMetadataTool, updateNoteTool, updateVaultMetadataTool,
@@ -15,7 +14,6 @@ export const toolRegistry = {
   deleteRoutine: deleteOrCancelRoutineTool,
   searchWeb: webSearchTool,
   fetchWebPage: webScrapeTool,
-  delegateCodingTask: delegateCodingTaskTool,
   searchNotes: searchNotesTool,
   createNote: createNoteTool,
   updateNote: updateNoteTool,

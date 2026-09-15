@@ -1,0 +1,51 @@
+name: CI / CD
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tinypersonal-production
+  cancel-in-progress: false
+
+jobs:
+  build-test-deploy:
+    if: github.ref == 'refs/heads/main'
+    runs-on: self-hosted
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    env:
+      APP_ENV_FILE: /home/best/actions-runner/.env
+      APP_IMAGE: tinypersonal-hub:${{ github.sha }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Check runner prerequisites
+        run: |
+          set -Eeuo pipefail
+          test "$(uname -s)" = Linux
+          test -r "$APP_ENV_FILE"
+          docker info >/dev/null
+          docker compose version
+
+      - name: Build production image
+        run: docker build --tag "$APP_IMAGE" .
+
+      - name: Typecheck and test
+        run: |
+          docker run --rm \
+            --env NODE_ENV=test \
+            --env DATABASE_URL=file:/tmp/ci.db \
+            "$APP_IMAGE" sh -c 'npm run typecheck && npm test && bash scripts/test-deploy.sh'
+
+      - name: Deploy and verify health
+        run: bash scripts/deploy.sh
