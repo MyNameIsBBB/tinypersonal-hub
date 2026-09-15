@@ -4,6 +4,7 @@ const maxStoredMessages = 120;
 const maxContextMessages = 16;
 const maxContextCharacters = 24_000;
 const maxToolSummaryCharacters = 600;
+const maxVisiblePendingJobAgeMs = 15 * 60_000;
 type MessagePart = UIMessage["parts"][number];
 type ToolLikePart = MessagePart & { output?: unknown };
 
@@ -23,14 +24,28 @@ function summarizeToolOutput(output: unknown): string {
   return "Tool completed; raw historical payload omitted.";
 }
 
+function toolName(part: MessagePart): string | null {
+  if (part.type === "dynamic-tool") {
+    const name = (part as MessagePart & { toolName?: unknown }).toolName;
+    return typeof name === "string" ? name : null;
+  }
+  return part.type.startsWith("tool-") ? part.type.slice("tool-".length) : null;
+}
+
 function sanitizeHistoricalMessage(message: UIMessage, isLatest: boolean): UIMessage {
   if (isLatest) return message;
   return { ...message, parts: message.parts.map((part): MessagePart => {
     if (part.type === "file") return { type: "text", text: `[Historical image omitted from model context: ${part.filename ?? "image"}]` } as MessagePart;
     if (!part.type.startsWith("tool-") && part.type !== "dynamic-tool") return part;
+    const historicalToolName = toolName(part);
     const toolPart = part as ToolLikePart;
-    if (!("output" in toolPart)) return part;
-    return { ...toolPart, output: summarizeToolOutput(toolPart.output) } as MessagePart;
+    const summary = "output" in toolPart
+      ? summarizeToolOutput(toolPart.output)
+      : "Tool call did not produce a usable result.";
+    return {
+      type: "text",
+      text: `[Historical tool ${historicalToolName ?? "unknown"}: ${summary}]`,
+    } as MessagePart;
   }) };
 }
 
@@ -62,6 +77,27 @@ export function hasRenderableMessageContent(message: UIMessage | undefined) {
   ));
 }
 
+type ChatGenerationProgress = {
+  status: string;
+  createdAt: string;
+};
+
+/**
+ * A terminal or abandoned server job must never leave the global thinking
+ * indicator visible. Old queued jobs can survive a stopped worker, so only a
+ * recent QUEUED/RUNNING job represents work the user is currently waiting on.
+ */
+export function isChatGenerationPending(
+  job: ChatGenerationProgress | null,
+  nowMs = Date.now(),
+) {
+  if (!job || (job.status !== "QUEUED" && job.status !== "RUNNING")) return false;
+  const createdAtMs = Date.parse(job.createdAt);
+  return Number.isFinite(createdAtMs)
+    && nowMs >= createdAtMs
+    && nowMs - createdAtMs <= maxVisiblePendingJobAgeMs;
+}
+
 /** Merge durable messages without dropping optimistic or still-streaming UI messages. */
 export function mergeServerMessages(local: UIMessage[], server: UIMessage[]) {
   const serverIds = new Set(server.map(({ id }) => id));
@@ -71,6 +107,7 @@ export function mergeServerMessages(local: UIMessage[], server: UIMessage[]) {
 
 export function confirmationDecision(text: string): boolean | null {
   const normalized = text.trim().toLowerCase().replace(/[.!?]+$/g, "").trim();
+  if (/^(?:(?:โอเค|ตกลง|ok|okay)(?:ครับ|ค่ะ|คะ)?\s+)?(?:ยืนยัน(?:เลย)?|confirm|yes)(?:ครับ|ค่ะ|คะ)?$/u.test(normalized)) return true;
   if (/^(ยืนยัน|ยืนยันเลย|ตกลง|โอเค|ได้เลย|เอาเลย|ทำเลย|จัดการ|ดำเนินการ|confirm|yes|ok)(ครับ|ค่ะ|คะ)?$/u.test(normalized)) return true;
   if (/^(ยกเลิก|ไม่ยืนยัน|ไม่เอา|ไม่ต้อง|cancel|no)(ครับ|ค่ะ|คะ)?$/u.test(normalized)) return false;
   return null;

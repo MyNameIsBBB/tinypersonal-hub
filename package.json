@@ -7,10 +7,13 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "npm run dev --workspace=@tinypersonal/personal-app",
+    "dev": "./scripts/start-dev.sh",
+    "dev:mobile": "ENABLE_TAILSCALE_FUNNEL=1 ./scripts/start-dev.sh",
     "build": "npm run build --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "vitest run",
+    "test:integration": "vitest run packages/personal-app/src/app/api/api.integration.test.ts",
+    "test:eval": "vitest run --config vitest.eval.config.ts packages/assistant-core/src/evals/routingEval.test.ts packages/assistant-core/src/evals/capabilityEval.test.ts",
     "db:generate": "npm run db:generate --workspace=@tinypersonal/backend-api",
     "db:migrate": "npm run db:migrate --workspace=@tinypersonal/backend-api",
     "db:deploy": "npm run db:deploy --workspace=@tinypersonal/backend-api",
@@ -26,7 +29,9 @@
     "briefing:install-systemd": "bash ./scripts/install-morning-briefing-systemd.sh",
     "docker:install-systemd": "bash ./scripts/install-start-docker-systemd.sh",
     "search:up": "./scripts/start-searxng.sh",
-    "search:logs": "docker compose logs --tail=100 searxng"
+    "search:logs": "docker compose logs --tail=100 searxng",
+    "discord:register": "node ./scripts/register-discord-commands.mjs",
+    "discord:bot": "npm run build --workspace=@tinypersonal/discord-bot && node packages/discord-bot/dist/index.js"
   },
   "devDependencies": {
     "typescript": "^5.7.0",

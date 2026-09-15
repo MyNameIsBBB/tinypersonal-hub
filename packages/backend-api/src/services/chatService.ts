@@ -3,6 +3,39 @@ import { getScheduleByRange } from "./scheduleService";
 
 export type StoredChatMessage = { id: string; role: string; parts: unknown[] };
 export const GENERAL_CHAT_TITLE = "แชททั่วไป";
+const MAX_CONVERSATION_STATE_BYTES = 16_000;
+
+export async function loadConversationState(ownerKey: string, sessionId: string): Promise<unknown | null> {
+    const session = await prisma.chatSession.findFirst({
+        where: { id: sessionId, ownerKey },
+        select: { conversationStateJson: true },
+    });
+    if (!session?.conversationStateJson) return null;
+    try {
+        return JSON.parse(session.conversationStateJson) as unknown;
+    } catch {
+        return null;
+    }
+}
+
+export async function saveConversationState(ownerKey: string, sessionId: string, state: unknown): Promise<boolean> {
+    const conversationStateJson = JSON.stringify(state);
+    if (Buffer.byteLength(conversationStateJson, "utf8") > MAX_CONVERSATION_STATE_BYTES) {
+        throw new Error("Conversation state exceeds the storage limit");
+    }
+    const updated = await prisma.chatSession.updateMany({
+        where: { id: sessionId, ownerKey },
+        data: { conversationStateJson },
+    });
+    return updated.count === 1;
+}
+
+export async function clearConversationPendingAction(ownerKey: string, sessionId: string): Promise<void> {
+    const current = await loadConversationState(ownerKey, sessionId);
+    if (!current || typeof current !== "object" || Array.isArray(current)) return;
+    const { pendingActionId: _pendingActionId, ...next } = current as Record<string, unknown>;
+    await saveConversationState(ownerKey, sessionId, { ...next, updatedAt: new Date().toISOString() });
+}
 
 function bangkokCycleDate(now: Date): string {
     // 08:00 Asia/Bangkok is 01:00 UTC, so shifting UTC back one hour gives the cycle date.
@@ -66,7 +99,7 @@ async function resetGeneralSession(
         }),
         prisma.chatSession.update({
             where: { id: sessionId },
-            data: { title: GENERAL_CHAT_TITLE },
+            data: { title: GENERAL_CHAT_TITLE, conversationStateJson: null },
         }),
     ]);
 }
@@ -99,6 +132,16 @@ export async function resetAllGeneralChats(
         ),
     );
     return sessions.length;
+}
+
+export async function resetGeneralChat(
+    ownerKey: string,
+    message: string,
+    cycleDate: string,
+): Promise<number> {
+    const session = await ensureDailyGeneralChat(ownerKey);
+    await resetGeneralSession(session.id, cycleDate, message, true);
+    return 1;
 }
 
 export async function listChatSessions(ownerKey: string, limit = 30) {

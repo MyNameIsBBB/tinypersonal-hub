@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { UIMessage } from "ai";
-import { confirmationDecision, hasRenderableMessageContent, mergeServerMessages, selectContextWindow } from "./ChatStreamHandler";
+import { confirmationDecision, hasRenderableMessageContent, isChatGenerationPending, mergeServerMessages, selectContextWindow } from "./ChatStreamHandler";
 
 describe("chat context window", () => {
   it("keeps a local message missing from a delayed server snapshot", () => {
@@ -43,7 +43,7 @@ describe("chat context window", () => {
     expect(JSON.stringify(context)).toContain("raw historical payload omitted");
   });
 
-  it("converts windowed messages with tool outputs to model messages", async () => {
+  it("converts historical tool outputs to inert model context", async () => {
     const { convertToModelMessages } = await import("ai");
     const testMessages = [
       { id: "1", role: "user", parts: [{ type: "text", text: "ค้นหาโน้ต test" }] },
@@ -54,12 +54,29 @@ describe("chat context window", () => {
     const converted = await convertToModelMessages(windowed);
     expect(converted).toBeDefined();
     expect(converted.length).toBeGreaterThan(0);
+    expect(JSON.stringify(converted)).not.toContain("tool-call");
+    expect(JSON.stringify(converted)).toContain("Historical tool searchNotes");
+  });
+
+  it("removes malformed historical function calls even when the same tool may be used again", async () => {
+    const { convertToModelMessages } = await import("ai");
+    const testMessages = [
+      { id: "1", role: "user", parts: [{ type: "text", text: "พรุ่งนี้มีอะไร" }] },
+      { id: "2", role: "assistant", parts: [{ type: "tool-getSchedule", toolCallId: "call-1", state: "output-error", input: { rangeStart: "2026-09-06", rangeEnd: "2026-09-06" }, errorText: "timeout" }] },
+      { id: "3", role: "user", parts: [{ type: "text", text: "ขอบคุณ" }] },
+    ] as UIMessage[];
+
+    const converted = await convertToModelMessages(selectContextWindow(testMessages));
+    expect(JSON.stringify(converted)).not.toContain("tool-call");
+    expect(JSON.stringify(converted)).toContain("Historical tool getSchedule");
   });
 });
 
 describe("confirmationDecision", () => {
   it("recognizes concise approval and denial replies", () => {
     expect(confirmationDecision("ยืนยันครับ")).toBe(true);
+    expect(confirmationDecision("โอเค ยืนยัน")).toBe(true);
+    expect(confirmationDecision("โอเคครับ ยืนยันเลยครับ")).toBe(true);
     expect(confirmationDecision("เอาเลย")).toBe(true);
     expect(confirmationDecision("ยกเลิก")).toBe(false);
     expect(confirmationDecision("cancel please")).toBeNull();
@@ -67,5 +84,20 @@ describe("confirmationDecision", () => {
 
   it("does not execute from a general sentence", () => {
     expect(confirmationDecision("ช่วยยืนยันเวลานัดให้หน่อย")).toBeNull();
+  });
+});
+
+describe("isChatGenerationPending", () => {
+  const now = Date.parse("2026-09-07T00:30:00.000Z");
+
+  it("shows only recent queued or running work", () => {
+    expect(isChatGenerationPending({ status: "QUEUED", createdAt: "2026-09-07T00:29:00.000Z" }, now)).toBe(true);
+    expect(isChatGenerationPending({ status: "RUNNING", createdAt: "2026-09-07T00:20:00.000Z" }, now)).toBe(true);
+  });
+
+  it("hides terminal and stale jobs", () => {
+    expect(isChatGenerationPending({ status: "SUCCEEDED", createdAt: "2026-09-07T00:29:00.000Z" }, now)).toBe(false);
+    expect(isChatGenerationPending({ status: "FAILED", createdAt: "2026-09-07T00:29:00.000Z" }, now)).toBe(false);
+    expect(isChatGenerationPending({ status: "QUEUED", createdAt: "2026-09-06T23:00:00.000Z" }, now)).toBe(false);
   });
 });

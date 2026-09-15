@@ -31,12 +31,10 @@ describe("batch pending actions", () => {
       { id: "act-2" },
     ] as never);
     const auditCreate = vi.spyOn(prisma.auditLog, "create").mockResolvedValue({} as never);
-    const findFirst = vi.spyOn(prisma.pendingAction, "findFirst")
-      .mockResolvedValueOnce({ id: "act-1", ownerKey: "u1", toolName: "notes.delete", argumentsJson: '{"id":"n1"}', summary: "Delete note 1", status: "PENDING", expiresAt: new Date(Date.now() + 60000) } as never)
-      .mockResolvedValueOnce({ id: "act-2", ownerKey: "u1", toolName: "notes.delete", argumentsJson: '{"id":"n2"}', summary: "Delete note 2", status: "PENDING", expiresAt: new Date(Date.now() + 60000) } as never);
-    const update = vi.spyOn(prisma.pendingAction, "update").mockImplementation((async ({ where, data }: any) => {
+    const updateMany = vi.spyOn(prisma.pendingAction, "updateMany").mockResolvedValue({ count: 1 });
+    const findUnique = vi.spyOn(prisma.pendingAction, "findUnique").mockImplementation((async ({ where }: any) => {
       const act = where.id === "act-1" ? { id: "act-1", argumentsJson: '{"id":"n1"}' } : { id: "act-2", argumentsJson: '{"id":"n2"}' };
-      return { id: act.id, ownerKey: "u1", toolName: "notes.delete", argumentsJson: act.argumentsJson, summary: `Delete note ${act.id}`, status: data.status, expiresAt: new Date(), createdAt: new Date(), resolvedAt: new Date(), sessionId: "s1" };
+      return { id: act.id, ownerKey: "u1", toolName: "notes.delete", argumentsJson: act.argumentsJson, summary: `Delete note ${act.id}`, status: "APPROVED", expiresAt: new Date(), createdAt: new Date(), resolvedAt: new Date(), sessionId: "s1" };
     }) as any);
     const deleteNoteMock = vi.spyOn(await import("./noteService"), "deleteNote").mockResolvedValue(undefined as never);
 
@@ -49,8 +47,8 @@ describe("batch pending actions", () => {
 
     findMany.mockRestore();
     auditCreate.mockRestore();
-    findFirst.mockRestore();
-    update.mockRestore();
+    updateMany.mockRestore();
+    findUnique.mockRestore();
     deleteNoteMock.mockRestore();
   });
 });
@@ -61,15 +59,15 @@ describe("pending action safety", () => {
       id: "retired-action", ownerKey: "u1", sessionId: "s1",
       toolName: "coding.delegateTask", argumentsJson: '{"instruction":"change files"}',
     };
-    const findFirst = vi.spyOn(prisma.pendingAction, "findFirst").mockResolvedValue(action as never);
-    const update = vi.spyOn(prisma.pendingAction, "update").mockResolvedValue(action as never);
+    const findUnique = vi.spyOn(prisma.pendingAction, "findUnique").mockResolvedValue(action as never);
+    const updateMany = vi.spyOn(prisma.pendingAction, "updateMany").mockResolvedValue({ count: 1 });
     const auditCreate = vi.spyOn(prisma.auditLog, "create").mockResolvedValue({} as never);
     try {
       await expect(executePendingAction("u1", action.id, true)).rejects.toThrow("Unsupported pending action");
       expect(auditCreate).toHaveBeenLastCalledWith({ data: expect.objectContaining({ status: "FAILED" }) });
     } finally {
-      findFirst.mockRestore();
-      update.mockRestore();
+      findUnique.mockRestore();
+      updateMany.mockRestore();
       auditCreate.mockRestore();
     }
   });
@@ -107,4 +105,3 @@ describe("pending action safety", () => {
     updateMany.mockRestore();
   });
 });
-

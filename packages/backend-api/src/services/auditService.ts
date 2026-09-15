@@ -1,8 +1,11 @@
 import { prisma } from "../db/client";
+import * as tasks from "./taskService";
 import { createNote, deleteNote, updateNote } from "./noteService";
 import { createScheduleItem, deleteOrCancelRoutine, updateScheduleItem, updateScheduleStatus } from "./scheduleService";
 import { createVaultSecret, deleteVaultSecret, updateVaultMetadata } from "./vaultService";
 import { decryptSecret, encryptSecret } from "../security/vaultCrypto";
+import { createHash } from "node:crypto";
+import { createProxmoxVm } from "./proxmoxService";
 
 function safeMetadata(metadata: Record<string, unknown>): string {
   const sanitized = Object.fromEntries(Object.entries(metadata).filter(([key]) =>
@@ -31,23 +34,72 @@ export async function createPendingAction(input: {
   ownerKey: string; sessionId?: string; toolName: string; arguments: unknown; summary: string; sensitive?: boolean;
 }) {
   const id = crypto.randomUUID();
+  const plainArgumentsJson = JSON.stringify(input.arguments);
+  const dedupeKey = input.sensitive || !input.sessionId
+    ? null
+    : createHash("sha256").update(`${input.toolName}\0${plainArgumentsJson}`).digest("hex");
   const argumentsJson = input.sensitive
     ? JSON.stringify({ sealed: encryptSecret(JSON.stringify(input.arguments), `pending:${id}`) })
-    : JSON.stringify(input.arguments);
-  const action = await prisma.pendingAction.create({ data: {
-    id,
-    ownerKey: input.ownerKey, sessionId: input.sessionId, toolName: input.toolName,
-    argumentsJson, summary: input.summary.slice(0, 500),
-    expiresAt: new Date(Date.now() + 15 * 60_000),
-  } });
+    : plainArgumentsJson;
+  if (dedupeKey) {
+    await prisma.pendingAction.updateMany({
+      where: {
+        ownerKey: input.ownerKey,
+        sessionId: input.sessionId,
+        toolName: input.toolName,
+        dedupeKey,
+        status: "PENDING",
+        expiresAt: { lte: new Date() },
+      },
+      data: { status: "DENIED", resolvedAt: new Date() },
+    });
+    const existing = await prisma.pendingAction.findFirst({
+      where: {
+        ownerKey: input.ownerKey,
+        sessionId: input.sessionId,
+        toolName: input.toolName,
+        dedupeKey,
+        status: "PENDING",
+        expiresAt: { gt: new Date() },
+      },
+    });
+    if (existing) return existing;
+  }
+  let action;
+  try {
+    action = await prisma.pendingAction.create({ data: {
+      id,
+      ownerKey: input.ownerKey, sessionId: input.sessionId, toolName: input.toolName,
+      argumentsJson, dedupeKey, summary: input.summary.slice(0, 500),
+      expiresAt: new Date(Date.now() + 15 * 60_000),
+    } });
+  } catch (error) {
+    if (!dedupeKey || !error || typeof error !== "object" || !("code" in error) || error.code !== "P2002") throw error;
+    const racedAction = await prisma.pendingAction.findFirst({
+      where: { ownerKey: input.ownerKey, sessionId: input.sessionId, toolName: input.toolName, dedupeKey, status: "PENDING" },
+    });
+    if (!racedAction) throw error;
+    return racedAction;
+  }
   await recordAudit({ actorId: input.ownerKey, action: input.toolName, targetType: "PendingAction", targetId: action.id, status: "REQUESTED", metadata: { summary: input.summary, sessionId: input.sessionId } });
   return action;
 }
 
+export async function hasPendingActions(ownerKey: string, sessionId: string): Promise<boolean> {
+  return Boolean(await prisma.pendingAction.findFirst({
+    where: { ownerKey, sessionId, status: "PENDING", expiresAt: { gt: new Date() } },
+    select: { id: true },
+  }));
+}
+
 export async function resolvePendingAction(ownerKey: string, id: string, approved: boolean) {
-  const action = await prisma.pendingAction.findFirst({ where: { id, ownerKey, status: "PENDING", expiresAt: { gt: new Date() } } });
-  if (!action) return null;
-  return prisma.pendingAction.update({ where: { id }, data: { status: approved ? "APPROVED" : "DENIED", resolvedAt: new Date() } });
+  const resolvedAt = new Date();
+  const claimed = await prisma.pendingAction.updateMany({
+    where: { id, ownerKey, status: "PENDING", expiresAt: { gt: resolvedAt } },
+    data: { status: approved ? "APPROVED" : "DENIED", resolvedAt },
+  });
+  if (claimed.count !== 1) return null;
+  return prisma.pendingAction.findUnique({ where: { id } });
 }
 
 export async function executePendingAction(ownerKey: string, id: string, approved: boolean) {
@@ -65,7 +117,13 @@ export async function executePendingAction(ownerKey: string, id: string, approve
       ? JSON.parse(decryptSecret(sealed as { ciphertext: string; iv: string; authTag: string }, `pending:${action.id}`)) as Record<string, unknown>
       : storedArgs;
     let result: unknown;
-    if (action.toolName === "schedule.create") result = await createScheduleItem(args as Parameters<typeof createScheduleItem>[0]);
+    if (action.toolName === "task.create") result = await tasks.createTask(ownerKey, args);
+    else if (action.toolName === "task.update") result = await tasks.updateTask(ownerKey, args);
+    else if (action.toolName === "task.delete") result = await tasks.deleteTask(ownerKey, args);
+    else if (action.toolName === "task.checklist.add") result = await tasks.addTaskChecklistItem(ownerKey, args);
+    else if (action.toolName === "task.checklist.update") result = await tasks.updateTaskChecklistItem(ownerKey, args);
+    else if (action.toolName === "task.checklist.delete") result = await tasks.deleteTaskChecklistItem(ownerKey, args);
+    else if (action.toolName === "schedule.create") result = await createScheduleItem(args as Parameters<typeof createScheduleItem>[0]);
     else if (action.toolName === "schedule.updateStatus") result = await updateScheduleStatus(String(args.id), args.status as Parameters<typeof updateScheduleStatus>[1]);
     else if (action.toolName === "schedule.update") {
       const { id: routineId, startTime, endTime, routineEndDate, ...input } = args;
@@ -83,6 +141,7 @@ export async function executePendingAction(ownerKey: string, id: string, approve
     else if (action.toolName === "vault.create") result = await createVaultSecret(args as Parameters<typeof createVaultSecret>[0]);
     else if (action.toolName === "vault.updateMetadata") { const { id: targetId, ...input } = args; result = await updateVaultMetadata(String(targetId), input); }
     else if (action.toolName === "vault.delete") { await deleteVaultSecret(String(args.id)); result = { id: String(args.id), deleted: true }; }
+    else if (action.toolName === "proxmox.createVm") result = await createProxmoxVm(args);
     else throw new Error("Unsupported pending action");
     assertSuccessfulToolResult(result);
     await recordAudit({ actorId: ownerKey, action: action.toolName, targetId: id, status: "SUCCEEDED" });

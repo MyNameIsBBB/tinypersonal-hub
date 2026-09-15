@@ -1,4 +1,4 @@
-const CACHE_NAME = "tinypersonal-shell-v7-push";
+const CACHE_NAME = "tinypersonal-shell-v8-lifecycle";
 const OFFLINE_URL = "/offline";
 const STATIC_ASSETS = [
   OFFLINE_URL,
@@ -8,7 +8,7 @@ const STATIC_ASSETS = [
 ];
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(STATIC_ASSETS)));
+  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(STATIC_ASSETS)).then(() => self.skipWaiting()));
 });
 
 self.addEventListener("activate", (event) => {

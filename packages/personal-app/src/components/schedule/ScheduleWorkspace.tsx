@@ -369,7 +369,7 @@ export function ScheduleWorkspace() {
                     <div className="item-editor">
                       <div className="item-editor-grid">
                         <label><span>ชื่อรายการ</span><input value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} placeholder="เช่น นัดลูกค้า" /></label>
-                        <label><span>ประเภท</span><select value={draft.type} onChange={(event) => setDraft({ ...draft, type: event.target.value as "EVENT" | "TASK" })}><option value="EVENT">Event</option><option value="TASK">Task</option></select></label>
+                        <label><span>ประเภท</span><select value={draft.type} onChange={(event) => setDraft({ ...draft, type: event.target.value as "EVENT" | "TASK" })}><option value="EVENT">Event</option>{draft.type === "TASK" && <option value="TASK">Task เดิม (legacy)</option>}</select></label>
                         <label><span>วันที่</span><input type="date" value={draft.date} onChange={(event) => setDraft({ ...draft, date: event.target.value })} /></label>
                         <label><span>ความสำคัญ</span><select value={draft.priority} onChange={(event) => setDraft({ ...draft, priority: event.target.value as "LOW" | "MEDIUM" | "HIGH" | "URGENT" })}><option value="LOW">Low</option><option value="MEDIUM">Medium</option><option value="HIGH">High</option><option value="URGENT">Urgent</option></select></label>
                         <label><span>เวลาเริ่ม</span><input type="time" value={draft.startTime} onChange={(event) => setDraft({ ...draft, startTime: event.target.value })} disabled={draft.isAllDay} /></label>

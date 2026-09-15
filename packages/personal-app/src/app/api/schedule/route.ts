@@ -17,6 +17,9 @@ export async function POST(request: Request) {
   if (!isAuthorizedRequest(request)) return Response.json({ error: "Unauthorized" }, { status: 401 });
   const parsed = await parseJson(request, scheduleCreateSchema); if ("response" in parsed) return parsed.response;
   const input = parsed.data;
+  if (input.type === "TASK") {
+    return Response.json({ error: "Create work through /api/tasks; schedule accepts events and routines" }, { status: 400 });
+  }
   try {
     const item = await createScheduleItem({
       title: input.title.trim(), description: input.description ?? null, type: input.type,

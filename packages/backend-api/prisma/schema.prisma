@@ -13,7 +13,7 @@ model User {
   name      String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  tasks     Task[]
+  tasks     LegacyTask[]
 }
 
 enum ScheduleItemType {
@@ -60,7 +60,7 @@ model ScheduleItem {
   @@index([parentRoutineId])
 }
 
-model Task {
+model LegacyTask {
   id          String    @id @default(cuid())
   title       String
   startsAt    DateTime?
@@ -69,6 +69,56 @@ model Task {
   user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
+
+  @@map("Task")
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  BLOCKED
+  DONE
+  CANCELLED
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+model Task {
+  id String @id @default(cuid())
+  ownerKey String
+  title String
+  description String?
+  requirements String?
+  status TaskStatus @default(TODO)
+  priority TaskPriority @default(MEDIUM)
+  deadline DateTime?
+  startAt DateTime?
+  progressNote String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  completedAt DateTime?
+  checklistItems TaskChecklistItem[]
+
+  @@index([ownerKey, status, deadline])
+  @@map("WorkTask")
+}
+
+model TaskChecklistItem {
+  id String @id @default(cuid())
+  taskId String
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  title String
+  isCompleted Boolean @default(false)
+  order Int
+  createdAt DateTime @default(now())
+  completedAt DateTime?
+
+  @@index([taskId, order])
 }
 
 model Note {
@@ -149,6 +199,7 @@ model ChatSession {
   ownerKey           String
   title              String?
   customSystemPrompt String?
+  conversationStateJson String?
   messages           ChatMessage[]
   createdAt          DateTime      @default(now())
   updatedAt          DateTime      @updatedAt
@@ -175,6 +226,7 @@ model PendingAction {
   sessionId   String?
   toolName    String
   argumentsJson String
+  dedupeKey   String?
   summary     String
   status      String   @default("PENDING")
   expiresAt   DateTime
@@ -240,4 +292,27 @@ model AuditLog {
 
   @@index([actorId, createdAt])
   @@index([action, createdAt])
+}
+
+model AgentRunTrace {
+  id               String   @id @default(cuid())
+  ownerKey         String
+  sessionId        String
+  userMessageId    String
+  intent           String
+  contextJson      String   @default("[]")
+  allowedToolsJson String   @default("[]")
+  model            String
+  status           String   @default("RUNNING")
+  toolCallsJson    String   @default("[]")
+  finalResponse    String?
+  durationMs       Int?
+  error            String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  completedAt      DateTime?
+
+  @@index([ownerKey, createdAt])
+  @@index([sessionId, createdAt])
+  @@index([status, createdAt])
 }
