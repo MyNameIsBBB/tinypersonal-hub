@@ -46,3 +46,6 @@ done
 # Compose waits for /api/health via the configured container health check.
 "${compose[@]}" up --detach --no-build --wait --wait-timeout 180
 "${compose[@]}" ps
+if [[ -n "${MEMORY_SEED_KEY:-}" ]]; then
+  "${compose[@]}" exec --no-TTY app node scripts/verify-memory-seed.mjs
+fi

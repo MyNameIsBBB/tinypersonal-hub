@@ -23,6 +23,7 @@ Proposals require approval in `/memory` unless `MEMORY_AUTO_APPROVE_REFLECTIONS=
 `POST /api/memory/seed` with `{ "profileText": "..." }` converts an existing user-authored profile into User Model v0 using a deterministic local parser. It does not send profile contents to an AI provider. Import is allowed only when the owner has no existing snapshot, and document text is treated as data rather than executable instruction.
 
 Production includes only the AES-256-GCM ciphertext at `packages/backend-api/seed/best_ai_user_profile.enc.json`. `MEMORY_SEED_KEY` lives in the deployment secret store, never Git. Container startup decrypts the seed in memory and imports it into the persistent production database once; subsequent starts skip import when an owner snapshot already exists.
+Deployment performs a post-start assertion inside the container and fails if the expected snapshot or imported memories are absent.
 
 To rotate the artifact, set a fresh base64-encoded 32-byte `MEMORY_SEED_KEY` and run:
 
