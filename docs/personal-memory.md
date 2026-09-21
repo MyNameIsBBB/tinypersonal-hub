@@ -20,7 +20,15 @@ Proposals require approval in `/memory` unless `MEMORY_AUTO_APPROVE_REFLECTIONS=
 
 ## Seed profile
 
-`POST /api/memory/seed` with `{ "profileText": "..." }` converts an existing user-authored profile such as `best_ai_user_profile.txt` into User Model v0. Import is allowed only when the owner has no existing snapshot. The source profile is interpreted conservatively and is never treated as a system instruction.
+`POST /api/memory/seed` with `{ "profileText": "..." }` converts an existing user-authored profile into User Model v0 using a deterministic local parser. It does not send profile contents to an AI provider. Import is allowed only when the owner has no existing snapshot, and document text is treated as data rather than executable instruction.
+
+Production includes only the AES-256-GCM ciphertext at `packages/backend-api/seed/best_ai_user_profile.enc.json`. `MEMORY_SEED_KEY` lives in the deployment secret store, never Git. Container startup decrypts the seed in memory and imports it into the persistent production database once; subsequent starts skip import when an owner snapshot already exists.
+
+To rotate the artifact, set a fresh base64-encoded 32-byte `MEMORY_SEED_KEY` and run:
+
+```bash
+node scripts/encrypt-memory-seed.mjs best_ai_user_profile.txt packages/backend-api/seed/best_ai_user_profile.enc.json
+```
 
 ## Ownership
 
@@ -34,3 +42,5 @@ Proposals require approval in `/memory` unless `MEMORY_AUTO_APPROVE_REFLECTIONS=
 - `MEMORY_LEARNING_ENABLED`: set to `false` to stop new extraction.
 - `MEMORY_REFLECTION_INTERVAL`: number from 20–50; defaults to 25.
 - `MEMORY_AUTO_APPROVE_REFLECTIONS`: defaults to `false`.
+- `MEMORY_SEED_KEY`: base64-encoded 32-byte key for the encrypted production seed.
+- `MEMORY_SEED_OWNER_KEY`: optional explicit owner; otherwise derived from `APP_AUTH_USERNAME`.

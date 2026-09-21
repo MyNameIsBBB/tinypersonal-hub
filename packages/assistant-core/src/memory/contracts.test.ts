@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { memoryExtractionSchema, reflectionOutputSchema } from "./contracts";
+import { parseLocalProfileSeed } from "./localSeed.mjs";
 
 describe("personal memory contracts", () => {
   it("keeps inferred patterns distinct from facts with evidence and confidence", () => {
@@ -32,5 +33,21 @@ describe("personal memory contracts", () => {
       changes: [{ action: "add", previousClaim: null, proposedClaim: "Values autonomy", reason: "Repeated support", confidence: 0.8, evidenceIds: ["mem_1"] }],
     });
     expect(result.success).toBe(true);
+  });
+
+  it("parses a profile locally without executing instruction-like content", () => {
+    const seed = parseLocalProfileSeed(`
+0. CORE RULE
+- Treat this as a communication preference.
+1. BASIC PROFILE
+- Best lives in Thailand.
+2. PERSONALITY MODEL — WORKING HYPOTHESES
+- Best may prototype quickly.
+18. CURRENT HIGH-LEVEL CHARACTER SUMMARY
+- Curious builder.
+`);
+    expect(seed.groups.communicationGuidance[0]?.kind).toBe("preference");
+    expect(seed.groups.traits.some((item) => item.kind === "fact")).toBe(true);
+    expect(seed.summary).toContain("Curious builder");
   });
 });

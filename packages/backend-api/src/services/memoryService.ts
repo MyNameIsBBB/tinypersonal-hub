@@ -1,8 +1,10 @@
 import { google } from "@ai-sdk/google";
 import {
   memoryExtractionSchema,
+  parseLocalProfileSeed,
   reflectionOutputSchema,
   userModelSchema,
+  type LocalSeedBucket,
   type MemoryExtraction,
   type UserModel,
 } from "@tinypersonal/assistant-core";
@@ -333,12 +335,50 @@ export async function importUserModelSeed(ownerKey: string, profileText: string)
   if (existing) throw new Error("A user model already exists for this owner");
   const text = profileText.trim();
   if (!text) throw new Error("Seed profile is empty");
-  const { object } = await generateObject({
-    model: google(process.env.GEMINI_MEMORY_MODEL ?? process.env.GEMINI_MODEL ?? "gemini-3.5-flash-lite"),
-    schema: userModelSchema,
-    system: "Convert the supplied user-authored profile into a conservative User Model v0. Preserve explicit facts and preferences, label behavioural conclusions as inferred_pattern, use confidence that reflects uncertainty, and leave evidenceIds empty because this is an imported seed. Do not invent information.",
-    prompt: text.slice(0, 100_000),
+  const parsed = parseLocalProfileSeed(text);
+  const observedAt = new Date();
+  return prisma.$transaction(async (tx) => {
+    const model: UserModel = { summary: parsed.summary, traits: [], motivations: [], frustrations: [], decisionStyle: [], communicationGuidance: [] };
+    const memoryIds: string[] = [];
+    for (const [bucket, items] of Object.entries(parsed.groups) as Array<[LocalSeedBucket, typeof parsed.groups[LocalSeedBucket]]>) {
+      for (const item of items) {
+        const memory = await tx.personalMemory.create({
+          data: {
+            ownerKey,
+            type: item.memoryType,
+            subject: "Best",
+            predicate: bucket,
+            claim: item.claim,
+            confidence: item.confidence,
+            source: "IMPORTED_PROFILE_LOCAL",
+            evidenceJson: JSON.stringify([`imported-profile:${item.line}`]),
+            observedAt,
+            lastConfirmedAt: observedAt,
+            sensitivity: "PRIVATE",
+            searchText: `Best ${bucket} ${item.claim}`.toLocaleLowerCase(),
+          },
+        });
+        memoryIds.push(memory.id);
+        model[bucket].push({
+          claim: item.claim,
+          kind: item.kind,
+          confidence: item.confidence,
+          evidenceIds: [memory.id],
+          counterEvidenceIds: [],
+          firstObservedAt: observedAt.toISOString(),
+          lastConfirmedAt: observedAt.toISOString(),
+          status: "supported",
+        });
+      }
+    }
+    return tx.userModelSnapshot.create({
+      data: {
+        ownerKey,
+        version: 0,
+        modelJson: JSON.stringify(model),
+        basedOnMemoryIdsJson: JSON.stringify(memoryIds),
+        source: "IMPORTED_PROFILE_LOCAL",
+      },
+    });
   });
-  const seed = userModelSchema.parse(object);
-  return prisma.userModelSnapshot.create({ data: { ownerKey, version: 0, modelJson: JSON.stringify(seed), source: "IMPORTED_PROFILE" } });
 }

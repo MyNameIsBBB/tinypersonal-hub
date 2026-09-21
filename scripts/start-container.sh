@@ -19,6 +19,7 @@ start_child() {
 trap stop_children EXIT INT TERM
 
 npm run db:deploy
+node scripts/import-memory-seed.mjs
 start_child npm run start --workspace=@tinypersonal/personal-app -- --port 3000
 
 if [[ -n "${CRON_SECRET:-}" ]]; then

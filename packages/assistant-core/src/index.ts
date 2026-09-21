@@ -27,6 +27,8 @@ export {
   userModelSchema,
 } from "./memory/contracts";
 export type { ExtractedMemory, MemoryExtraction, ReflectionOutput, UserModel } from "./memory/contracts";
+export { parseLocalProfileSeed } from "./memory/localSeed.mjs";
+export type { LocalProfileSeed, LocalSeedBucket, LocalSeedItem } from "./memory/localSeed.mjs";
 
 // Feature Re-exports
 export * from "./tools/taskSchemas";

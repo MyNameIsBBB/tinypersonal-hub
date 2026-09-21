@@ -55,6 +55,7 @@ GOOGLE_GENERATIVE_AI_API_KEY=your_gemini_api_key
 GEMINI_MODEL=gemini-3.5-flash-lite
 DATABASE_URL="file:./dev.db"
 VAULT_MASTER_KEY=base64_encoded_32_byte_key
+MEMORY_SEED_KEY=base64_encoded_32_byte_key_for_encrypted_profile_seed
 PERSONAL_API_TOKEN=random_private_api_token
 APP_AUTH_USERNAME=your_workspace_username
 APP_AUTH_PASSWORD=your_workspace_login_password
@@ -563,6 +564,7 @@ APP_AUTH_USERNAME=your_workspace_username
 APP_AUTH_PASSWORD=your_workspace_login_password
 SESSION_SIGNING_KEY=random_string_at_least_32_characters
 VAULT_MASTER_KEY=base64_encoded_32_byte_key
+MEMORY_SEED_KEY=base64_encoded_32_byte_key_for_encrypted_profile_seed
 VAULT_REVEAL_PASSWORD=separate_step_up_password
 PERSONAL_API_TOKEN=random_private_api_token_at_least_32_characters
 ```

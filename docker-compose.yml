@@ -30,6 +30,8 @@ services:
       PORT: "3000"
       HOSTNAME: 0.0.0.0
       SEARXNG_BASE_URL: http://127.0.0.1:8080
+      MEMORY_SEED_KEY: ${MEMORY_SEED_KEY:-}
+      MEMORY_SEED_OWNER_KEY: ${MEMORY_SEED_OWNER_KEY:-}
     network_mode: host
     volumes:
       - tinypersonal-hub-data:/data

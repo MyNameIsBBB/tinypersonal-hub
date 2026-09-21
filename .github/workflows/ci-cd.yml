@@ -23,6 +23,7 @@ jobs:
     env:
       APP_ENV_FILE: /home/best/actions-runner/.env
       APP_IMAGE: tinypersonal-hub:${{ github.sha }}
+      MEMORY_SEED_KEY: ${{ secrets.MEMORY_SEED_KEY }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
