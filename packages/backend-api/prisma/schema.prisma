@@ -316,3 +316,112 @@ model AgentRunTrace {
   @@index([sessionId, createdAt])
   @@index([status, createdAt])
 }
+
+enum MemoryType {
+  FACT
+  EPISODE
+  PREFERENCE
+  PROJECT
+  RELATIONSHIP
+  INFERRED_PATTERN
+}
+
+enum MemoryStatus {
+  ACTIVE
+  SUPERSEDED
+  DISPUTED
+  RETRACTED
+}
+
+enum MemorySensitivity {
+  NORMAL
+  PRIVATE
+  RESTRICTED
+}
+
+model PersonalMemory {
+  id                String            @id @default(cuid())
+  ownerKey          String
+  type              MemoryType
+  subject           String
+  predicate         String?
+  claim             String
+  confidence        Float
+  source            String
+  sourceSessionId   String?
+  sourceMessageId   String?
+  evidenceJson      String            @default("[]")
+  validFrom         DateTime?
+  validUntil        DateTime?
+  observedAt        DateTime
+  lastConfirmedAt   DateTime?
+  status            MemoryStatus      @default(ACTIVE)
+  sensitivity       MemorySensitivity @default(PRIVATE)
+  searchText        String
+  embeddingJson     String?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  @@unique([ownerKey, sourceMessageId, claim])
+  @@index([ownerKey, status, type])
+  @@index([ownerKey, subject])
+  @@index([ownerKey, updatedAt])
+}
+
+model MemoryProcessingRun {
+  id              String   @id @default(cuid())
+  ownerKey        String
+  sessionId       String
+  sourceMessageId String
+  status          String
+  extractedCount  Int      @default(0)
+  error           String?
+  createdAt       DateTime @default(now())
+  completedAt     DateTime?
+
+  @@unique([ownerKey, sourceMessageId])
+  @@index([ownerKey, status, createdAt])
+}
+
+model UserModelSnapshot {
+  id                   String   @id @default(cuid())
+  ownerKey             String
+  version              Int
+  modelJson            String
+  basedOnMemoryIdsJson String   @default("[]")
+  supersedesId         String?
+  throughRunAt         DateTime?
+  source               String   @default("REFLECTION")
+  createdAt            DateTime @default(now())
+
+  @@unique([ownerKey, version])
+  @@index([ownerKey, createdAt])
+}
+
+model UserModelProposal {
+  id                   String   @id @default(cuid())
+  ownerKey             String
+  baseSnapshotId       String?
+  proposedModelJson    String
+  changesJson          String   @default("[]")
+  basedOnMemoryIdsJson String   @default("[]")
+  status               String   @default("PENDING")
+  createdAt            DateTime @default(now())
+  resolvedAt           DateTime?
+
+  @@index([ownerKey, status, createdAt])
+}
+
+model RelationshipTimelineEvent {
+  id           String   @id @default(cuid())
+  ownerKey     String
+  occurredAt   DateTime
+  category     String
+  description  String
+  confidence   Float
+  evidenceJson String   @default("[]")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([ownerKey, occurredAt])
+}

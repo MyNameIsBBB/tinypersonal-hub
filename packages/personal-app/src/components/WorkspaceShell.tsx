@@ -1,6 +1,6 @@
 "use client";
 
-import { Activity, Bell, BellOff, Bot, CalendarDays, KeyRound, LogOut, Menu, NotebookPen, PanelLeftClose, PanelLeftOpen, Sparkles, X } from "lucide-react";
+import { Activity, Bell, BellOff, Bot, BrainCircuit, CalendarDays, KeyRound, LogOut, Menu, NotebookPen, PanelLeftClose, PanelLeftOpen, Sparkles, X } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 import { useEffect, useRef, useState, type ReactNode, type TouchEvent } from "react";
@@ -13,6 +13,7 @@ const modules = [
   { href: "/schedule", label: "Schedule", icon: CalendarDays },
   { href: "/tasks", label: "Tasks", icon: NotebookPen },
   { href: "/notes", label: "Notes", icon: NotebookPen },
+  { href: "/memory", label: "Memory", icon: BrainCircuit },
   { href: "/vault", label: "Vault", icon: KeyRound },
   { href: "/traces", label: "Agent Trace", icon: Activity },
 ] as const;

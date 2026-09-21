@@ -133,6 +133,16 @@ export {
 export type { PushSubscriptionInput } from "./services/pushService";
 export { embedToolText, searchToolVectors } from "./services/toolVectorService";
 export type { ToolVectorDocument, ToolVectorHit } from "./services/toolVectorService";
+export {
+  importUserModelSeed,
+  listMemoryWorkspace,
+  maybeCreateReflectionProposal,
+  processConversationMemory,
+  retrievePersonalContext,
+  reviewMemory,
+  reviewUserModelProposal,
+  scoreMemoryForContext,
+} from "./services/memoryService";
 export { scrapeWebPage, searchWeb } from "./services/webService";
 export type { ScrapedPage, WebSearchResult } from "./services/webService";
 export {

@@ -7,4 +7,5 @@ export * from "./web/webService";
 export * from "./push/pushService";
 export * from "./chat/chatService";
 export * from "./morningBriefing/morningBriefingService";
+export * from "../services/memoryService";
 export * from "./vector/toolVectorService";

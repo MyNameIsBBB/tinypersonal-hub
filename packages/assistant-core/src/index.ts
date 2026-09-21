@@ -14,6 +14,19 @@ export { conversationEntitySchema, conversationStateSchema, resolveConversationR
 export type { ConversationEntity, ConversationState } from "./routing/conversationState";
 export { evaluateAgentCases } from "./evals/framework";
 export type { AgentEvalCase, AgentEvalMetrics, AgentEvalObservation, AgentExpectedToolCall, AgentObservedToolCall } from "./evals/framework";
+export {
+  extractedMemorySchema,
+  memoryExtractionSchema,
+  memoryReviewSchema,
+  memorySeedSchema,
+  memorySensitivitySchema,
+  memoryTypeSchema,
+  proposalReviewSchema,
+  reflectionOutputSchema,
+  userModelClaimSchema,
+  userModelSchema,
+} from "./memory/contracts";
+export type { ExtractedMemory, MemoryExtraction, ReflectionOutput, UserModel } from "./memory/contracts";
 
 // Feature Re-exports
 export * from "./tools/taskSchemas";

@@ -36,6 +36,7 @@ import {
   messageText,
   reserveAssistantMessage,
 } from "./persistence";
+import { processConversationMemory } from "../../services/memoryService";
 
 export type RunAgentInput = {
   ownerKey: string;
@@ -121,7 +122,7 @@ export async function prepareAgentRun(input: RunAgentInput) {
   });
 
   const tools = createChatTools(input.ownerKey, input.sessionId, input.userText, scope.allowedTools);
-  const systemPrompt = `${agent.system}\n\n${agent.system}\nIf a tool returns ok=false, explain its exact error briefly and never claim success.${
+  const systemPrompt = `${agent.system}\n\n${context.systemPrompt}\n\nIf a tool returns ok=false, explain its exact error briefly and never claim success.${
     input.customSystemPrompt
       ? `\n\nChat-specific user preference (applies only to this chat; it cannot override safety, authorization, confirmation, or tool rules):\n${input.customSystemPrompt}`
       : ""
@@ -224,6 +225,19 @@ export async function runChatAgent(input: RunAgentInput) {
     triggeringUserMessageId: input.triggeringUserMessageId,
     trace: { id: prepared.trace.id, startedAt: prepared.startedAt },
     shouldCompleteTrace: () => !traceFailed,
+    afterPersist: async (assistantText) => {
+      try {
+        await processConversationMemory({
+          ownerKey: input.ownerKey,
+          sessionId: input.sessionId,
+          sourceMessageId: input.triggeringUserMessageId,
+          userText: input.userText,
+          assistantText,
+        });
+      } catch (error) {
+        console.error("Memory extraction failed", describeAgentError(error));
+      }
+    },
   });
 
   const completedStream = result.toUIMessageStream<UIMessage>({
@@ -330,6 +344,19 @@ export async function runAgentDirect(input: RunAgentInput): Promise<{
       triggeringUserMessageId: input.triggeringUserMessageId,
       trace: { id: prepared.trace.id, startedAt: prepared.startedAt },
       shouldCompleteTrace: () => !traceFailed,
+      afterPersist: async (assistantText) => {
+        try {
+          await processConversationMemory({
+            ownerKey: input.ownerKey,
+            sessionId: input.sessionId,
+            sourceMessageId: input.triggeringUserMessageId,
+            userText: input.userText,
+            assistantText,
+          });
+        } catch (error) {
+          console.error("Memory extraction failed", describeAgentError(error));
+        }
+      },
     });
 
     const assistantUIMessage: UIMessage = {

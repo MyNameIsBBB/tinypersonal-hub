@@ -13,6 +13,7 @@ export type PersistenceInput = {
   triggeringUserMessageId: string;
   trace?: { id: string; startedAt: number };
   shouldCompleteTrace?: () => boolean;
+  afterPersist?: (assistantText: string) => Promise<void>;
 };
 
 export function messageText(message: UIMessage) {
@@ -56,6 +57,7 @@ export function createPersistenceEndHandler(input: PersistenceInput) {
             durationMs: Date.now() - input.trace.startedAt,
           });
         }
+        if (input.afterPersist) await input.afterPersist(messageText(responseMessage));
       }
     } catch (error) {
       console.error(
