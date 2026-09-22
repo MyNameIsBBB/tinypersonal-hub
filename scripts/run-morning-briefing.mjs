@@ -1,4 +1,10 @@
-const baseUrl = process.env.TINYPERSONAL_BASE_URL ?? "http://127.0.0.1:3000";
+if (typeof process.loadEnvFile === "function") {
+  try {
+    process.loadEnvFile();
+  } catch {}
+}
+
+const baseUrl = process.env.INTERNAL_APP_URL ?? process.env.TINYPERSONAL_BASE_URL ?? "http://127.0.0.1:3000";
 const secret = process.env.CRON_SECRET;
 if (!secret) throw new Error("CRON_SECRET is required");
 const response = await fetch(new URL("/api/jobs/morning-briefing", baseUrl), {

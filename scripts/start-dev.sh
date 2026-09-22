@@ -69,6 +69,9 @@ done
 node scripts/chat/run-jobs.mjs &
 child_pids+=("$!")
 
+node scripts/run-cron-scheduler.mjs &
+child_pids+=("$!")
+
 if [[ -n "${DISCORD_BOT_TOKEN:-}" ]]; then
   npm run build --workspace=@tinypersonal/discord-bot
   node packages/discord-bot/dist/index.js &

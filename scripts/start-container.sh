@@ -24,6 +24,7 @@ start_child npm run start --workspace=@tinypersonal/personal-app -- --port 3000
 
 if [[ -n "${CRON_SECRET:-}" ]]; then
   start_child node scripts/chat/run-jobs.mjs
+  start_child node scripts/run-cron-scheduler.mjs
 fi
 
 if [[ -n "${DISCORD_BOT_TOKEN:-}" ]]; then
