@@ -10,7 +10,7 @@ const weekdays = [
 
 export type RoutineDraft = {
   title: string;
-  frequency: "DAILY" | "WEEKLY" | "MONTHLY";
+  frequency: "DAILY" | "WEEKLY" | "MONTHLY" | "YEARLY";
   interval: number;
   byDays: string[];
   startTime: string;
@@ -23,6 +23,7 @@ export function RoutineForm({ onCreate, initial }: {
   initial?: RoutineDraft;
 }) {
   const [selectedDays, setSelectedDays] = useState<string[]>(initial?.byDays ?? ["MO", "WE"]);
+  const [frequency, setFrequency] = useState<RoutineDraft["frequency"]>(initial?.frequency ?? "WEEKLY");
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
 
@@ -37,7 +38,8 @@ export function RoutineForm({ onCreate, initial }: {
     const data = new FormData(event.currentTarget);
     try {
       setError("");
-      await onCreate?.({ title: String(data.get("title")), frequency: String(data.get("frequency")) as RoutineDraft["frequency"], interval: Number(data.get("interval")), byDays: selectedDays, startTime: String(data.get("startTime")), endTime: String(data.get("endTime")), endDate: String(data.get("endDate")) });
+      if (frequency === "WEEKLY" && selectedDays.length === 0) throw new Error("เลือกอย่างน้อย 1 วันสำหรับ Routine รายสัปดาห์");
+      await onCreate?.({ title: String(data.get("title")), frequency, interval: Number(data.get("interval")), byDays: frequency === "WEEKLY" ? selectedDays : [], startTime: String(data.get("startTime")), endTime: String(data.get("endTime")), endDate: String(data.get("endDate")) });
       if (!initial) event.currentTarget.reset();
       setSaved(true); window.setTimeout(() => setSaved(false), 2400);
     } catch (cause) { setError(cause instanceof Error ? cause.message : "บันทึกไม่สำเร็จ"); }
@@ -48,8 +50,8 @@ export function RoutineForm({ onCreate, initial }: {
       <div className="section-heading">
         <span className="icon-tile"><Repeat2 size={18} /></span>
         <div>
-          <p className="eyebrow">Routine builder</p>
-          <h2 id="routine-form-title">สร้างกิจวัตรใหม่</h2>
+          <p className="eyebrow">{initial ? "Edit routine" : "New routine"}</p>
+          <h2 id="routine-form-title">{initial ? "แก้ไข Routine" : "สร้าง Routine ใหม่"}</h2>
         </div>
       </div>
 
@@ -62,37 +64,30 @@ export function RoutineForm({ onCreate, initial }: {
         <div className="form-grid two-columns">
           <label>
             <span>ความถี่</span>
-            <select name="frequency" defaultValue={initial?.frequency ?? "WEEKLY"}>
+            <select name="frequency" value={frequency} onChange={(event) => setFrequency(event.target.value as RoutineDraft["frequency"])}>
               <option value="DAILY">ทุกวัน</option>
               <option value="WEEKLY">ทุกสัปดาห์</option>
               <option value="MONTHLY">ทุกเดือน</option>
+              <option value="YEARLY">ทุกปี</option>
             </select>
           </label>
           <label>
             <span>ทำซ้ำทุก</span>
             <span className="input-suffix">
-              <input name="interval" type="number" min="1" max="52" defaultValue={initial?.interval ?? 1} required />
-              <small>สัปดาห์</small>
+              <input name="interval" type="number" min="1" max="365" defaultValue={initial?.interval ?? 1} required />
+              <small>{frequency === "DAILY" ? "วัน" : frequency === "MONTHLY" ? "เดือน" : frequency === "YEARLY" ? "ปี" : "สัปดาห์"}</small>
             </span>
           </label>
         </div>
 
-        <fieldset>
-          <legend>วันที่ทำกิจวัตร</legend>
+        {frequency === "WEEKLY" && <fieldset>
+          <legend>วันที่ทำ Routine</legend>
           <div className="weekday-picker">
             {weekdays.map(([value, label]) => (
-              <button
-                key={value}
-                type="button"
-                className={selectedDays.includes(value) ? "selected" : ""}
-                aria-pressed={selectedDays.includes(value)}
-                onClick={() => toggleDay(value)}
-              >
-                {label}
-              </button>
+              <button key={value} type="button" className={selectedDays.includes(value) ? "selected" : ""} aria-pressed={selectedDays.includes(value)} onClick={() => toggleDay(value)}>{label}</button>
             ))}
           </div>
-        </fieldset>
+        </fieldset>}
 
         <div className="form-grid two-columns">
           <label>
@@ -112,7 +107,7 @@ export function RoutineForm({ onCreate, initial }: {
         </label>
 
         <button className="primary-button" type="submit">
-          {saved ? "บันทึกแล้ว ✓" : <><Sparkles size={17} /> สร้าง Routine</>}
+          {saved ? "บันทึกแล้ว ✓" : <><Sparkles size={17} /> {initial ? "บันทึกการแก้ไข" : "สร้าง Routine"}</>}
         </button>
         {error && <small className="form-error">{error}</small>}
       </form>
